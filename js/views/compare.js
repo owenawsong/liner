@@ -13,7 +13,7 @@ export function renderCompare(source = 'lastfm', a = '', b = '') {
       <header class="cmp-head">
         <span class="label">Compare</span>
         <h1>How close is your taste?</h1>
-        <p class="flow__lede">Put in two usernames. Liner compares your all-time top artists and songs, then shows what you share and what you'd each get from the other.</p>
+        <p class="flow__lede">Put in two usernames. Sleeve compares your all-time top artists and songs, then shows what you share and what you'd each get from the other.</p>
         <form class="cmp-form" id="cmp-form" novalidate>
           <div class="seg" role="radiogroup" aria-label="Source">
             <button type="button" role="radio" data-src="lastfm" aria-checked="${source === 'lastfm'}">Last.fm</button>

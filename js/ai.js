@@ -27,7 +27,7 @@ export async function write(task, facts, { question = '', fresh = false } = {}) 
       body: JSON.stringify({ task, facts, question, seed: fresh ? Date.now() : '' }),
     });
   } catch {
-    throw new Error("Couldn't reach Liner's writer. Check your connection.");
+    throw new Error("Couldn't reach Sleeve's writer. Check your connection.");
   }
   if (res.status === 404) throw new Error('AI writing only works on the live site.');
   const d = await res.json().catch(() => ({}));
@@ -75,7 +75,7 @@ export function facts(A, p, { year, detailed = false } = {}) {
   if (!year) {
     const recent = topIn(A, 'artists', A.to - 28 * DAY, A.to + 1, 6);
     if (recent.length) L.push(`Last 4 weeks: ${recent.map((a) => a.name).join(', ')}.`);
-    L.push(`Things Liner noticed: ${A.insights.slice(0, detailed ? 12 : 7).map((i) => stripTags(i.title)).join('. ')}.`);
+    L.push(`Things Sleeve noticed: ${A.insights.slice(0, detailed ? 12 : 7).map((i) => stripTags(i.title)).join('. ')}.`);
   }
   if (detailed) {
     L.push(`First plays: ${A.artists.slice(0, 20).map((a) => `${a.name} first played ${monthYear(a.first)}`).join('; ')}.`);

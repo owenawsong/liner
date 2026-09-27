@@ -1,8 +1,8 @@
-// Liner service worker: keeps the app shell available offline.
+// Sleeve service worker: keeps the app shell available offline.
 // Live data (Last.fm, ListenBrainz, Spotify, artwork) always goes to the network.
-const CACHE = 'liner-v4';
+const CACHE = 'sleeve-v1';
 const SHELL = [
-  './', './index.html', './styles.css', './config.js', './manifest.webmanifest', './assets/mark.svg',
+  './', './index.html', './styles.css', './sleeve.css', './js/color.js', './js/theme.js', './js/views/start.js', './js/views/settings.js', './config.js', './manifest.webmanifest', './assets/mark.svg',
   './js/app.js', './js/ui.js', './js/core.js', './js/components.js', './js/analysis.js', './js/export.js', './js/actions.js', './js/meta.js', './js/ai.js',
   './js/views/home.js', './js/views/connect.js', './js/views/profile.js', './js/views/detail.js', './js/views/aiviews.js', './js/views/compare.js', './js/views/mainstream.js',
   './js/sources/demo.js', './js/sources/lastfm.js', './js/sources/listenbrainz.js', './js/sources/spotify.js',

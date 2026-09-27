@@ -3,15 +3,18 @@ import { $, $$, esc, monthYear, num } from '../ui.js';
 import { onLeave } from '../core.js';
 import { topIn } from '../analysis.js';
 import { write, facts, reveal, loadingLines, paragraphs } from '../ai.js';
+import { store } from '../ui.js';
+const aiOff = () => store.get('liner.ai') === 'off';
 
 const TITLES = { notes: 'Your liner notes', roast: 'Your taste, roasted' };
 
 export function notesPanel(A) {
+  if (aiOff()) return '';
   const basis = A ? [
     [num(A.plays), 'plays'],
     [num(A.artists.length), 'artists'],
     [String(A.eras.length), A.eras.length === 1 ? 'era' : 'eras'],
-    [String(A.insights.length), 'things Liner noticed'],
+    [String(A.insights.length), 'things Sleeve noticed'],
   ].map(([v, l]) => `<span><b>${v}</b>${l}</span>`).join('') : '';
   return `<section class="panel c-12 ai" id="ai-notes">
     <div class="panel__head">
@@ -59,6 +62,7 @@ export function bindNotes(ctx) {
 
 /* ---------- Ask ---------- */
 export function askPanel(A) {
+  if (aiOff()) return '';
   const y = A.years.length > 1 ? A.years[A.years.length - 2].y : A.years[0].y;
   const who = A.artists[Math.min(3, A.artists.length - 1)]?.name;
   const chips = [
@@ -101,6 +105,7 @@ export function bindAsk(ctx) {
 
 /* ---------- Era names ---------- */
 export async function nameEras(ctx) {
+  if (aiOff()) return;
   const { A } = ctx;
   if (!A?.eras.length) return;
   const lines = A.eras.map((e) => {
@@ -130,6 +135,7 @@ export async function nameEras(ctx) {
 
 /* ---------- Year write-up ---------- */
 export function yearNotes() {
+  if (aiOff()) return '';
   return `<section class="panel ai" id="ai-year" style="margin-top:16px">
     <div class="panel__head"><div class="ai__head"><span class="label">Written for you</span><h2 class="ai__title">The year, in a paragraph</h2></div></div>
     <div class="ai__body" aria-live="polite">${loadingLines}</div>

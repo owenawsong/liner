@@ -3,17 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Liner</title>
-  <meta name="description" content="The complete record of your listening. Free Spotify stats with timelines, eras and insights. Nothing uploaded.">
+  <title>Sleeve — your whole listening record</title>
+  <meta name="description" content="The complete record of your listening. Free Spotify stats with timelines, eras and insights. Your history files stay on your device.">
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <meta name="theme-color" content="#F5F5F1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#F3EFE6" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0D0D0C" media="(prefers-color-scheme: dark)">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@400;500;600&family=Funnel+Sans:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Funnel+Display:wght@400;500;600&family=Funnel+Sans:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="sleeve.css">
   <script>
     (function () {
       var t = 'auto';
@@ -27,7 +28,7 @@
 
   <header class="nav" id="nav">
     <div class="nav__inner">
-      <a class="logo" href="#/" aria-label="Liner, home">
+      <a class="logo" href="#/" aria-label="Sleeve, home">
         <svg viewBox="0 0 28 28" aria-hidden="true">
           <circle cx="12" cy="16" r="11" fill="currentColor"/>
           <circle cx="12" cy="16" r="7.4" fill="none" stroke="var(--bg)" stroke-opacity=".22" stroke-width=".8"/>
@@ -35,10 +36,11 @@
           <circle cx="12" cy="16" r=".9" fill="var(--bg)"/>
           <g class="arm"><path d="M24 4.2 L17.6 13.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="24" cy="4.2" r="2.3" fill="currentColor"/></g>
         </svg>
-        <span>liner</span>
+        <span>sleeve</span>
       </a>
       <nav class="nav__links" aria-label="Main">
-        <a href="#/" data-scroll="features">How it works</a>
+        <a href="#/" data-scroll="features">What it does</a>
+        <a href="#/start">Get started</a>
         <a href="#/demo">Demo</a>
         <a href="#/compare">Compare</a>
         <a href="#/" data-scroll="sources">Sources</a>
@@ -63,9 +65,9 @@
   <footer class="footer">
     <div class="footer__inner">
       <div>
-        <a class="logo" href="#/" aria-label="Liner, home">
+        <a class="logo" href="#/" aria-label="Sleeve, home">
           <svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="12" cy="16" r="11" fill="currentColor"/><circle cx="12" cy="16" r="3.3" fill="var(--accent)"/><circle cx="12" cy="16" r=".9" fill="var(--bg)"/><g class="arm"><path d="M24 4.2 L17.6 13.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="24" cy="4.2" r="2.3" fill="currentColor"/></g></svg>
-          <span>liner</span>
+          <span>sleeve</span>
         </a>
         <p>Free listening stats for Spotify. Every feature, for everyone. Your files stay on your device.</p>
       </div>
@@ -79,11 +81,12 @@
         </ul>
       </div>
       <div>
-        <h4>Liner</h4>
+        <h4>Sleeve</h4>
         <ul>
           <li><a href="#/demo">Demo profile</a></li>
           <li><a href="#/" data-scroll="faq">Questions</a></li>
-          <li><button type="button" id="settings-btn">Settings</button></li>
+          <li><a href="#/settings" id="settings-btn">Settings</a></li>
+          <li><a href="#/start">Get started</a></li>
         </ul>
       </div>
       <div>
@@ -96,28 +99,10 @@
       </div>
     </div>
     <div class="footer__base">
-      <span>Live data powered by <a href="https://www.last.fm" target="_blank" rel="noopener">Last.fm</a> and <a href="https://listenbrainz.org" target="_blank" rel="noopener">ListenBrainz</a>. Liner is not affiliated with Spotify or Last.fm.</span>
+      <span>Live data powered by <a href="https://www.last.fm" target="_blank" rel="noopener">Last.fm</a> and <a href="https://listenbrainz.org" target="_blank" rel="noopener">ListenBrainz</a>. Sleeve is not affiliated with Spotify or Last.fm.</span>
       <span id="source-status"></span>
     </div>
   </footer>
-
-  <dialog class="dialog" id="settings">
-    <form method="dialog" id="settings-form">
-      <h2>Settings</h2>
-      <label class="label" for="set-key">Last.fm API key</label>
-      <p>Last.fm lookups need a free key. Without one, Last.fm profiles use simulated data so you can still try every screen. ListenBrainz and the Spotify export never need a key.</p>
-      <input class="input input--mono" id="set-key" autocomplete="off" spellcheck="false" placeholder="32 letters and numbers">
-      <p><a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Create a Last.fm API key</a>. It takes about a minute and is saved in this browser only.</p>
-      <details>
-        <summary>Preview connection states</summary>
-        <p>In simulated mode, try the Last.fm usernames <code>hiddenuser</code>, <code>staleuser</code>, <code>newuser</code> and <code>nobody</code>.</p>
-      </details>
-      <div class="dialog__actions">
-        <button type="button" class="btn btn--line" id="set-clear">Remove key</button>
-        <button type="submit" class="btn btn--ink" value="save">Save</button>
-      </div>
-    </form>
-  </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <div class="dropveil" id="dropveil" hidden><div><b>Drop your Spotify export</b><span>The ZIP from Spotify's email. It's read here and never uploaded.</span></div></div>

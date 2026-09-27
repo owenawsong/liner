@@ -41,7 +41,7 @@ function monthBars(A, counts, height = 120) {
 }
 
 function notFound(what, back) {
-  return `<div class="flow"><span class="label">Not in your history</span><h1>No plays of ${esc(what)}</h1><p class="flow__lede">It isn't in the history Liner has for this profile${back ? ', or it was filtered out by your counting rule' : ''}.</p><div class="flow__actions"><a class="btn btn--line" href="${back}">${icon.back} Back</a></div></div>`;
+  return `<div class="flow"><span class="label">Not in your history</span><h1>No plays of ${esc(what)}</h1><p class="flow__lede">It isn't in the history Sleeve has for this profile${back ? ', or it was filtered out by your counting rule' : ''}.</p><div class="flow__actions"><a class="btn btn--line" href="${back}">${icon.back} Back</a></div></div>`;
 }
 
 /* ---------- Artist ---------- */
@@ -253,7 +253,7 @@ async function shareCard(c, who) {
   g.globalAlpha = 1; g.fillStyle = v('--accent'); g.beginPath(); g.arc(0, 0, 70, 0, Math.PI * 2); g.fill();
   g.restore();
   const text = (s, x, y, font, color, max) => { g.font = font; g.fillStyle = color; let t = s; while (max && g.measureText(t).width > max && t.length > 3) t = `${t.slice(0, -2)}…`; g.fillText(t, x, y); };
-  text('LINER · YEAR IN MUSIC', 80, 110, `400 26px ${mono}`, v('--ink-3'));
+  text('SLEEVE · YEAR IN MUSIC', 80, 110, `400 26px ${mono}`, v('--ink-3'));
   text(String(c.y), 72, 330, `500 230px ${disp}`, v('--ink'));
   text(`${who}`, 80, 400, `500 40px ${disp}`, v('--ink-2'), 560);
   const stat = (label, val, x) => { text(val, x, 530, `500 76px ${disp}`, v('--ink')); text(label.toUpperCase(), x, 575, `400 22px ${mono}`, v('--ink-3')); };
@@ -265,14 +265,14 @@ async function shareCard(c, who) {
   c.tracks.forEach((t, i) => { text(t.name, 560, 770 + i * 62, `500 ${i ? 36 : 40}px ${disp}`, v('--ink'), 440); });
   g.fillStyle = v('--line'); g.fillRect(80, 1130, W - 160, 2);
   if (c.discovered) text(`Best discovery: ${c.discovered}`, 80, 1200, `400 32px ${disp}`, v('--ink-2'), W - 160);
-  text('Made with Liner', 80, 1270, `400 24px ${mono}`, v('--ink-3'));
+  text('Made with Sleeve', 80, 1270, `400 24px ${mono}`, v('--ink-3'));
   cv.toBlob((blob) => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `liner-${c.y}.png`;
+    a.download = `sleeve-${c.y}.png`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    toast(`Saved liner-${c.y}.png`);
+    toast(`Saved sleeve-${c.y}.png`);
   }, 'image/png');
 }
 

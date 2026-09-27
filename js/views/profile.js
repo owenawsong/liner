@@ -4,7 +4,8 @@ import { topIn, monthDetail, lowerBound } from '../analysis.js';
 import { health, healthLine, trackRows, rankList, statStrip, timeline, bindTimeline, heatmap, heatLegend, hoursChart, daysChart, insightCard, dropzone, bindDrops, sourceBadge } from '../components.js';
 import { handleFiles, importHistory, keepSpotifyPlays } from '../actions.js';
 import { linker, artistPage, songPage, yearPage, bindYear, onThisDay, mountSearch, genres, genresHTML } from './detail.js';
-import { hydrate } from '../meta.js';
+import { hydrate, art } from '../meta.js';
+import { palette, paint } from '../color.js';
 import { mainstreamPanel, bindMainstream, milestonesPanel } from './mainstream.js';
 import { notesPanel, bindNotes, askPanel, bindAsk, nameEras, yearNotes, bindYearNotes } from './aiviews.js';
 import { demoRecent, DEMO_USER } from '../sources/demo.js';
@@ -62,6 +63,7 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
     <div class="wrap fade-in" id="tab"></div>`;
   ({ overview, top, timeline: timelineTab, insights: insightsTab, clock, data, artist: detail, song: detail, year: detail })[tab](ctx);
   mountSearch($('#search'), A, ctx.L);
+  paintHeader(ctx);
   if (source !== 'file') startPolling(ctx);
 }
 
@@ -102,9 +104,11 @@ function header({ p, A, source }) {
   const since = A?.from || u.since;
   if (since) bits.push(`<span>Listening since ${monthYear(since)}</span>`);
   bits.push(sourceBadge(p));
-  return `<header class="phead">
+  const catno = { lastfm: 'LAST.FM', listenbrainz: 'LISTENBRAINZ', spotify: 'SPOTIFY', file: 'SPOTIFY EXPORT', demo: 'DEMO' }[source] || '';
+  return `<header class="phead" id="phead">
     ${avatar(u.display, u.image, 64)}
-    <div class="phead__body"><h1>${esc(u.display)}</h1><div class="phead__meta">${bits.join('')}</div></div>
+    <div class="phead__body"><span class="phead__catno">SLV · ${catno}${A ? ` · ${new Date(A.from).getFullYear()}–${new Date(A.to).getFullYear()}` : ''}</span><h1>${esc(u.display)}</h1><div class="phead__meta">${bits.join('')}</div></div>
+    <div class="phead__covers" id="phead-covers"></div>
     <div class="phead__side"><span id="pill">${pill(p)}</span>${source === 'lastfm' || source === 'listenbrainz' ? `<a class="btn btn--line btn--sm" href="#/compare/${source}/${encodeURIComponent(p.user.name)}">Compare</a>` : ''}${A ? '<div id="search"></div>' : ''}</div>
   </header>`;
 }
@@ -219,7 +223,7 @@ function estimate(sec) {
 function importCTA({ p, source }) {
   const exportDrop = `<div style="border-top:1px solid var(--line);padding-top:18px">${dropzone({ title: source === 'spotify' ? 'Drop your Spotify export' : 'Or drop your Spotify export', sub: 'For exact listening time and skips. Read on your device, never uploaded.' })}</div>`;
   if (source === 'spotify') {
-    return `<section class="panel c-12"><div class="cta"><div><span class="label">Your full history</span><h2 style="margin-top:8px">Spotify only shares your last 50 plays</h2><p>Liner keeps every batch it sees, so your history grows each time you visit. For everything since day one, add your Spotify export.</p></div><div class="cta__actions"><a class="btn btn--line" href="#/connect/file">How to get it</a></div></div>${exportDrop}</section>`;
+    return `<section class="panel c-12"><div class="cta"><div><span class="label">Your full history</span><h2 style="margin-top:8px">Spotify only shares your last 50 plays</h2><p>Sleeve keeps every batch it sees, so your history grows each time you visit. For everything since day one, add your Spotify export.</p></div><div class="cta__actions"><a class="btn btn--line" href="#/connect/file">How to get it</a></div></div>${exportDrop}</section>`;
   }
   const src = SOURCES[source];
   if (source === 'lastfm' && !lastfm.isLive()) {
@@ -229,7 +233,7 @@ function importCTA({ p, source }) {
   const bigLB = source === 'listenbrainz' && count > 40000;
   return `<section class="panel c-12" id="import">
     <div class="cta"><div><span class="label">Your full history</span><h2 style="margin-top:8px">Build your timeline</h2>
-      <p>Liner can read ${count ? `all ${num(count)} of your` : 'your'} ${src.label} plays in about ${estimate(src.estimateImport(count || 1000))}, then show your eras, a month-by-month timeline, your listening clock and what stands out. It's saved in this browser, so you only do it once.${bigLB ? " With a history this big, ListenBrainz's own export is faster: in ListenBrainz settings choose Export, then drop the file below." : ''}</p></div>
+      <p>Sleeve can read ${count ? `all ${num(count)} of your` : 'your'} ${src.label} plays in about ${estimate(src.estimateImport(count || 1000))}, then show your eras, a month-by-month timeline, your listening clock and what stands out. It's saved in this browser, so you only do it once.${bigLB ? " With a history this big, ListenBrainz's own export is faster: in ListenBrainz settings choose Export, then drop the file below." : ''}</p></div>
       <div class="cta__actions"><button type="button" class="btn btn--ink" data-import>Import my history ${icon.arrow}</button></div></div>
     <div class="importing" data-importing hidden>
       <div class="panel__head"><span data-import-text class="muted">Starting…</span><button type="button" class="link link--quiet" data-import-stop>Cancel</button></div>
@@ -242,7 +246,7 @@ function importCTA({ p, source }) {
 function bindCommon(ctx) {
   const root = $('#tab');
   bindDrops(root, handleFiles);
-  $$('[data-settings]', root).forEach((b) => b.addEventListener('click', () => document.getElementById('settings-btn').click()));
+  $$('[data-settings]', root).forEach((b) => b.addEventListener('click', () => (location.hash = '#/settings')));
   const go_ = $('[data-import]', root);
   if (!go_) return;
   go_.addEventListener('click', async () => {
@@ -277,7 +281,7 @@ function watchHTML() {
   const today = log.filter((r) => r.t >= new Date().setHours(0, 0, 0, 0));
   const skipped = today.filter((r) => r.skipped).length;
   return `<div class="panel__head"><h2>Skip tracker</h2><span class="chip chip--good"><span class="dot dot--live"></span>Watching while this tab is open</span></div>
-    <p class="muted" style="font-size:14.5px">Spotify doesn't report skips, so Liner checks what's playing every few seconds and notes how long each song actually played. Today: <b>${num(today.length)}</b> songs, <b>${num(skipped)}</b> skipped.</p>
+    <p class="muted" style="font-size:14.5px">Spotify doesn't report skips, so Sleeve checks what's playing every few seconds and notes how long each song actually played. Today: <b>${num(today.length)}</b> songs, <b>${num(skipped)}</b> skipped.</p>
     ${log.length ? `<ol class="rows">${log.slice(-6).reverse().map((r) => `<li class="row">${sleeve(r.album || r.track, r.artist, { size: 36 })}<span class="row__t"><b>${esc(r.track)}</b><span>${esc(r.artist)}</span></span><span class="row__meta">${r.skipped ? '<span class="chip chip--warn">Skipped</span>' : ''} ${Math.floor(r.ms / 60000)}:${String(Math.floor((r.ms % 60000) / 1000)).padStart(2, '0')}</span></li>`).join('')}</ol>` : '<p class="empty">Play something on Spotify. Each song is logged here when it ends or you skip it.</p>'}`;
 }
 function startWatch() {
@@ -350,7 +354,7 @@ function top(ctx) {
     topState.custom = [f, t];
     top(ctx);
   });
-  $('[data-settings]')?.addEventListener('click', () => document.getElementById('settings-btn').click());
+  $('[data-settings]')?.addEventListener('click', () => (location.hash = '#/settings'));
   const periodLabel = topState.period === 'custom'
     ? `${new Date(custom[0]).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })} to ${new Date(custom[1]).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}`
     : periods.find((x) => x.id === topState.period).label;
@@ -415,9 +419,9 @@ function topBody(items, kind, periodLabel, total, L = {}) {
 /* ---------- Timeline ---------- */
 function needArchive(ctx, what) {
   const copy = {
-    timeline: ['Your timeline needs your full history', 'Import it once and Liner lays out every month you have listened, finds your eras, and sums up each year.'],
-    insights: ['Insights need your full history', 'Import it once and Liner looks for obsessions, comebacks, streaks, late nights and more.'],
-    clock: ['Your listening clock needs your full history', 'Import it once and Liner maps when you listen, hour by hour, across the week.'],
+    timeline: ['Your timeline needs your full history', 'Import it once and Sleeve lays out every month you have listened, finds your eras, and sums up each year.'],
+    insights: ['Insights need your full history', 'Import it once and Sleeve looks for obsessions, comebacks, streaks, late nights and more.'],
+    clock: ['Your listening clock needs your full history', 'Import it once and Sleeve maps when you listen, hour by hour, across the week.'],
   }[what];
   $('#tab').innerHTML = `${banner(ctx)}<div class="grid">
     <div class="c-12 subhead" style="margin-top:0"><div><h2>${copy[0]}</h2><p class="muted" style="margin-top:6px">${copy[1]} <a href="${hrefFor('demo', what)}">See it on the demo profile</a>.</p></div></div>
@@ -547,12 +551,12 @@ function data(ctx) {
       <section class="panel c-6">
         <div class="panel__head"><h2>What counts as a play</h2></div>
         <div class="seg" role="radiogroup" aria-label="What counts as a play"><button type="button" role="radio" data-min="0" aria-checked="${state.minMs === 0}">Any length</button><button type="button" role="radio" data-min="30000" aria-checked="${state.minMs === 30000}">30 seconds or more</button></div>
-        <p class="muted" style="font-size:14.5px">Spotify counts a stream once you've listened for 30 seconds, and that's Liner's default. This only changes plays where the listening time is known, which means your Spotify export. Last.fm and ListenBrainz only log songs you mostly finished.</p>
+        <p class="muted" style="font-size:14.5px">Spotify counts a stream once you've listened for 30 seconds, and that's Sleeve's default. This only changes plays where the listening time is known, which means your Spotify export. Last.fm and ListenBrainz only log songs you mostly finished.</p>
         ${ctx.A?.short ? `<p class="faint" style="font-size:14px">${num(ctx.A.short)} plays are shorter than 30 seconds.</p>` : ''}
       </section>
       <section class="panel c-6">
         <div class="panel__head"><h2>Stored in this browser</h2></div>
-        <p class="muted" style="font-size:14.5px">Liner has no accounts and no server. Everything above lives in this browser only, and nothing leaves your device except the requests to ${source === 'spotify' ? 'Spotify' : src ? src.label : 'nobody'}.</p>
+        <p class="muted" style="font-size:14.5px">Sleeve has no accounts and no server. Everything above lives in this browser only, and nothing leaves your device except the requests to ${source === 'spotify' ? 'Spotify' : src ? src.label : 'nobody'}.</p>
         <div class="flow__actions" id="danger">
           ${ctx.source !== 'demo' ? '<button type="button" class="btn btn--line btn--sm" data-forget>Remove this profile</button>' : ''}
           <button type="button" class="btn btn--line btn--sm" data-wipe>Clear everything</button>
@@ -595,7 +599,7 @@ function data(ctx) {
   confirmButton($('[data-wipe]'), 'Clear everything? Tap again', async () => {
     await idb.clear();
     ['liner.profiles', 'liner.sp.tok', 'liner.sp.watch', 'liner.sp.client', 'liner.lfmkey', 'liner.minMs'].forEach((k) => store.set(k, null));
-    toast('Everything Liner stored in this browser is gone.');
+    toast('Everything Sleeve stored in this browser is gone.');
     setTimeout(() => location.assign(location.pathname), 600);
   });
 }
@@ -630,4 +634,17 @@ function detail(ctx) {
       bindYearNotes(ctx, ctx.yearCard?.y);
     }
   }
+}
+
+/* ---------- The header takes the colour of your top artist ---------- */
+async function paintHeader({ A, p }) {
+  const head = $('#phead');
+  if (!head) return;
+  const lead = A?.artists[0]?.name || p.recent?.[0]?.artist;
+  const albums = A ? A.albums.slice(0, 4) : [];
+  if (albums.length) $('#phead-covers').innerHTML = albums.map((al) => sleeve(al.album, al.artist, { size: 118, kind: 'album' })).join('');
+  const firstAlbum = albums[0];
+  const url = firstAlbum ? await art('album', firstAlbum.album, firstAlbum.artist) : lead ? await art('artist', lead) : '';
+  const pal = await palette(url);
+  if (pal && document.body.contains(head)) paint(head, pal);
 }

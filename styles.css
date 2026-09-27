@@ -4,22 +4,22 @@
    ========================================================= */
 :root {
   color-scheme: light;
-  --bg: #F5F5F1;
-  --bg-2: #ECECE6;
-  --surface: #FFFFFF;
-  --ink: #121211;
-  --ink-2: #55554F;
-  --ink-3: #8B8B83;
-  --line: #E2E2DB;
-  --line-2: #CDCDC4;
-  --accent: #EE4A1E;
+  --bg: #F3EFE6;
+  --bg-2: #E9E3D6;
+  --surface: #FBF8F2;
+  --ink: #16110E;
+  --ink-2: #544C44;
+  --ink-3: #8A8177;
+  --line: #E0D9CB;
+  --line-2: #CBC2B2;
+  --accent: #E8542E;
   --on-accent: #FFFFFF;
   --good: #1E8449;
   --warn: #B26B12;
   --bad: #C0392B;
-  --c0: #EE4A1E; --c1: #2B4FD8; --c2: #1E8449; --c3: #C9971A; --c4: #8B3FA0; --c5: #0F7C86;
+  --c0: #E8542E; --c1: #2340C9; --c2: #1E8449; --c3: #C9971A; --c4: #8B3FA0; --c5: #0F7C86;
   --shadow: 0 1px 2px rgb(18 18 17 / .04), 0 12px 40px -16px rgb(18 18 17 / .18);
-  --glass: rgb(245 245 241 / .82);
+  --glass: rgb(243 239 230 / .86);
 
   --f-display: "Funnel Display", "Funnel Sans", ui-sans-serif, system-ui, sans-serif;
   --f-body: "Funnel Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;

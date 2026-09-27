@@ -14,7 +14,7 @@ export async function readExport(files, onProgress = () => {}) {
     if (/\.zip$/i.test(f.name) || /zip/.test(f.type)) {
       if (!window.JSZip) throw new Error("The ZIP reader didn't load. Check your connection and refresh the page.");
       let zip;
-      try { zip = await window.JSZip.loadAsync(f); } catch { throw new Error(`"${f.name}" isn't a ZIP file Liner can open.`); }
+      try { zip = await window.JSZip.loadAsync(f); } catch { throw new Error(`"${f.name}" isn't a ZIP file Sleeve can open.`); }
       const names = Object.keys(zip.files).filter((n) => wanted(n) && !zip.files[n].dir);
       for (let j = 0; j < names.length; j++) {
         onProgress(`Reading ${names[j].split('/').pop()}`);

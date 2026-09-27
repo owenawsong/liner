@@ -16,7 +16,7 @@ const ENDPOINT = {
   openrouter: 'https://openrouter.ai/api/v1/chat/completions',
 };
 
-const STYLE = `You write for Liner, a music stats site. Voice: a sharp, warm friend who knows music, talking straight to the listener as "you".
+const STYLE = `You write for Sleeve, a music stats site. Voice: a sharp, warm friend who knows music, talking straight to the listener as "you".
 Rules: Be specific. Name real artists, songs, years and numbers from the facts. Never invent facts that aren't given.
 No clichés ("eclectic", "sonic journey", "tapestry", "soundtrack of your life", "vibes", "delve"). No emojis. No hashtags. No markdown, headings or lists. Plain sentences only.`;
 
@@ -39,7 +39,7 @@ const TASKS = {
   },
   ask: {
     max: 220,
-    prompt: (f, q) => `Answer the listener's question using only these facts. If the facts don't contain the answer, say so plainly and suggest where in Liner they could look (Timeline, Top, Insights, Clock, or an artist page). Two or three sentences.\n\nFacts:\n${f}\n\nQuestion: ${q}`,
+    prompt: (f, q) => `Answer the listener's question using only these facts. If the facts don't contain the answer, say so plainly and suggest where in Sleeve they could look (Timeline, Top, Insights, Clock, or an artist page). Two or three sentences.\n\nFacts:\n${f}\n\nQuestion: ${q}`,
   },
 };
 
@@ -75,7 +75,7 @@ async function call(step, env, messages, max) {
       headers: {
         Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json',
-        ...(step.via === 'openrouter' ? { 'HTTP-Referer': 'https://liner-c7u.pages.dev', 'X-Title': 'Liner' } : {}),
+        ...(step.via === 'openrouter' ? { 'HTTP-Referer': 'https://liner-c7u.pages.dev', 'X-Title': 'Sleeve' } : {}),
       },
       body: JSON.stringify({ model: step.model, messages, max_tokens: step.maxTokens || max, temperature: 0.8, top_p: 0.95 }),
     });

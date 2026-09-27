@@ -129,7 +129,7 @@ function lfmFlow(step) {
   if (step === 1) {
     shell({ back, label, n: 4, cur: 1, body: `
       <h1>Make a free Last.fm account</h1>
-      <p class="flow__lede">Last.fm keeps a log of every song you play on Spotify, on any device. Liner reads that log to build your stats. Signing up takes about 30 seconds.</p>
+      <p class="flow__lede">Last.fm keeps a log of every song you play on Spotify, on any device. Sleeve reads that log to build your stats. Signing up takes about 30 seconds.</p>
       <div class="flow__actions">
         ${ext('https://www.last.fm/join', `Open Last.fm sign-up ${icon.out}`, 'btn btn--ink btn--lg')}
         <a class="btn btn--line btn--lg" href="#/connect/lastfm/3">I already have an account</a>
@@ -186,7 +186,7 @@ function lbFlow(step) {
   if (step === 1) {
     shell({ back, label, n: 3, cur: 1, body: `
       <h1>Make a free ListenBrainz account</h1>
-      <p class="flow__lede">ListenBrainz is an open, non-profit alternative to Last.fm run by MetaBrainz. It logs what you play on Spotify, and anyone can read that log, so Liner needs no key.</p>
+      <p class="flow__lede">ListenBrainz is an open, non-profit alternative to Last.fm run by MetaBrainz. It logs what you play on Spotify, and anyone can read that log, so Sleeve needs no key.</p>
       <div class="flow__actions">
         ${ext('https://listenbrainz.org/login/', `Open ListenBrainz ${icon.out}`, 'btn btn--ink btn--lg')}
         <a class="btn btn--line btn--lg" href="#/connect/listenbrainz/3">I already use it</a>
@@ -287,7 +287,7 @@ function detected(source, name, t) {
     ${sleeve(t.album || t.name, t.artist, { img: t.image, size: 200 })}
     <span class="chip chip--good"><span class="dot dot--live"></span>${t.nowPlaying ? 'Heard it live' : 'Found it'}</span>
     <h2>You're connected.</h2>
-    <p>${t.nowPlaying ? "You're listening to" : 'You just played'} <b>${esc(t.name)}</b> by <b>${esc(t.artist)}</b>. From now on, every song you play shows up in Liner by itself.</p>
+    <p>${t.nowPlaying ? "You're listening to" : 'You just played'} <b>${esc(t.name)}</b> by <b>${esc(t.artist)}</b>. From now on, every song you play shows up in Sleeve by itself.</p>
     <div class="flow__actions" style="justify-content:center"><a class="btn btn--ink btn--lg" href="${hrefFor(pid)}" id="open">Open my stats ${icon.arrow}</a></div>
   </div>`;
   $('#trouble').hidden = true;
@@ -301,7 +301,7 @@ export const requestSteps = `
     <li><span class="n">1</span><div><b>Open Spotify's privacy page</b><p>${ext(SPOTIFY_PRIVACY, 'spotify.com/account/privacy')}, then sign in.</p></div></li>
     <li><span class="n">2</span><div><b>Tick "Extended streaming history"</b><p>The default option only covers the last year. The extended one has every play since you made your account.</p></div></li>
     <li><span class="n">3</span><div><b>Request it and confirm the email</b><p>Spotify sends a confirmation link first. Your files come in a second email, usually within a few days. Spotify says it can take up to 30.</p></div></li>
-    <li><span class="n">4</span><div><b>Drop the ZIP into Liner</b><p>No need to unzip it. It's read right here on your device.</p></div></li>
+    <li><span class="n">4</span><div><b>Drop the ZIP into Sleeve</b><p>No need to unzip it. It's read right here on your device.</p></div></li>
   </ol>`;
 
 function fileFlow() {
@@ -324,13 +324,13 @@ function spotifyFlow() {
   const connected = spotify.isConnected();
   shell({ label: 'Spotify direct · Advanced', body: `
     <h1>Connect Spotify directly</h1>
-    <p class="flow__lede">For enthusiasts. You make your own free Spotify developer app, and Liner signs in through it. You get what's playing with live progress, your last 50 plays, Spotify's own top lists, and skip tracking while Liner is open.</p>
+    <p class="flow__lede">For enthusiasts. You make your own free Spotify developer app, and Sleeve signs in through it. You get what's playing with live progress, your last 50 plays, Spotify's own top lists, and skip tracking while Sleeve is open.</p>
     ${connected ? `<div class="banner"><span>${icon.check} Spotify is connected in this browser.</span><a class="link" href="#/spotify">Open my stats ${icon.arrow}</a></div>` : ''}
     ${onLocalhost ? `<div class="banner banner--warn"><span>Spotify only accepts <code>127.0.0.1</code> for apps running on your own computer, not <code>localhost</code>.</span><a class="link" href="${altUrl}">Switch to 127.0.0.1</a></div>` : ''}
     <p class="flow__note">You'll need <b>Spotify Premium</b>, which Spotify requires for developer apps. It takes about 5 minutes.</p>
     <ol class="steplist">
       <li><span class="n">1</span><div><b>Open the Spotify developer dashboard</b><p>${ext('https://developer.spotify.com/dashboard', 'developer.spotify.com/dashboard')}. Log in with your normal Spotify account and accept the terms if asked.</p></div></li>
-      <li><span class="n">2</span><div><b>Create an app</b><p>Press <b>Create app</b>. The name and description can be anything, like "My Liner".</p></div></li>
+      <li><span class="n">2</span><div><b>Create an app</b><p>Press <b>Create app</b>. The name and description can be anything, like "My Sleeve".</p></div></li>
       <li><span class="n">3</span><div><b>Add this redirect address</b><p>Paste it into <b>Redirect URIs</b> exactly as shown, tick <b>Web API</b>, and save.</p>
         <div class="copyline"><code id="redir">${esc(spotify.redirectUri())}</code><button type="button" class="btn btn--line btn--sm" id="copy-redir">Copy</button></div></div></li>
       <li><span class="n">4</span><div><b>Paste your Client ID</b><p>Open the app's <b>Settings</b> and copy the Client ID.</p>
