@@ -5,6 +5,8 @@ import { health, healthLine, trackRows, rankList, statStrip, timeline, bindTimel
 import { handleFiles, importHistory, keepSpotifyPlays } from '../actions.js';
 import { linker, artistPage, songPage, yearPage, bindYear, onThisDay, mountSearch, genres, genresHTML } from './detail.js';
 import { hydrate } from '../meta.js';
+import { mainstreamPanel, bindMainstream, milestonesPanel } from './mainstream.js';
+import { notesPanel, bindNotes, askPanel, bindAsk, nameEras, yearNotes, bindYearNotes } from './aiviews.js';
 import { demoRecent, DEMO_USER } from '../sources/demo.js';
 import * as lastfm from '../sources/lastfm.js';
 import * as spotify from '../sources/spotify.js';
@@ -103,7 +105,7 @@ function header({ p, A, source }) {
   return `<header class="phead">
     ${avatar(u.display, u.image, 64)}
     <div class="phead__body"><h1>${esc(u.display)}</h1><div class="phead__meta">${bits.join('')}</div></div>
-    <div class="phead__side"><span id="pill">${pill(p)}</span>${A ? '<div id="search"></div>' : ''}</div>
+    <div class="phead__side"><span id="pill">${pill(p)}</span>${source === 'lastfm' || source === 'listenbrainz' ? `<a class="btn btn--line btn--sm" href="#/compare/${source}/${encodeURIComponent(p.user.name)}">Compare</a>` : ''}${A ? '<div id="search"></div>' : ''}</div>
   </header>`;
 }
 const pill = (p) => (p.recent?.[0]?.nowPlaying ? `<span class="chip chip--good"><span class="dot dot--live"></span>Listening now</span>` : '');
@@ -126,8 +128,10 @@ export function overviewHTML(ctx) {
   }
   if (A) {
     parts.push(`<div class="c-12">${statStrip(A)}</div>`);
+    if (!ctx.preview) parts.push(notesPanel(A));
     parts.push(`<section class="panel c-12"><div class="panel__head"><h2>Month by month</h2><a class="link link--quiet" href="${hrefFor(pid, 'timeline')}">Open the timeline ${icon.arrow}</a></div>${timeline(A, { height: 140, fit: true })}</section>`);
   } else if (!ctx.preview) {
+    if (liveSource) parts.push(notesPanel());
     parts.push(importCTA(ctx));
   }
   const topLabel = source === 'file' ? 'All time' : source === 'spotify' ? 'Last 4 weeks' : 'Last 7 days';
@@ -172,6 +176,8 @@ function overview(ctx) {
     });
   }
   if (source === 'spotify') startWatch();
+  if (source !== 'spotify') bindNotes(ctx);
+  else $('#ai-notes')?.remove();
 }
 
 function nowHTML(p) {
@@ -301,32 +307,54 @@ function startPolling(ctx) {
 }
 
 /* ---------- Top ---------- */
-const topState = { kind: 'artists', period: null, mode: null };
+const topState = { kind: 'artists', period: null, mode: null, metric: 'plays', custom: null, all: false };
+const isoDay = (t) => new Date(t - new Date(t).getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 
 function top(ctx) {
   const { A, source } = ctx;
   const src = SOURCES[source];
   const hasLive = !!src;
   if (!topState.mode || (topState.mode === 'archive' && !A) || (topState.mode === 'live' && !hasLive)) topState.mode = A ? 'archive' : 'live';
-  const periods = topState.mode === 'archive'
-    ? [{ id: '4w', label: '4 weeks' }, { id: '6m', label: '6 months' }, { id: '12m', label: '12 months' }, { id: 'all', label: 'All time' }, ...[...A.years].reverse().map((y) => ({ id: `y${y.y}`, label: String(y.y) }))]
+  const archive = topState.mode === 'archive';
+  const periods = archive
+    ? [{ id: '4w', label: '4 weeks' }, { id: '6m', label: '6 months' }, { id: '12m', label: '12 months' }, { id: 'all', label: 'All time' }, ...[...A.years].reverse().map((y) => ({ id: `y${y.y}`, label: String(y.y) })), { id: 'custom', label: 'Custom…' }]
     : src.periods;
-  if (!periods.some((x) => x.id === topState.period)) topState.period = periods[topState.mode === 'archive' ? 3 : 0].id;
+  if (!periods.some((x) => x.id === topState.period)) topState.period = periods[archive ? 3 : 0].id;
+  if (!archive || !A.hasMs) topState.metric = 'plays';
   const kinds = [['artists', 'Artists'], ['tracks', 'Songs'], ['albums', 'Albums'], ['genres', 'Genres']];
+  const custom = topState.custom || [A ? Math.max(A.from, A.to - 90 * DAY) : 0, A ? A.to : 0];
   $('#tab').innerHTML = `${banner(ctx)}
     <div class="toolbar">
       <div class="seg" role="group" aria-label="What to rank">${kinds.map(([k, l]) => `<button type="button" data-kind="${k}" aria-pressed="${k === topState.kind}">${l}</button>`).join('')}</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;min-width:0">
-        ${A && hasLive ? `<div class="seg" role="group" aria-label="Data source"><button type="button" data-mode="archive" aria-pressed="${topState.mode === 'archive'}">Your archive</button><button type="button" data-mode="live" aria-pressed="${topState.mode === 'live'}">Live from ${src.label}</button></div>` : ''}
-        <div class="seg" role="group" aria-label="Time period">${periods.map((x) => `<button type="button" data-period="${x.id}" aria-pressed="${x.id === topState.period}">${x.label}</button>`).join('')}</div>
+      <div class="toolbar__right">
+        ${archive && A.hasMs && topState.kind !== 'genres' ? `<div class="seg" role="group" aria-label="Rank by"><button type="button" data-metric="plays" aria-pressed="${topState.metric === 'plays'}">Plays</button><button type="button" data-metric="minutes" aria-pressed="${topState.metric === 'minutes'}">Minutes</button></div>` : ''}
+        ${A && hasLive ? `<div class="seg" role="group" aria-label="Data source"><button type="button" data-mode="archive" aria-pressed="${archive}">Your archive</button><button type="button" data-mode="live" aria-pressed="${!archive}">Live from ${src.label}</button></div>` : ''}
       </div>
     </div>
+    <div class="toolbar"><div class="seg" role="group" aria-label="Time period">${periods.map((x) => `<button type="button" data-period="${x.id}" aria-pressed="${x.id === topState.period}">${x.label}</button>`).join('')}</div></div>
+    ${archive && topState.period === 'custom' ? `<form class="range" id="range">
+      <label>From <input class="input" type="date" id="range-from" value="${isoDay(custom[0])}" min="${isoDay(A.from)}" max="${isoDay(A.to)}"></label>
+      <label>To <input class="input" type="date" id="range-to" value="${isoDay(custom[1])}" min="${isoDay(A.from)}" max="${isoDay(A.to)}"></label>
+      <button class="btn btn--ink btn--sm" type="submit">Show</button>
+    </form>` : ''}
     <div id="top-body">${loadingRows()}</div>`;
-  $$('[data-kind]').forEach((b) => b.addEventListener('click', () => { topState.kind = b.dataset.kind; top(ctx); }));
-  $$('[data-period]').forEach((b) => b.addEventListener('click', () => { topState.period = b.dataset.period; top(ctx); }));
+  $$('[data-kind]').forEach((b) => b.addEventListener('click', () => { topState.kind = b.dataset.kind; topState.all = false; top(ctx); }));
+  $$('[data-period]').forEach((b) => b.addEventListener('click', () => { topState.period = b.dataset.period; topState.all = false; top(ctx); }));
   $$('[data-mode]').forEach((b) => b.addEventListener('click', () => { topState.mode = b.dataset.mode; topState.period = null; top(ctx); }));
+  $$('[data-metric]').forEach((b) => b.addEventListener('click', () => { topState.metric = b.dataset.metric; top(ctx); }));
+  $('#range')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = new Date(`${$('#range-from').value}T00:00`).getTime();
+    const t = new Date(`${$('#range-to').value}T23:59:59`).getTime();
+    if (!(f < t)) { toast('Pick a start date before the end date.', 'bad'); return; }
+    topState.custom = [f, t];
+    top(ctx);
+  });
   $('[data-settings]')?.addEventListener('click', () => document.getElementById('settings-btn').click());
-  const label = periods.find((x) => x.id === topState.period).label;
+  const periodLabel = topState.period === 'custom'
+    ? `${new Date(custom[0]).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })} to ${new Date(custom[1]).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : periods.find((x) => x.id === topState.period).label;
+
   const draw = (items, total) => {
     const el = $('#top-body');
     if (!el) return;
@@ -344,21 +372,23 @@ function top(ctx) {
       onLeave(() => g?.stop());
       return;
     }
-    el.innerHTML = topBody(items, topState.kind, label, total, ctx.L);
+    el.innerHTML = topBody(items, topState.kind, periodLabel, total, ctx.L);
+    $('[data-more]', el)?.addEventListener('click', () => { topState.all = true; draw(items, total); });
     hydrate(el);
   };
   const fetchKind = topState.kind === 'genres' ? 'artists' : topState.kind;
 
-  if (topState.mode === 'archive') {
+  if (archive) {
     const end = A.to + 1;
-    const range = {
+    const range = topState.period === 'custom' ? custom : {
       '4w': [end - 28 * DAY, end], '6m': [end - 182 * DAY, end], '12m': [end - 365 * DAY, end], all: [-Infinity, Infinity],
     }[topState.period] || (() => { const y = Number(topState.period.slice(1)); return [new Date(y, 0, 1).getTime(), new Date(y + 1, 0, 1).getTime()]; })();
     const from = range[0] === -Infinity ? 0 : lowerBound(A.rows, range[0]);
     const to = range[1] === Infinity ? A.rows.length : lowerBound(A.rows, range[1]);
-    draw(topIn(A, fetchKind, range[0], range[1], topState.kind === 'genres' ? 60 : 25), to - from);
+    const metric = topState.kind === 'genres' ? 'plays' : topState.metric;
+    draw(topIn(A, fetchKind, range[0], range[1], topState.kind === 'genres' ? 60 : 100, metric), metric === 'plays' ? to - from : 0);
   } else {
-    src.top(ctx.name, topState.period, fetchKind, ctx.signal).then((items) => {
+    src.top(ctx.name, topState.period, fetchKind, ctx.signal, topState.kind === 'genres' ? 60 : 100).then((items) => {
       if (items) draw(items);
       else { const el = $('#top-body'); if (el) el.innerHTML = '<div class="panel"><p class="empty">ListenBrainz works out top lists once a day, and hasn\'t done this one yet. Check back tomorrow, or import your history to rank it yourself.</p></div>'; }
     }).catch((e) => { if (e.name !== 'AbortError') { const el = $('#top-body'); if (el) el.innerHTML = `<div class="panel"><p class="empty">${esc(e.message)}</p></div>`; } });
@@ -367,15 +397,18 @@ function top(ctx) {
 
 function topBody(items, kind, periodLabel, total, L = {}) {
   if (!items?.length) return '<div class="panel"><p class="empty">Nothing played in this period.</p></div>';
-  const [first, ...rest] = items;
+  const [first, ...restAll] = items;
+  const rest = topState.all ? restAll : restAll.slice(0, 24);
   const noun = { artists: 'artist', tracks: 'song', albums: 'album' }[kind];
+  const unit = first.unit === 'min' ? 'minutes' : 'plays';
   return `<div class="grid">
     <section class="panel panel--flush c-12"><div class="lead">
       ${kind === 'artists' ? sleeve(first.name, first.name, { img: first.image, size: 150, round: true, kind: 'artist' }) : kind === 'albums' ? sleeve(first.name, first.artist, { img: first.image, size: 150, kind: 'album' }) : trackSleeve({ name: first.name, artist: first.artist, album: first.album }, { img: first.image, size: 150 })}
-      <div><span class="lead__n">Top ${noun} · ${esc(periodLabel)}</span><h2>${L.rank?.(first, kind) ? `<a href="${L.rank(first, kind)}" style="text-decoration:none">${esc(first.name)}</a>` : esc(first.name)}</h2><p>${first.artist ? `${esc(first.artist)}${first.plays != null ? ' · ' : ''}` : ''}${first.plays != null ? `${num(first.plays)} plays` : ''}</p></div>
+      <div><span class="lead__n">Top ${noun} · ${esc(periodLabel)}</span><h2>${L.rank?.(first, kind) ? `<a href="${L.rank(first, kind)}" style="text-decoration:none">${esc(first.name)}</a>` : esc(first.name)}</h2><p>${first.artist ? `${esc(first.artist)}${first.plays != null ? ' · ' : ''}` : ''}${first.plays != null ? `${num(first.plays)} ${unit}` : ''}</p></div>
       ${total && first.plays ? `<div class="lead__share"><b>${((first.plays / total) * 100).toFixed(1)}%</b><span>of your ${num(total)} plays in this period</span></div>` : ''}
     </div></section>
-    ${rest.length ? `<section class="panel c-12">${rankList(rest, { kind, start: 1, max: first.plays || undefined, link: L.rank })}</section>` : ''}
+    ${rest.length ? `<section class="panel c-12">${rankList(rest, { kind, start: 1, max: first.plays || undefined, link: L.rank })}
+      ${!topState.all && restAll.length > rest.length ? `<div class="more"><button type="button" class="btn btn--line btn--sm" data-more>Show all ${restAll.length + 1}</button></div>` : ''}</section>` : ''}
   </div>`;
 }
 
@@ -408,7 +441,7 @@ function timelineTab(ctx) {
     ${A.eras.length ? `<div class="subhead"><div><h2>Your eras</h2><p class="muted">Stretches of at least two months when one artist led your listening.</p></div></div>
     <div class="eras">${A.eras.map((e) => {
       const total = A.months.slice(e.start, e.end + 1).reduce((s, m) => s + m.n, 0);
-      return `<a class="era" href="${ctx.L.artist(e.artist)}" style="--era:var(--c${e.color})"><span class="label">${monthYear(e.from)} to ${monthYear(e.to)} · ${e.months} months</span><h3>The ${esc(e.artist)} era</h3><p>${num(e.plays)} of your ${num(total)} plays in that stretch.</p></a>`;
+      return `<a class="era" data-artist="${esc(e.artist)}" href="${ctx.L.artist(e.artist)}" style="--era:var(--c${e.color})"><span class="label">${monthYear(e.from)} to ${monthYear(e.to)} · ${e.months} months</span><h3>The ${esc(e.artist)} era</h3><p>${num(e.plays)} of your ${num(total)} plays in that stretch.</p></a>`;
     }).join('')}</div>` : ''}
     <div class="subhead"><div><h2>Year by year</h2></div></div>
     <div class="years">${[...A.years].reverse().map((y) => `
@@ -428,6 +461,7 @@ function timelineTab(ctx) {
   };
   bindTimeline($('#tl'), A, pick);
   pick(sel);
+  if (ctx.source !== 'spotify') nameEras(ctx);
 }
 
 function monthHTML(A, i, L = {}) {
@@ -445,7 +479,12 @@ function insightsTab(ctx) {
   if (!A) return needArchive(ctx, 'insights');
   $('#tab').innerHTML = `${banner(ctx)}
     <div class="subhead" style="margin-top:0"><div><h2>${A.insights.length} things we noticed</h2><p class="muted">Worked out from ${num(A.plays)} plays, counting ${A.minMs ? 'songs played for 30 seconds or more' : 'every play, however short'}. <a href="${hrefFor(ctx.pid, 'data')}">Change this</a>.</p></div></div>
-    <div class="insights">${A.insights.map((x, i) => insightCard(x, i === 0)).join('')}</div>`;
+    ${askPanel(A)}
+    ${mainstreamPanel()}
+    ${milestonesPanel(A, ctx.L)}
+    <div class="insights" style="margin-top:16px">${A.insights.map((x, i) => insightCard(x, i === 0)).join('')}</div>`;
+  bindAsk(ctx);
+  bindMainstream(A, ctx.L);
 }
 
 /* ---------- Clock ---------- */
@@ -584,5 +623,11 @@ function detail(ctx) {
   else if (tab === 'song') html = songPage(ctx, args[0] || '', args[1] || '');
   else html = yearPage(ctx, Number(args[0]) || A.years[A.years.length - 1].y);
   $('#tab').innerHTML = `${banner(ctx)}${html}`;
-  if (tab === 'year') bindYear(ctx);
+  if (tab === 'year') {
+    bindYear(ctx);
+    if (ctx.source !== 'spotify') {
+      $('.recap')?.insertAdjacentHTML('afterend', yearNotes());
+      bindYearNotes(ctx, ctx.yearCard?.y);
+    }
+  }
 }

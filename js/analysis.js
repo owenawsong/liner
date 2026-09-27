@@ -105,6 +105,7 @@ export function analyze(all, { minMs = 30000 } = {}) {
     return { y: yr.y, n: yr.n, topArtist: ta, topArtistN: tan, topTrack: tt?.split('\u0000'), topTrackN: ttn, newArtists: yr.newArtists, artistCount: yr.artists.size };
   });
   A.artistSkip = artistSkip;
+  A.milestones = [1, 100, 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000].filter((n) => n <= rows.length).map((n) => ({ n, row: rows[n - 1] }));
   A.eras = findEras(A.months, A.months.map((m) => months.get(m.i)?.artists));
   A.insights = insights(A, { artistSkip, dayTrack });
   return A;
@@ -145,21 +146,24 @@ function findEras(months, maps) {
   return kept;
 }
 
-export function topIn(A, kind, from = -Infinity, to = Infinity, limit = 25) {
+export function topIn(A, kind, from = -Infinity, to = Infinity, limit = 25, metric = 'plays') {
   const m = new Map();
+  const by = metric === 'minutes' ? (r) => (r.ms ?? AVG_SONG_MS) / 60000 : () => 1;
   const start = from === -Infinity ? 0 : lowerBound(A.rows, from);
   for (let i = start; i < A.rows.length; i++) {
     const r = A.rows[i];
     if (r.t >= to) break;
-    if (kind === 'artists') bump(m, r.artist);
-    else if (kind === 'tracks') bump(m, trackKey(r));
-    else if (r.album) bump(m, `${r.album}\u0000${r.artist}`);
+    if (kind === 'artists') bump(m, r.artist, by(r));
+    else if (kind === 'tracks') bump(m, trackKey(r), by(r));
+    else if (r.album) bump(m, `${r.album}\u0000${r.artist}`, by(r));
   }
-  return [...m.entries()].sort((a, b2) => b2[1] - a[1]).slice(0, limit).map(([k, n]) => {
-    if (kind === 'artists') return { name: k, artist: '', plays: n };
+  const unit = metric === 'minutes' ? 'min' : '';
+  return [...m.entries()].sort((a, b2) => b2[1] - a[1]).slice(0, limit).map(([k, v]) => {
+    const n = Math.round(v);
+    if (kind === 'artists') return { name: k, artist: '', plays: n, unit };
     const [name, artist] = k.split('\u0000');
     const album = kind === 'tracks' ? A.tracks.find((t) => t.track === name && t.artist === artist)?.album : name;
-    return { name, artist, plays: n, album };
+    return { name, artist, plays: n, album, unit };
   });
 }
 

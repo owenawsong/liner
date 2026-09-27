@@ -1,10 +1,10 @@
 // Liner service worker: keeps the app shell available offline.
 // Live data (Last.fm, ListenBrainz, Spotify, artwork) always goes to the network.
-const CACHE = 'liner-v3';
+const CACHE = 'liner-v4';
 const SHELL = [
   './', './index.html', './styles.css', './config.js', './manifest.webmanifest', './assets/mark.svg',
-  './js/app.js', './js/ui.js', './js/core.js', './js/components.js', './js/analysis.js', './js/export.js', './js/actions.js', './js/meta.js',
-  './js/views/home.js', './js/views/connect.js', './js/views/profile.js', './js/views/detail.js',
+  './js/app.js', './js/ui.js', './js/core.js', './js/components.js', './js/analysis.js', './js/export.js', './js/actions.js', './js/meta.js', './js/ai.js',
+  './js/views/home.js', './js/views/connect.js', './js/views/profile.js', './js/views/detail.js', './js/views/aiviews.js', './js/views/compare.js', './js/views/mainstream.js',
   './js/sources/demo.js', './js/sources/lastfm.js', './js/sources/listenbrainz.js', './js/sources/spotify.js',
 ];
 
@@ -21,6 +21,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
+  if (url.pathname.startsWith('/api/')) return;
   const cacheable = url.origin === location.origin || /fonts\.(googleapis|gstatic)\.com|cdnjs\.cloudflare\.com/.test(url.host);
   if (!cacheable) return;
   if (url.origin === location.origin) {

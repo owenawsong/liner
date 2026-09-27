@@ -3,6 +3,7 @@ import { SOURCES, view, leave, go, pidFor, hrefFor, profiles, state } from './co
 import { renderHome } from './views/home.js';
 import { renderConnect } from './views/connect.js';
 import { renderProfile } from './views/profile.js';
+import { renderCompare } from './views/compare.js';
 import { handleFiles } from './actions.js';
 import * as lastfm from './sources/lastfm.js';
 import * as spotify from './sources/spotify.js';
@@ -19,6 +20,7 @@ async function route() {
     if (!a) await renderHome();
     else if (a === 'demo' || a === 'file' || a === 'spotify') { pid = a; await renderProfile({ pid: a, source: a, tab: b, args: parts.slice(2) }); }
     else if (a === 'u' && SOURCES[b] && c) { pid = pidFor(b, c); await renderProfile({ pid, source: b, name: c, tab: d, args: parts.slice(4) }); }
+    else if (a === 'compare') renderCompare(b, c || '', d || '');
     else if (a === 'connect') renderConnect(b || 'lastfm', Number(c) || 1);
     else if (a === 'setup') renderConnect('lastfm', Number(b) || 1);
     else if (a === 'history') go('#/connect/file');

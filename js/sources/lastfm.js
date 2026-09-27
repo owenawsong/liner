@@ -135,10 +135,10 @@ export async function profile(name, signal) {
 }
 
 // kind: artists | tracks | albums
-export async function top(name, period, kind, signal) {
+export async function top(name, period, kind, signal, limit = 25) {
   if (!isLive()) return simTop(name, period, kind);
   const method = { artists: 'user.gettopartists', tracks: 'user.gettoptracks', albums: 'user.gettopalbums' }[kind];
-  const d = await call(method, { user: name, period, limit: 25 }, signal);
+  const d = await call(method, { user: name, period, limit }, signal);
   const key = { artists: 'topartists', tracks: 'toptracks', albums: 'topalbums' }[kind];
   const one = kind.slice(0, -1);
   return list(d[key]?.[one]).map((x) => ({

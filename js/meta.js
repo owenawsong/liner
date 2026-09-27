@@ -68,16 +68,45 @@ export function cachedArt(kind, name, artist) {
   return typeof v === 'string' ? v : undefined;
 }
 
+// Liner's own /api/art looks up to 40 pictures on Deezer in one request, with real
+// artist photos. If it isn't available (plain static hosting), fall back to iTunes.
+let batch = [];
+let batchTimer = 0;
+let apiOk = location.protocol === 'https:' || ['127.0.0.1', 'localhost'].includes(location.hostname);
+
+function flush() {
+  const jobs = batch.splice(0, 40);
+  if (batch.length) batchTimer = setTimeout(flush, 0); else batchTimer = 0;
+  const q = JSON.stringify(jobs.map((j) => j.item));
+  fetch(`/api/art?q=${encodeURIComponent(q)}`)
+    .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+    .then((d) => jobs.forEach((j, i) => j.done(d.results?.[i] ?? null)))
+    .catch(() => { apiOk = false; jobs.forEach((j) => j.done(undefined)); });
+}
+
+function viaApi(item) {
+  return new Promise((done) => {
+    batch.push({ item, done });
+    if (!batchTimer) batchTimer = setTimeout(flush, 30);
+  });
+}
+
+function viaItunes(kind, name, artist, front) {
+  return itunesQ(() => fetchArt(kind, name, artist).catch(() => null), front);
+}
+
 export function art(kind, name, artist = '', front = false) {
   const key = artKey(kind, name, artist);
   if (mem.has(key)) return Promise.resolve(mem.get(key));
   if (inflight.has(key)) return inflight.get(key);
-  const p = itunesQ(async () => {
-    const url = await fetchArt(kind, name, artist).catch(() => null);
-    if (url !== null) { mem.set(key, url); save(); }
+  const p = (async () => {
+    let url = apiOk ? await viaApi([kind, name, artist]) : undefined;
+    // Deezer found nothing, or the API is down: try iTunes before giving up.
+    if (!url) url = await viaItunes(kind, name, artist, front);
+    if (url !== null && url !== undefined) { mem.set(key, url); save(); }
     inflight.delete(key);
     return url || '';
-  }, front);
+  })();
   inflight.set(key, p);
   return p;
 }
@@ -135,3 +164,27 @@ export function artistInfo(name, front = false) {
 }
 
 export const ready = () => loading;
+
+/* ---------- Listener counts (Last.fm), for the obscurity score ---------- */
+const lastfmQ = queue(220);
+export const cachedListeners = (name) => mem.get(`lfl:${norm(name)}`);
+
+export function listeners(name) {
+  const key = `lfl:${norm(name)}`;
+  if (mem.has(key)) return Promise.resolve(mem.get(key));
+  if (inflight.has(key)) return inflight.get(key);
+  let apiKey = '';
+  try { apiKey = localStorage.getItem('liner.lfmkey') || ''; } catch { /* storage blocked */ }
+  apiKey = (apiKey || window.LINER_CONFIG?.lastfmApiKey || '').trim();
+  if (!apiKey) return Promise.resolve(null);
+  const p = lastfmQ(async () => {
+    try {
+      const d = await getJSON(`https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=${encodeURIComponent(name)}&autocorrect=1&api_key=${apiKey}&format=json`);
+      const n = Number(d.artist?.stats?.listeners || 0) || null;
+      mem.set(key, n); save();
+      return n;
+    } catch { return null; } finally { inflight.delete(key); }
+  });
+  inflight.set(key, p);
+  return p;
+}

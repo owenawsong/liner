@@ -97,9 +97,9 @@ export async function profile(name, signal) {
   };
 }
 
-export async function top(name, period, kind, signal) {
+export async function top(name, period, kind, signal, limit = 25) {
   const path = { artists: 'artists', tracks: 'recordings', albums: 'releases' }[kind];
-  const d = await get(`/stats/user/${enc(name)}/${path}`, { range: period, count: 25 }, signal);
+  const d = await get(`/stats/user/${enc(name)}/${path}`, { range: period, count: limit }, signal);
   if (!d) return null; // ListenBrainz hasn't calculated these yet
   const p = d.payload;
   if (kind === 'artists') return p.artists.map((a) => ({ name: a.artist_name, artist: '', plays: a.listen_count, image: '' }));

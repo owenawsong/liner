@@ -5,3 +5,8 @@ desktop.ini
 .vscode/
 .idea/
 *.log
+
+# Local secrets for `wrangler pages dev`. Never commit.
+.dev.vars
+.wrangler/
+node_modules/

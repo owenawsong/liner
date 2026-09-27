@@ -4,3 +4,6 @@
 wrangler.jsonc
 README.md
 node_modules
+.dev.vars
+.wrangler
+functions

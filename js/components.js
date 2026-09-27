@@ -57,7 +57,7 @@ export function rankList(items, { kind = 'artists', start = 0, size = 40, max: m
         <span class="rank__name"><b>${esc(x.name)}</b>${x.artist && byline ? `<span>${esc(x.artist)}</span>` : ''}</span>
         ${counts ? `<span class="rank__bar"><i style="width:${((x.plays || 0) / max) * 100}%;animation-delay:${i * 25}ms"></i></span>` : ''}
       </span>
-      <span class="rank__v">${counts ? num(x.plays) : ''}</span>`;
+      <span class="rank__v">${counts ? `${num(x.plays)}${x.unit === 'min' ? ' min' : ''}` : ''}</span>`;
     const href = link?.(x, kind);
     return href ? `<li><a class="rank__item" href="${href}">${inner}</a></li>` : `<li><div class="rank__item">${inner}</div></li>`;
   }).join('')}</ol>`;

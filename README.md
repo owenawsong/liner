@@ -31,6 +31,13 @@ Without a Last.fm key, Last.fm lookups are simulated. The usernames `hiddenuser`
 - Real cover art from iTunes Search and artist details from MusicBrainz, fetched slowly and cached in the browser
 - Installable as an app (manifest and service worker), with the app shell available offline
 
+## Server functions (Cloudflare Pages Functions)
+
+- `functions/api/art.js`: batch artist photos and covers from Deezer, cached 30 days at the edge
+- `functions/api/ai.js`: liner notes, roasts, era names, year write-ups and questions. Routes between NVIDIA and OpenRouter free models, caches answers, and rate-limits per visitor
+
+The AI keys are Cloudflare secrets: `NVIDIA_API_KEY` and `OPENROUTER_API_KEY`. For local development put them in `.dev.vars` (git-ignored) and run `npx wrangler pages dev . --port 5178`.
+
 ## How it fits together
 
 - `js/app.js`: router, theme picker, settings, drop-anywhere, Spotify sign-in callback
