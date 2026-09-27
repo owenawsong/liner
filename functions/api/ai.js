@@ -126,5 +126,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
       errors.push(String(e.message || e));
     }
   }
-  return Response.json({ error: 'The writing models are all busy right now. Try again in a minute.', detail: errors }, { status: 503 });
+  console.log('ai: every model failed', errors);
+  const unconfigured = errors.every((e) => e.startsWith('no key'));
+  return Response.json({ error: unconfigured ? "AI writing isn't switched on for this site yet." : 'The writing models are all busy right now. Try again in a minute.' }, { status: 503 });
 }
