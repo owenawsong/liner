@@ -18,12 +18,14 @@ Do not serve the project root with `python -m http.server` or `wrangler pages de
 
 | Source | What you need | What it adds |
 | --- | --- | --- |
-| Last.fm | A username | Recent plays, top lists, and optional full-history import. The site has a read-only API key; visitors do not need one. |
-| ListenBrainz | A username | Open live listening data and optional history import. Large histories can take time, so its export file is also accepted. |
-| Spotify Extended Streaming History | The ZIP Spotify emails you | Detailed past plays, listening time, skips, shuffle, and device where present. The ZIP is opened in the browser and is never uploaded. |
-| Direct Spotify | Your own Spotify developer app and Client ID | Now playing, recent plays, Spotify top lists, and skip tracking while Sleeve is open. Uses browser PKCE. |
+| Last.fm | A username | Recent plays, top lists, and optional full-history import. A newly created account starts logging future plays; it has no earlier Spotify history. |
+| ListenBrainz | A username | Open live listening data and optional history import. A newly created account starts logging future plays. Large histories can take time, so its export file is also accepted. |
+| Spotify Account Data or Extended Streaming History | The ZIP Spotify emails you | Account Data covers about a year; Extended History covers the life of the account and includes skips and devices. The ZIP is opened in the browser and is never uploaded. |
+| Direct Spotify, advanced | Your own Spotify developer app and Client ID | Now playing, recent plays, Spotify top lists, and skip tracking while Sleeve is open. Uses browser PKCE and is not a public one-click Spotify login. |
 
 The `#/start` page helps visitors pick a route. `#/demo` shows the full experience without setup. When an archive and a live source overlap, the archive is used through its final day and newer live plays follow it.
+
+The public access strategy, MetaBrainz approval requirements, and a draft partnership request are in [docs/DATA_ACCESS_DECISION.md](docs/DATA_ACCESS_DECISION.md).
 
 ## Explore
 

@@ -43,11 +43,11 @@ export async function renderHome() {
   view().innerHTML = `
   <section class="sl-hero" id="sl-hero">
     <div class="wrap sl-hero__inner">
-      <div class="sl-hero__meta"><span>SLV-001</span><span>Every feature free · No account · Files stay on your device</span><span>33⅓ RPM</span></div>
+      <div class="sl-hero__meta"><span>SLV-001</span><span>Every feature free · No Sleeve account · Files stay on your device</span><span>33⅓ RPM</span></div>
       <div class="sl-hero__grid">
         <div class="sl-hero__copy">
           <h1 class="sl-hero__title" data-reveal>${'Your whole record.'.split(' ').map((w, i) => `<span style="--i:${i}">${w}</span>`).join(' ')}</h1>
-          <p class="sl-hero__lede" data-reveal>Sleeve turns your Spotify history into your eras, a year in review for every year, and the small things you never noticed about how you listen. Every feature is free.</p>
+          <p class="sl-hero__lede" data-reveal>Sleeve turns your listening history into your eras, a year in review for every year, and the small things you never noticed about how you listen. Every feature is free.</p>
           <div class="sl-connect" data-reveal>
             ${returning.length ? `<div class="returning"><span>Welcome back</span>${returning.map((r) => `<a href="${hrefFor(r.pid)}">${avatar(r.display, r.image, 26)}${esc(r.display)}</a>`).join('')}</div>` : ''}
             <div class="sl-srcs" role="tablist" aria-label="How to connect">
@@ -56,7 +56,7 @@ export async function renderHome() {
               <button type="button" role="tab" data-src="file" aria-selected="${homeSource === 'file'}">Spotify file</button>
             </div>
             <div id="hero-src" role="tabpanel"></div>
-            <p class="sl-hero__none">No Last.fm? <a href="#/start">Start here, it takes a minute</a> · <a href="#/demo">See a demo profile</a></p>
+            <p class="sl-hero__none">Only use Spotify? <a href="#/start/none">See how to start tracking</a> · <a href="#/demo">Explore a demo profile</a></p>
           </div>
         </div>
         <div class="deck" aria-hidden="true">
@@ -68,7 +68,7 @@ export async function renderHome() {
     </div>
   </section>
 
-  <div class="marquee" aria-hidden="true"><div class="marquee__row">${Array.from({ length: 2 }, () => ['Every feature free', 'Your eras, found for you', 'Year in review for every year', 'AI liner notes', 'Compare with friends', 'Files stay on your device', 'No account', 'Top 100, any dates', 'Listening clock', 'Your whole history'].map((s) => `<span>${s}</span><i>●</i>`).join('')).join('')}</div></div>
+  <div class="marquee" aria-hidden="true"><div class="marquee__row">${Array.from({ length: 2 }, () => ['Every feature free', 'Your eras, found for you', 'Year in review for every year', 'AI liner notes', 'Compare with friends', 'Files stay on your device', 'No Sleeve account', 'Top 100, any dates', 'Listening clock', 'Your whole history'].map((s) => `<span>${s}</span><i>●</i>`).join('')).join('')}</div></div>
 
   <section class="sl-tracks" id="features">
     <div class="wrap">
@@ -134,10 +134,10 @@ export async function renderHome() {
     <div class="wrap">
       <div class="sl-tracks__head" data-reveal><span class="catno">FOUR WAYS IN</span><h2>Use one. Or all of them.</h2><p>Pick a live listening log, bring your Spotify history, or connect your own developer app.</p></div>
       <div class="ways">
-        <a class="way way--vermilion" href="#/connect/lastfm" data-reveal><span class="way__no">01</span><b>Last.fm</b><span>Live, within seconds. Import years in one click.</span><em>About a minute to set up</em></a>
-        <a class="way way--cobalt" href="#/connect/listenbrainz" aria-label="Connect ListenBrainz" data-reveal><span class="way__no">02</span><b>Listen<br>Brainz</b><span>Open source and non-profit. No key needed.</span><em>About a minute to set up</em></a>
-        <a class="way way--moss" href="#/connect/file" data-reveal><span class="way__no">03</span><b>Spotify export</b><span>Every play since day one, with exact skips.</span><em>Arrives by email in a few days</em></a>
-        <a class="way way--ink" href="#/connect/spotify" data-reveal><span class="way__no">04</span><b>Spotify direct</b><span>Live progress and skip tracking, for enthusiasts.</span><em>About five minutes, needs Premium</em></a>
+        <a class="way way--vermilion" href="#/connect/lastfm" data-reveal><span class="way__no">01</span><b>Last.fm</b><span>Open your existing log or start tracking new Spotify plays.</span><em>Free Last.fm account needed</em></a>
+        <a class="way way--cobalt" href="#/connect/listenbrainz" aria-label="Connect ListenBrainz" data-reveal><span class="way__no">02</span><b>Listen<br>Brainz</b><span>Open your existing log or start tracking new Spotify plays.</span><em>Free MetaBrainz account needed</em></a>
+        <a class="way way--moss" href="#/connect/file" data-reveal><span class="way__no">03</span><b>Spotify export</b><span>Add past plays, listening time and skips whenever you want.</span><em>Spotify prepares the file by email</em></a>
+        <a class="way way--ink" href="#/connect/spotify" data-reveal><span class="way__no">04</span><b>Your Spotify app</b><span>Advanced: connect through a developer app you create.</span><em>Requires Premium and setup</em></a>
       </div>
     </div>
   </section>
@@ -153,8 +153,8 @@ export async function renderHome() {
           <p>Sleeve runs almost entirely in your browser, so it costs very little to keep online, and the AI uses free models. If it ever costs more, donations will cover it. Features won't go behind a paywall.</p>
         </div>
         <div class="faq faq--small">
-          <details><summary>Why no one-click Spotify login?</summary><p>A Spotify login alone wouldn't give us your full listening history. Last.fm and ListenBrainz keep a live log; your Extended Streaming History export adds detailed past plays. If you have a Spotify developer app, you can also <a href="#/connect/spotify">connect it directly</a>.</p></details>
-          <details><summary>How do I get my Spotify export?</summary><p>Tick "Extended streaming history" on Spotify's privacy page. It usually arrives in a few days. <a href="#/connect/file">Step-by-step guide</a>.</p></details>
+          <details><summary>Why no one-click Spotify login?</summary><p>Spotify limits new developer apps to five authorized users. A Spotify login also cannot provide your lifetime play history. For now, <a href="#/start/none">start a listening log</a> for future plays or add your Spotify data file for the past. If you have your own developer app, you can <a href="#/connect/spotify">connect it as an advanced option</a>.</p></details>
+          <details><summary>How do I get my Spotify export?</summary><p>Tick "Extended streaming history" on Spotify's privacy page. It includes your lifetime plays, but Spotify can take up to 30 days to prepare it. <a href="#/connect/file">Step-by-step guide</a>.</p></details>
           <details><summary>Why don't my numbers match Wrapped?</summary><p>Spotify counts a stream at 30 seconds, Last.fm at half a song, and Wrapped only covers part of the year. Sleeve shows its rule and lets you change it.</p></details>
           <details><summary>Last.fm or ListenBrainz?</summary><p>Already on Last.fm? Use it. Starting fresh? Either works. ListenBrainz is open source and run by a non-profit.</p></details>
           <details><summary>Does it count my phone?</summary><p>Yes. Plays come from Spotify itself, so every device counts.</p></details>
@@ -167,9 +167,9 @@ export async function renderHome() {
     <div class="wrap sl-final__inner" data-reveal>
       <div class="sl-final__disc" aria-hidden="true"></div>
       <h2>Drop the needle.</h2>
-      <p>Type your Last.fm username. That's the whole sign-up.</p>
+      <p>Already track with Last.fm? Enter your username to open your record.</p>
       <div id="final-lookup"></div>
-      <a class="sl-final__alt" href="#/start">Don't have Last.fm? Start here ${icon.arrow}</a>
+      <a class="sl-final__alt" href="#/start/none">Only use Spotify? Start here ${icon.arrow}</a>
     </div>
   </section>`;
 

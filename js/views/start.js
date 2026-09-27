@@ -6,10 +6,10 @@ import { dropzone, bindDrops } from '../components.js';
 import { handleFiles } from '../actions.js';
 
 const CHOICES = [
-  { id: 'lastfm', no: 'A1', title: 'I use Last.fm', sub: 'Your stats are ready in seconds, with years of history if you have it.', tone: 'vermilion' },
-  { id: 'listenbrainz', no: 'A2', title: 'I use ListenBrainz', sub: 'The open-source one. No key, no fuss.', tone: 'cobalt' },
-  { id: 'file', no: 'A3', title: 'I have my Spotify data', sub: 'The ZIP Spotify emailed you. Every play, every skip.', tone: 'moss' },
-  { id: 'none', no: 'A4', title: "I don't have any of these", sub: "Most people don't. We'll get you set up in about a minute.", tone: 'marigold' },
+  { id: 'none', no: 'A1', title: 'I only use Spotify', sub: 'Start recording new plays. Your older plays need a separate Spotify file.', tone: 'marigold' },
+  { id: 'lastfm', no: 'A2', title: 'I use Last.fm', sub: 'Open the plays you have already logged there.', tone: 'vermilion' },
+  { id: 'listenbrainz', no: 'A3', title: 'I use ListenBrainz', sub: 'Open the plays you have already logged there.', tone: 'cobalt' },
+  { id: 'file', no: 'A4', title: 'I have my Spotify data', sub: 'Drop the ZIP Spotify emailed you to explore your past plays.', tone: 'moss' },
 ];
 
 export function renderStart(choice = '') {
@@ -17,8 +17,8 @@ export function renderStart(choice = '') {
     <div class="wrap start">
       <header class="start__head">
         <span class="catno">SLV · SETUP</span>
-        <h1>Where does your music live?</h1>
-        <p>Choose the source you already have. Your listening record can grow from live scrobbles, a Spotify history file, or both.</p>
+        <h1>Start with what you have.</h1>
+        <p>Already track your listening? Open it now. Only use Spotify? Start logging new plays, and add your past from Spotify's data file if you want.</p>
       </header>
       <div class="choices">${CHOICES.map((c) => `
         <button type="button" class="choice choice--${c.tone}" data-choice="${c.id}" aria-pressed="${choice === c.id}">
@@ -46,11 +46,12 @@ function panel(choice) {
     bindDrops(el, handleFiles);
   } else {
     el.innerHTML = `
-      <h2>Here's the plan</h2>
+      <h2>Start your listening record</h2>
+      <p class="faint" style="font-size:14px;margin:8px 0 0">A new listening log begins with your next songs. It cannot pull your past Spotify plays automatically.</p>
       <ol class="plan">
-        <li><span class="plan__n">1</span><div><b>Set up Last.fm now</b><p>It's free and takes about a minute. It starts logging the songs you listen to on Spotify across your devices.</p><a class="btn btn--ink" href="#/connect/lastfm">Start the one-minute setup ${icon.arrow}</a></div></li>
-        <li><span class="plan__n">2</span><div><b>Ask Spotify for your full history too</b><p>It fills in everything before today, with skips and exact listening time. It arrives by email in a few days.</p><a class="btn btn--line" href="#/connect/file">How to request it</a></div></li>
-        <li><span class="plan__n">3</span><div><b>While you wait</b><p>Look around a full demo profile, or compare your taste with a friend who already uses Last.fm.</p><div class="flow__actions"><a class="btn btn--line" href="#/demo">Open the demo</a><a class="btn btn--line" href="#/compare">Compare with a friend</a></div></div></li>
+        <li><span class="plan__n">1</span><div><b>Connect Spotify to a listening log</b><p>Last.fm can record songs you play across your Spotify devices. It needs a free Last.fm account and starts tracking from now on.</p><a class="btn btn--ink" href="#/connect/lastfm">Set up Last.fm ${icon.arrow}</a><div class="flow__actions"><a class="link link--quiet" href="#/connect/listenbrainz">Use ListenBrainz instead</a></div></div></li>
+        <li><span class="plan__n">2</span><div><b>See it work with your next song</b><p>Play a song after connecting. Sleeve will check for it, then your record will grow as you listen. The bigger stories need more plays.</p><a class="btn btn--line" href="#/demo">Explore a full demo now ${icon.arrow}</a></div></li>
+        <li><span class="plan__n">3</span><div><b>Add your Spotify past whenever you want</b><p>Spotify can email your listening history. The lifetime export includes skips and exact listening time, but preparation can take up to 30 days.</p><a class="link" href="#/connect/file">How to request the optional file ${icon.arrow}</a></div></li>
       </ol>`;
   }
   el.hidden = false;

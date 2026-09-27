@@ -60,7 +60,7 @@ export function mountLookup(root, { source = 'lastfm', id, cta = 'Continue', ini
     } catch (e) {
       if (e.name === 'AbortError' || my !== seq) return;
       out.innerHTML = e.code === 'notfound'
-        ? `<p class="lookup__msg lookup__msg--bad">There's no ${src.label} user called <b>${esc(name)}</b>. Check the spelling, or <a href="#/connect/${source}">set up an account</a> in about a minute.</p>`
+        ? `<p class="lookup__msg lookup__msg--bad">There's no ${src.label} user called <b>${esc(name)}</b>. Check the spelling, or <a href="#/connect/${source}">set up an account</a>.</p>`
         : `<p class="lookup__msg lookup__msg--bad">${esc(e.message || 'Something went wrong. Try again.')}</p>`;
     } finally {
       if (my === seq) { busy = false; wantSubmit = false; }
@@ -129,7 +129,7 @@ function lfmFlow(step) {
   if (step === 1) {
     shell({ back, label, n: 4, cur: 1, body: `
       <h1>Make a free Last.fm account</h1>
-      <p class="flow__lede">Last.fm keeps a log of every song you play on Spotify, on any device. Sleeve reads that log to build your stats. Signing up takes about 30 seconds.</p>
+      <p class="flow__lede">Last.fm keeps a log of songs you play on Spotify, across your devices. Sleeve reads that log to build your stats. A new account starts recording from now on; it won't contain your older Spotify plays.</p>
       <div class="flow__actions">
         ${ext('https://www.last.fm/join', `Open Last.fm sign-up ${icon.out}`, 'btn btn--ink btn--lg')}
         <a class="btn btn--line btn--lg" href="#/connect/lastfm/3">I already have an account</a>
@@ -186,7 +186,7 @@ function lbFlow(step) {
   if (step === 1) {
     shell({ back, label, n: 3, cur: 1, body: `
       <h1>Make a free ListenBrainz account</h1>
-      <p class="flow__lede">ListenBrainz is an open, non-profit alternative to Last.fm run by MetaBrainz. It logs what you play on Spotify, and anyone can read that log, so Sleeve needs no key.</p>
+      <p class="flow__lede">ListenBrainz is an open, non-profit alternative to Last.fm run by MetaBrainz. It can log new Spotify plays, and Sleeve can read them without an API key. A new account won't contain your older Spotify plays.</p>
       <div class="flow__actions">
         ${ext('https://listenbrainz.org/login/', `Open ListenBrainz ${icon.out}`, 'btn btn--ink btn--lg')}
         <a class="btn btn--line btn--lg" href="#/connect/listenbrainz/3">I already use it</a>
@@ -241,8 +241,10 @@ function detectStep(source, name, chrome) {
   const tick = setInterval(() => {
     const s = (Date.now() - started) / 1000;
     $('#elapsed').textContent = clock(s);
-    if (s >= 20 && s < 21.2) $('#hint').textContent = `Spotify can take up to 30 seconds to tell ${src.label}. Keep the song playing.`;
-    if (s >= 45) showTrouble(source, name);
+    if (s >= 20 && s < 21.2) $('#hint').textContent = source === 'listenbrainz'
+      ? 'ListenBrainz can take a few minutes to record a new Spotify play. Keep listening.'
+      : 'Last.fm may take a little while to record your play. Keep listening.';
+    if (s >= (source === 'listenbrainz' ? 120 : 45)) showTrouble(source, name);
   }, 1000);
   const stop = () => { stopped = true; clearInterval(tick); clearTimeout(timer); ctrl.abort(); };
   onLeave(stop);
@@ -273,7 +275,7 @@ function showTrouble(source, name) {
     <ol>
       <li><b>The song is really playing</b>, not paused, and it's music rather than a podcast.</li>
       <li><b>Private session is off</b> in Spotify. Private listening is never shared.</li>
-      <li><b>Spotify is connected.</b> On ${ext(LFM_APPS, 'Last.fm Applications')}, Spotify Scrobbling should say Disconnect. If it says Connect, press it.</li>
+      <li><b>Spotify is connected.</b> ${source === 'lastfm' ? `On ${ext(LFM_APPS, 'Last.fm Applications')}, Spotify Scrobbling should say Disconnect. If it says Connect, press it.` : `Check the Spotify connection in ${ext(LB_SERVICES, 'ListenBrainz Connect services')}.`}</li>
       <li><b>The username is right.</b> We're listening for <b>${esc(name)}</b>. <a href="#/connect/${source}/3">Change it</a></li>
     </ol>
   </div>`;
@@ -299,21 +301,21 @@ function detected(source, name, t) {
 export const requestSteps = `
   <ol class="steplist">
     <li><span class="n">1</span><div><b>Open Spotify's privacy page</b><p>${ext(SPOTIFY_PRIVACY, 'spotify.com/account/privacy')}, then sign in.</p></div></li>
-    <li><span class="n">2</span><div><b>Tick "Extended streaming history"</b><p>The default option only covers the last year. The extended one has every play since you made your account.</p></div></li>
-    <li><span class="n">3</span><div><b>Request it and confirm the email</b><p>Spotify sends a confirmation link first. Your files come in a second email, usually within a few days. Spotify says it can take up to 30.</p></div></li>
+    <li><span class="n">2</span><div><b>Request Account data and Extended streaming history</b><p>Account data includes roughly the last year of plays. Extended history covers the life of your account, with more detail. You can add either file when it arrives.</p></div></li>
+    <li><span class="n">3</span><div><b>Confirm the request by email</b><p>Spotify sends a confirmation link first, then prepares the files. Extended history can take around 30 days.</p></div></li>
     <li><span class="n">4</span><div><b>Drop the ZIP into Sleeve</b><p>No need to unzip it. It's read right here on your device.</p></div></li>
   </ol>`;
 
 function fileFlow() {
   shell({ label: 'Spotify export', body: `
-    <h1>Your whole history, straight from Spotify</h1>
-    <p class="flow__lede">Spotify will send you every play since you made your account, with exact listening time, skips, shuffle and devices. It's the most complete record there is.</p>
+    <h1>Add your Spotify listening history</h1>
+    <p class="flow__lede">Spotify's Account Data includes roughly the last year of plays. Extended Streaming History covers your account's lifetime with details such as listening time, skips, shuffle and devices.</p>
     ${dropzone({ big: true, title: 'Drop your Spotify ZIP here', sub: 'or click to choose it. It never leaves your device.' })}
     <div class="panel">
       <div class="panel__head"><h2>Don't have it yet?</h2><span class="label">Takes 2 minutes</span></div>
       ${requestSteps}
     </div>
-    <p class="flow__note">Waiting for Spotify? Connect ${'<a href="#/connect/lastfm">Last.fm</a>'} or ${'<a href="#/connect/listenbrainz">ListenBrainz</a>'} now and you'll have stats in the meantime.</p>` });
+    <p class="flow__note">Waiting for Spotify? ${'<a href="#/connect/lastfm">Last.fm</a>'} or ${'<a href="#/connect/listenbrainz">ListenBrainz</a>'} can start recording new plays now. A newly created log won't contain your older Spotify plays.</p>` });
   bindDrops(view(), handleFiles);
 }
 
