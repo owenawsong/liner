@@ -4,6 +4,7 @@ import * as listenbrainz from './sources/listenbrainz.js';
 import * as spotify from './sources/spotify.js';
 import { sampleArchive } from './sources/demo.js';
 import { analyze } from './analysis.js';
+import { clearTaste } from './taste.js';
 
 export const SOURCES = { lastfm, listenbrainz, spotify };
 export const view = () => $('#view');
@@ -62,6 +63,7 @@ export async function setArchive(pid, a) {
 export async function clearArchive(pid) {
   cache.delete(pid);
   await idb.del(`archive:${pid}`);
+  await clearTaste(pid);
   if (pid.startsWith('lastfm:')) await lastfm.clearCheckpoint(pid);
 }
 

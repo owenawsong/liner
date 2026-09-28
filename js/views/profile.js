@@ -11,12 +11,13 @@ import { mainstreamPanel, bindMainstream, milestonesPanel } from './mainstream.j
 import { notesPanel, bindNotes, askPanel, bindAsk, nameEras, yearNotes, bindYearNotes } from './aiviews.js';
 import { evolutionView } from './evolution.js';
 import { patternsView } from './patterns.js';
+import { discoverView } from './discover.js';
 import { evolution } from '../evolution.js';
 import { demoRecent, DEMO_USER } from '../sources/demo.js';
 import * as lastfm from '../sources/lastfm.js';
 import * as spotify from '../sources/spotify.js';
 
-const TABS = [['overview', 'Overview'], ['top', 'Top'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['patterns', 'Deep dive'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
+const TABS = [['overview', 'Overview'], ['discover', 'Discover'], ['top', 'Top'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['patterns', 'Deep dive'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
 const LABEL = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export', demo: 'Demo' };
 const DAY = 864e5;
 let overviewPick = -1;
@@ -68,7 +69,7 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
     <nav class="tabs" aria-label="Profile sections"><div class="wrap tabs__inner">${TABS.map(([t, l]) => `<a href="${hrefFor(pid, t === 'overview' ? '' : t)}"${t === current ? ' aria-current="page"' : ''}>${l}${t === 'insights' && A ? `<small>${A.insights.length}</small>` : ''}</a>`).join('')}</div></nav>
     <div class="wrap" id="sync-banner" aria-live="polite"></div>
     <div class="wrap fade-in" id="tab"></div>`;
-  ({ overview, top, timeline: timelineTab, evolution: evolutionTab, patterns: patternsTab, insights: insightsTab, clock, data, artist: detail, song: detail, year: detail })[tab](ctx);
+  ({ overview, discover: discoverTab, top, timeline: timelineTab, evolution: evolutionTab, patterns: patternsTab, insights: insightsTab, clock, data, artist: detail, song: detail, year: detail })[tab](ctx);
   bindSyncBanner(ctx);
   autoSync(ctx);
   mountSearch($('#search'), A, ctx.L);
@@ -481,18 +482,21 @@ function needArchive(ctx, what) {
   const preparing = ctx.source === 'lastfm' && !empty;
   const copy = (empty ? {
     timeline: ['Your timeline starts with your first song', 'Connect Spotify in Last.fm, then listen. Your months and eras will take shape as your record grows.'],
+    discover: ['Discovery starts with your first song', 'Connect Spotify in Last.fm, then listen. Sleeve will use your record and your ratings to find new artists and albums.'],
     evolution: ['Your taste changes from the first song', 'Connect Spotify in Last.fm, then listen. Once you have history, Sleeve can compare your recent chapters.'],
     patterns: ['Your deeper charts start with the first song', 'Connect Spotify in Last.fm, then listen. Activity, discovery and genre charts will grow with your record.'],
     insights: ['Insights grow from your listening', 'Connect Spotify in Last.fm, then listen. Sleeve will find patterns as more plays arrive.'],
     clock: ['Your listening clock starts with your first song', 'Connect Spotify in Last.fm, then listen. Sleeve will map when you play music.'],
   } : preparing ? {
     timeline: ['Your timeline is being prepared', 'Sleeve is reading your Last.fm history in the background. You can explore while it works.'],
+    discover: ['Your recommendations are being prepared', 'Sleeve is reading your Last.fm history to understand what you already know.'],
     evolution: ['Your taste evolution is being prepared', 'Sleeve is reading your Last.fm history so it can compare your recent listening with earlier periods.'],
     patterns: ['Your deeper charts are being prepared', 'Sleeve is reading your Last.fm history to build month-by-month activity and discovery charts.'],
     insights: ['Your insights are being prepared', 'Sleeve is reading your Last.fm history to find patterns across your record.'],
     clock: ['Your listening clock is being prepared', 'Sleeve is reading your Last.fm history to map when you listen.'],
   } : {
     timeline: ['Your timeline needs your full history', 'Import it once and Sleeve lays out every month you have listened, finds your eras, and sums up each year.'],
+    discover: ['Discovery needs your listening history', 'Import your plays so Sleeve can find new artists and albums connected to your taste.'],
     evolution: ['Taste evolution needs your listening history', 'Sleeve compares equal periods to find discoveries, rising artists, fading favorites and comebacks.'],
     patterns: ['Deeper charts need your listening history', 'Import your plays to see month-by-month activity, discovery, breadth and genres.'],
     insights: ['Insights need your full history', 'Import it once and Sleeve looks for obsessions, comebacks, streaks, late nights and more.'],
@@ -546,6 +550,11 @@ function timelineTab(ctx) {
 function evolutionTab(ctx) {
   if (!ctx.A) return needArchive(ctx, 'evolution');
   evolutionView(ctx, banner(ctx));
+}
+
+function discoverTab(ctx) {
+  if (!ctx.A) return needArchive(ctx, 'discover');
+  discoverView(ctx, banner(ctx));
 }
 
 function patternsTab(ctx) {

@@ -192,15 +192,63 @@ export function artistInfo(name, front = false) {
   return p;
 }
 
+// Last.fm album MBIDs generally identify a particular release. Resolve that
+// release to the MusicBrainz release group (the album concept) before reading
+// community ratings, and keep these calls on the shared 1/sec MusicBrainz queue.
+export async function releaseGroupForAlbum(album) {
+  if (!/^[0-9a-f-]{36}$/i.test(album.mbid || '')) return null;
+  const key = `rg:v1:${album.mbid}`;
+  if (mem.has(key)) return mem.get(key);
+  if (inflight.has(key)) return inflight.get(key);
+  if (Date.now() < mbUnavailableUntil) return null;
+  const p = (async () => {
+    const base = 'https://musicbrainz.org/ws/2/';
+    const release = await mbQ(() => getJSON(`${base}release/${album.mbid}?inc=release-groups&fmt=json`).catch(() => null));
+    const groupId = release?.['release-group']?.id || album.mbid;
+    const group = await mbQ(() => getJSON(`${base}release-group/${groupId}?inc=ratings+genres&fmt=json`).catch(() => null));
+    if (!group || !same(group.title, album.name)) return null;
+    const value = Number(group.rating?.value), count = Number(group.rating?.['votes-count'] || 0);
+    const info = { id: group.id, title: group.title, type: group['primary-type'] || '',
+      date: group['first-release-date'] || '', rating: Number.isFinite(value) && count ? value : null,
+      votes: count, genres: (group.genres || []).sort((a, b) => b.count - a.count).slice(0, 3).map((x) => x.name) };
+    mem.set(key, info); save();
+    return info;
+  })().finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+export async function critiqueCount(groupId) {
+  if (!groupId) return null;
+  const key = `cb:v1:${groupId}`;
+  if (mem.has(key)) return mem.get(key);
+  if (inflight.has(key)) return inflight.get(key);
+  const p = (async () => {
+    try {
+      const d = await getJSON(`https://critiquebrainz.org/ws/1/review/?entity_id=${groupId}&entity_type=release_group&review_type=review&limit=0`);
+      const count = Number(d.count || 0);
+      mem.set(key, count); save();
+      return count;
+    } catch { return null; }
+  })().finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
 export const ready = () => loading;
 
 /* ---------- Listener counts (Last.fm), for the obscurity score ---------- */
 const lastfmQ = queue(220);
-// v2 avoids old counts returned by Last.fm's autocorrect for a different artist.
-export const cachedListeners = (name) => mem.get(`lfl2:${norm(name)}`);
+// Search returns the audience of canonical spelling variants. artist.getInfo
+// can attach a small, separate page to punctuation variants (e.g. Travi$ Scott)
+// and make a globally popular artist look obscure. v4 checks both stylized
+// dollar-sign names and plain spellings before selecting the largest match.
+const audienceName = (name) => String(name || '').replace(/\$/g, 's').replace(/[+&]/g, ' and ').toLowerCase()
+  .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+export const cachedListeners = (name) => mem.get(`lfl4:${audienceName(name)}`);
 
 export function listeners(name) {
-  const key = `lfl2:${norm(name)}`;
+  const key = `lfl4:${audienceName(name)}`;
   if (mem.has(key)) return Promise.resolve(mem.get(key));
   if (inflight.has(key)) return inflight.get(key);
   let apiKey = '';
@@ -209,8 +257,15 @@ export function listeners(name) {
   if (!apiKey) return Promise.resolve(null);
   const p = lastfmQ(async () => {
     try {
-      const d = await getJSON(`https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=${encodeURIComponent(name)}&autocorrect=0&api_key=${apiKey}&format=json`);
-      const n = same(d.artist?.name, name) ? Number(d.artist?.stats?.listeners || 0) || null : null;
+      const search = async (query) => {
+        const d = await getJSON(`https://ws.audioscrobbler.com/2.0/?method=artist.search&artist=${encodeURIComponent(query)}&limit=15&api_key=${apiKey}&format=json`);
+        const matches = d.results?.artistmatches?.artist || [];
+        return Array.isArray(matches) ? matches : [matches];
+      };
+      const matches = await search(name);
+      if (name.includes('$')) matches.push(...await search(name.replace(/\$/g, 's')));
+      const exact = matches.filter((x) => audienceName(x.name) === audienceName(name));
+      const n = Math.max(0, ...exact.map((x) => Number(x.listeners || 0))) || null;
       mem.set(key, n); save();
       return n;
     } catch { return null; } finally { inflight.delete(key); }

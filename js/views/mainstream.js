@@ -48,14 +48,14 @@ export function bindMainstream(A, L) {
         <div class="ms__score"><b>${score}</b><span>out of 100 obscurity</span><p>${label}</p></div>
         <div class="ms__meter"><div class="ms__track"><i style="left:${score}%"></i></div><div class="ms__ends"><span>Everyone knows them</span><span>Almost nobody does</span></div></div>
       </div>
-      <p class="faint" style="font-size:13px;margin:2px 0 16px">Fixed score based on your top ${scoreArtists.length} artists, weighted by plays. Exact Last.fm listener counts cover ${coverage}% of those plays. Listener totals are global, not monthly.</p>`;
+      <p class="faint" style="font-size:13px;margin:2px 0 16px">Fixed score based on your top ${scoreArtists.length} artists, weighted by plays. Matched Last.fm listener counts cover ${coverage}% of those plays. Listener totals are global, not monthly.</p>`;
     scoreEl.classList.add('is-ready');
   };
   const paintDeep = () => {
     if (!alive || !deepEl?.isConnected) return;
     const known = artists.map((a) => ({ a, n: cachedListeners(a.name) })).filter((x) => x.n);
     const sorted = [...known].sort((x, y) => x.n - y.n);
-    deepEl.innerHTML = `<p class="faint" style="font-size:13px;margin:2px 0 16px">Deep cuts searched ${artists.length} artists with at least five plays; ${known.length} had an exact listener count.</p>
+    deepEl.innerHTML = `<p class="faint" style="font-size:13px;margin:2px 0 16px">Deep cuts searched ${artists.length} artists with at least five plays; ${known.length} had a matched listener count.</p>
       <div class="grid" style="margin-top:8px"><div class="c-6"><span class="label">Your deeper cuts</span>${sorted.slice(0, 5).map(row).join('') || '<p class="empty">No counts available.</p>'}</div>
       <div class="c-6"><span class="label">Your most mainstream</span>${sorted.slice(-3).reverse().map(row).join('') || '<p class="empty">No counts available.</p>'}</div></div>`;
     deepEl.classList.add('is-ready');

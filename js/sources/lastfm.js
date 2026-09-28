@@ -165,8 +165,18 @@ export async function top(name, period, kind, signal, limit = 25) {
 export async function similar(artist, signal, limit = 15) {
   if (!isLive()) return [];
   const d = await call('artist.getsimilar', { artist, autocorrect: 0, limit }, signal);
-  return list(d.similarartists?.artist).map((a) => ({ name: a.name, match: Number(a.match || 0) }))
+  return list(d.similarartists?.artist).map((a) => ({ name: a.name, mbid: a.mbid || '', match: Number(a.match || 0) }))
     .filter((a) => a.name && Number.isFinite(a.match));
+}
+
+// Last.fm ranks these by global plays. Its album MBID is often a MusicBrainz
+// release ID, so Discover resolves it to a release group before showing a rating.
+export async function topAlbums(artist, signal, limit = 8) {
+  if (!isLive()) return [];
+  const d = await call('artist.gettopalbums', { artist, autocorrect: 0, limit }, signal);
+  return list(d.topalbums?.album).map((a) => ({ name: a.name, artist: a.artist?.name || artist,
+    mbid: a.mbid || '', plays: Number(a.playcount || 0), url: a.url || '' }))
+    .filter((a) => a.name && a.artist.toLowerCase() === artist.toLowerCase());
 }
 
 function simTop(name, period, kind) {

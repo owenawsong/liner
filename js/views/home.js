@@ -25,6 +25,7 @@ export async function renderHome() {
   const insight = (id) => A.insights.find((x) => x.id === id);
 
   const TRACKS = [
+    { side: 'A', title: 'Find your next favorite', desc: 'Discover artists and albums connected to your listening, then rate and save what you find.', vis: '<div class="minichat"><p class="minichat__q">What should I play next?</p><p class="minichat__a">Start with artists you love. Go further out, dig for deeper cuts, and build a shelf of records to try.</p></div>' },
     { side: 'A', title: 'Timeline and eras', desc: 'Every month you have ever listened, on one line, with your eras found for you.', vis: `<div id="pv-timeline">${timeline(A, { height: 170, fit: true })}</div>` },
     { side: 'A', title: 'How your taste changes', desc: 'See the artists rising, the old favorites fading, and who you discovered this season.', vis: '<div class="minichat"><p class="minichat__q">Your next chapter</p><p class="minichat__a">Compare two equal 90-day stretches. Find discoveries, comebacks and the artists moving into your rotation.</p></div>' },
     { side: 'A', title: 'Your listening, four ways', desc: 'Explore 24 months of plays, artist breadth, discoveries and how much one favorite dominated.', vis: '<div class="minichat"><p class="minichat__q">More than a top list</p><p class="minichat__a">See how wide your rotation got, when it narrowed, and when new artists arrived.</p></div>' },
@@ -49,7 +50,7 @@ export async function renderHome() {
       <div class="sl-hero__grid">
         <div class="sl-hero__copy">
           <h1 class="sl-hero__title" data-reveal>${'Your whole record.'.split(' ').map((w, i) => `<span style="--i:${i}">${w}</span>`).join(' ')}</h1>
-          <p class="sl-hero__lede" data-reveal>Sleeve turns your listening history into your eras, a year in review for every year, and the small things you never noticed about how you listen. Every feature is free.</p>
+          <p class="sl-hero__lede" data-reveal>Sleeve turns your listening history into your eras, a year in review for every year, and new artists and albums to try. Every feature is free.</p>
           <div class="sl-connect" data-reveal>
             ${returning.length ? `<div class="returning"><span>Welcome back</span>${returning.map((r) => `<a href="${hrefFor(r.pid)}">${avatar(r.display, r.image, 26)}${esc(r.display)}</a>`).join('')}</div>` : ''}
             <div class="sl-hero__actions"><a class="btn btn--ink sl-hero__cta" href="#/start">Get started ${icon.arrow}</a><a class="btn btn--line sl-hero__cta" href="#/demo">Explore the demo</a></div>

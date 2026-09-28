@@ -30,7 +30,8 @@ The public data access decision is in [docs/DATA_ACCESS_DECISION.md](docs/DATA_A
 
 ## Explore
 
-- Overview, Top 100 with plays or minutes and date filters, Timeline, Evolution, Deep dive charts, Insights, Clock, and Data tabs
+- Overview, Discover, Top 100 with plays or minutes and date filters, Timeline, Evolution, Deep dive charts, Insights, Clock, and Data tabs
+- Discover combines Last.fm artist similarities and album popularity with your listening history. It lets you follow any seed artist, rotate through longer-tail seeds, and find deeper cuts using listener counts checked against spelling variants. It filters artists and albums you already heard, checks album identities against MusicBrainz, and shows available community ratings with vote counts. Save, hide, mark as known, rate, and add notes; export or import your personal shelf as JSON. Recommendations and ratings stay in this browser.
 - Evolution compares equal 30-, 90-, or 365-day periods, showing rising artists, new discoveries, older favorites and a taste-shift index. On demand, Last.fm similarity suggests artists missing from your record.
 - Deep dive charts show 24 months of activity, artist breadth, discovery share, top-artist concentration, and genre/style tags with coverage. Last.fm imports save page checkpoints and resume after an interrupted setup.
 - Automatic eras, year pages with a shareable image, and detailed artist and song pages
