@@ -23,7 +23,8 @@ export function discoverySeeds(A, taste, edition = 0) {
   const map = new Map();
   const add = (name, weight, why) => {
     const key = normalize(name);
-    if (!key || taste.items[tasteKey('artist', name)]?.status === 'hidden') return;
+    const opinion = taste.items[tasteKey('artist', name)];
+    if (!key || opinion?.status === 'hidden' || (opinion?.rating && opinion.rating <= 2)) return;
     const old = map.get(key);
     if (old) { old.weight += weight; old.why.add(why); }
     else map.set(key, { name, weight, why: new Set([why]), tag: cachedArtist(name)?.tags?.[0] || '' });
@@ -71,10 +72,12 @@ export async function candidatePool(A, seeds, signal, onProgress = () => {}) {
   return [...map.values()];
 }
 
-export function rankCandidates(pool, taste, mode = 'for-you') {
+export function rankCandidates(pool, taste, mode = 'for-you', keepRated = new Set()) {
+  const likedAlbums = new Set(Object.values(taste.items).filter((x) => x.kind === 'album' && x.rating >= 4).map((x) => normalize(x.artist)));
+  const dislikedArtists = new Set(Object.values(taste.items).filter((x) => x.kind === 'album' && x.rating && x.rating <= 2 && !likedAlbums.has(normalize(x.artist))).map((x) => normalize(x.artist)));
   let allowed = pool.filter((x) => {
-    const f = taste.items[tasteKey('artist', x.name)];
-    return !f || (f.status !== 'hidden' && f.status !== 'known' && !f.rating);
+    const key = tasteKey('artist', x.name), f = taste.items[key];
+    return !dislikedArtists.has(normalize(x.name)) && (!f || (f.status !== 'hidden' && f.status !== 'known' && (!f.rating || keepRated.has(key))));
   });
   if (mode === 'deep') {
     const withAudience = allowed.filter((x) => cachedListeners(x.name) > 0);
@@ -87,8 +90,11 @@ export function rankCandidates(pool, taste, mode = 'for-you') {
     const audienceBonus = audience ? Math.min(1, Math.max(0, (Math.log10(20e6) - Math.log10(Math.max(1, audience))) / 3.8)) : 0;
     const connectionBonus = Math.min(3, x.sources.length) * .06;
     const base = x.score * (1 + connectionBonus);
+    // Keep a famous adjacent artist available, but let a strong less-obvious
+    // connection lead the ordinary view once its audience has been checked.
+    const novelty = !audience ? 1 : audience > 5000000 ? .76 : audience > 3000000 ? .9 : audience < 3000000 ? 1.12 : 1;
     const score = mode === 'deep' ? base * (1 + audienceBonus * 2.2)
-      : mode === 'explore' ? base * (1.3 - x.match * .7) : base;
+      : mode === 'explore' ? base * (1.3 - x.match * .7) * novelty : base * novelty;
     return { ...x, audience, score };
   }).sort((a, b) => b.score - a.score);
   const picked = [], used = new Map();

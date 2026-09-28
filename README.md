@@ -18,7 +18,7 @@ Do not serve the project root with `python -m http.server` or `wrangler pages de
 
 | Source | What you need | What it adds |
 | --- | --- | --- |
-| Last.fm | A username | Recent plays, top lists, and automatic full-history setup in the background. A newly created account starts logging future plays; it has no earlier Spotify history. |
+| Last.fm | A username | Recent plays, top lists, and automatic full-history setup. On the first visit, Sleeve shows the read and writing progress before revealing the full profile, with an early-preview option. A newly created account starts logging future plays; it has no earlier Spotify history. |
 | Spotify Account Data or Extended Streaming History | The ZIP Spotify emails you | Account Data covers about a year; Extended History covers the life of the account and includes skips and devices. The ZIP is opened in the browser and is never uploaded. |
 | Direct Spotify, advanced | Your own Spotify developer app and Client ID | Now playing, recent plays, Spotify top lists, and skip tracking while Sleeve is open. Uses browser PKCE and is not a public one-click Spotify login. |
 
@@ -31,7 +31,7 @@ The public data access decision is in [docs/DATA_ACCESS_DECISION.md](docs/DATA_A
 ## Explore
 
 - Overview, Discover, Top 100 with plays or minutes and date filters, Timeline, Evolution, Deep dive charts, Insights, Clock, and Data tabs
-- Discover combines Last.fm artist similarities and album popularity with your listening history. It lets you follow any seed artist, rotate through longer-tail seeds, and find deeper cuts using listener counts checked against spelling variants. It filters artists and albums you already heard, checks album identities against MusicBrainz, and shows available community ratings with vote counts. Save, hide, mark as known, rate, and add notes; export or import your personal shelf as JSON. Recommendations and ratings stay in this browser.
+- Discover combines Last.fm artist similarities and album popularity with your listening history. It lets you follow any seed artist, rotate through longer-tail seeds, and find deeper cuts using listener counts checked against spelling variants. It filters artists and albums you already heard, checks album identities against MusicBrainz, and treats the sparse MusicBrainz community scores as secondary context, showing a score only when at least 20 people rated it. Save, hide, mark as known, rate, and add notes; export or import your personal shelf as JSON. Recommendations and ratings stay in this browser.
 - Evolution compares equal 30-, 90-, or 365-day periods, showing rising artists, new discoveries, older favorites and a taste-shift index. On demand, Last.fm similarity suggests artists missing from your record.
 - Deep dive charts show 24 months of activity, artist breadth, discovery share, top-artist concentration, and genre/style tags with coverage. Last.fm imports save page checkpoints and resume after an interrupted setup.
 - Automatic eras, year pages with a shareable image, and detailed artist and song pages
@@ -49,7 +49,7 @@ The public data access decision is in [docs/DATA_ACCESS_DECISION.md](docs/DATA_A
 - `js/meta.js` batches artwork through `functions/api/art.js` and enriches music metadata.
 - `js/views/*` contains the landing page, onboarding, settings, connections, profiles, and detail pages.
 - `styles.css` holds the app layout and theme tokens; `sleeve.css` adds the Sleeve visual language.
-- `functions/api/ai.js` sends brief derived facts to server-side model providers. The provider keys stay in Cloudflare secrets or `.dev.vars`, not frontend code.
+- `functions/api/ai.js` sends brief derived facts to a fixed DiffusionGemma route through NVIDIA, with a fixed Gemma 4 free route through OpenRouter as fallback. It returns the model name with the response. Provider keys stay in Cloudflare secrets or `.dev.vars`, not frontend code.
 - `sw.js` caches the app shell for offline use on HTTPS.
 
 The existing `liner.*` browser storage keys, `LINER_CONFIG`, and `liner` Cloudflare/GitHub project identifiers remain in place so existing visitors keep their saved data and the current deployment continues to work.

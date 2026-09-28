@@ -3,7 +3,7 @@ import { SOURCES, state, view, onLeave, go, rerender, hrefFor, profiles, getArch
 import { topIn, monthDetail, lowerBound } from '../analysis.js';
 import { health, healthLine, trackRows, rankList, statStrip, timeline, bindTimeline, heatmap, heatLegend, hoursChart, daysChart, insightCard, dropzone, bindDrops, sourceBadge } from '../components.js';
 import { handleFiles, keepSpotifyPlays } from '../actions.js';
-import { autoSync, startSync, cancelSync, cancelAllSync, watchSync } from '../sync.js';
+import { autoSync, startSync, cancelSync, cancelAllSync, watchSync, syncStatus } from '../sync.js';
 import { linker, artistPage, songPage, yearPage, bindYear, onThisDay, mountSearch, genres, genresHTML } from './detail.js';
 import { hydrate, art, cachedArtist, artistInfo } from '../meta.js';
 import { palette, paint } from '../color.js';
@@ -63,6 +63,14 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
   if (source !== 'demo') profiles.remember({ pid, source, display: p.user.display, image: p.user.image });
 
   const ctx = { pid, source, name, tab, args, p, archive, A, L: linker(pid, A), signal: ctrl.signal };
+  const firstJob = syncStatus(pid);
+  const preparingFirstRecord = source === 'lastfm' && (!A && !archive.live?.synced || firstJob?.state === 'running' && firstJob.phase === 'writing') &&
+    !p.simulated && !p.hidden && p.user.playcount > 0 && store.get(`liner.setup.preview:${pid}`) !== '1';
+  if (preparingFirstRecord) {
+    firstRecordSetup(ctx);
+    autoSync(ctx);
+    return;
+  }
   const current = DETAIL[tab] || tab;
   view().innerHTML = `
     <div class="wrap">${header(ctx)}</div>
@@ -227,6 +235,58 @@ const loadingRows = () => `<div class="skel" style="flex-direction:column;align-
 
 function firstPlayCTA() {
   return `<section class="panel c-12"><div class="cta"><div><span class="label">Your first play</span><h2 style="margin-top:8px">Your record starts with the next song.</h2><p>Connect Spotify in Last.fm, then play something. Your Last.fm account starts empty and will grow from there. Sleeve checks for new plays while this page is open.</p></div><div class="cta__actions"><a class="btn btn--ink" href="#/connect/lastfm/2">Check Spotify connection ${icon.arrow}</a><a class="btn btn--line" href="#/demo">Explore the demo</a></div></div><p class="muted" style="margin-top:18px;font-size:14px">Want your older plays too? <a href="#/connect/file">Spotify can email you an optional history file</a>.</p></section>`;
+}
+
+function firstRecordSetup(ctx) {
+  const { pid, p } = ctx;
+  const writing = store.get('liner.ai') !== 'off';
+  const recent = (p.recent || []).filter((track) => track.artist && track.name).slice(0, 3);
+  view().innerHTML = `<div class="wrap setup-wrap"><section class="setup-record" aria-labelledby="setup-title">
+    <div class="setup-record__copy"><span class="label">SLEEVE / FIRST PRESSING</span><h1 id="setup-title">Making sense of your record.</h1>
+      <p class="setup-record__lead">We found <b>${num(p.user.playcount)} plays</b> for ${esc(p.user.display)}. Sleeve is reading the full history before it lays out your eras, discoveries${writing ? ', and first liner note' : ''}.</p>
+      <div class="setup-record__progress" role="status" aria-live="polite"><b id="setup-phase">Finding your plays</b><span id="setup-detail">Starting the history read…</span></div>
+      <div class="setup-record__bar" role="progressbar" aria-label="Reading listening history" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+      <ol class="setup-record__steps"><li data-step="reading" class="is-active"><span>01</span> Read every play</li><li data-step="saving"><span>02</span> Map the record</li>${writing ? '<li data-step="writing"><span>03</span> Write the opening note</li>' : ''}</ol>
+      <div class="setup-record__actions"><button type="button" class="btn btn--line" id="setup-preview">Explore an early preview</button><button type="button" class="link" id="setup-retry" hidden>Try the history again</button></div>
+      <p class="setup-record__foot">Your plays are saved in this browser. A large history can take a few minutes; if you leave, the import resumes from its saved pages when you return.</p>
+    </div>
+    <div class="setup-record__visual" aria-hidden="true"><span class="setup-record__eyebrow">RECENTLY ON YOUR TURNTABLE</span><div class="setup-record__sleeves">${recent.map((t, i) => `<div class="setup-record__sleeve" style="--i:${i}">${sleeve(t.album || t.name, t.artist, { img: t.image, size: 220 })}<span>${esc(t.name)} <i>— ${esc(t.artist)}</i></span></div>`).join('') || '<div class="setup-record__blank">Your first chapter is taking shape.</div>'}</div><span class="setup-record__index">${esc(p.user.name)} / YOUR WHOLE RECORD</span></div>
+  </section></div>`;
+  const setStep = (phase) => {
+    const order = ['reading', 'saving', 'writing'];
+    const current = order.indexOf(phase);
+    $$('[data-step]', view()).forEach((row) => {
+      const i = order.indexOf(row.dataset.step);
+      row.classList.toggle('is-active', i === current);
+      row.classList.toggle('is-done', i < current);
+    });
+  };
+  const off = watchSync(pid, (job) => {
+    if (!$('#setup-phase')) return;
+    const phase = job?.phase === 'writing' ? 'writing' : job?.phase === 'saving' ? 'saving' : 'reading';
+    const pct = job?.total ? Math.min(100, Math.round(job.done / job.total * 100)) : 0;
+    const bar = $('.setup-record__bar');
+    bar.setAttribute('aria-valuenow', String(phase === 'reading' ? pct : 100));
+    $('i', bar).style.width = `${phase === 'reading' ? pct : 100}%`;
+    setStep(phase);
+    $('#setup-retry').hidden = job?.state !== 'error' && job?.state !== 'cancelled';
+    if (job?.state === 'error' || job?.state === 'cancelled') {
+      $('#setup-phase').textContent = 'The history read paused';
+      $('#setup-detail').textContent = job.error || 'You can resume from the last saved page.';
+    } else if (phase === 'writing') {
+      $('#setup-phase').textContent = 'Putting the first page into words';
+      $('#setup-detail').textContent = 'Your history is saved. The opening note is the last step.';
+    } else if (phase === 'saving') {
+      $('#setup-phase').textContent = 'Mapping your listening';
+      $('#setup-detail').textContent = `${num(job.done)} plays read. Building your chapters now.`;
+    } else {
+      $('#setup-phase').textContent = job?.phase === 'resuming' ? 'Picking up where we left off' : 'Reading your listening history';
+      $('#setup-detail').textContent = job?.total ? `${num(job.done)} of ${num(job.total)} plays read · ${pct}%` : 'Finding the size of your record…';
+    }
+  });
+  onLeave(off);
+  $('#setup-preview').addEventListener('click', () => { store.set(`liner.setup.preview:${pid}`, '1'); rerender(); });
+  $('#setup-retry').addEventListener('click', () => startSync(pid, ctx.source, ctx.name, { prepare: true, profile: p }));
 }
 
 function storyPanel(ctx) {

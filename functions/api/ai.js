@@ -4,30 +4,32 @@
 // the browser. Prompts are fixed here, so this can't be used as a general chatbot.
 // Answers are cached, so the same request is only paid for once.
 
-const ROUTE = [
-  { via: 'nvidia', model: 'google/diffusiongemma-26b-a4b-it', timeout: 20000 },
-  { via: 'openrouter', model: 'google/gemma-4-31b-it:free', timeout: 25000 },
-  { via: 'openrouter', model: 'nvidia/nemotron-3-super-120b-a12b:free', timeout: 30000 },
-  { via: 'openrouter', model: 'openrouter/free', timeout: 30000 },
-  { via: 'nvidia', model: 'z-ai/glm-5.3-flash', timeout: 90000, maxTokens: 1024 },
-];
+// Use a fixed, responsive writer first. The larger Gemma route is a fallback:
+// its free provider may be unavailable, and should not delay the first reveal.
+// Never use a random free router, which changes the site's voice between runs.
+const GEMMA = { via: 'openrouter', model: 'google/gemma-4-31b-it:free', timeout: 15000 };
+const DIFFUSION = { via: 'nvidia', model: 'google/diffusiongemma-26b-a4b-it', timeout: 19000 };
+const ROUTES = {
+  notes: [DIFFUSION, GEMMA], year: [DIFFUSION, GEMMA], eras: [DIFFUSION, GEMMA],
+  roast: [DIFFUSION, GEMMA], ask: [DIFFUSION, GEMMA],
+};
 const ENDPOINT = {
   nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
   openrouter: 'https://openrouter.ai/api/v1/chat/completions',
 };
 
-const STYLE = `You write for Sleeve, a music stats site. Voice: a sharp, warm friend who knows music, talking straight to the listener as "you".
-Rules: Be specific. Name real artists, songs, years and numbers from the facts. Never invent facts that aren't given.
-No clichés ("eclectic", "sonic journey", "tapestry", "soundtrack of your life", "vibes", "delve"). No emojis. No hashtags. No markdown, headings or lists. Plain sentences only.`;
+const STYLE = `You write for Sleeve, a music stats site. Sound like a perceptive music editor speaking directly to "you": plain, specific, and a little surprising.
+Use only the supplied facts. Make a concrete observation about a change, contrast, or pattern; back it with artist names and counts from those facts. Do not infer personality, emotion, genre, or audio qualities from play counts. If the evidence is thin, say less.
+Avoid praise, corporate wording, and stock phrases: "eclectic", "sonic journey", "tapestry", "soundtrack of your life", "vibes", "delve", "engagement", "in contrast", "the record accumulated", "during this period", "clearly", "you have always". Every sentence should add evidence or interpretation grounded in evidence. No filler closing summary. No emojis, hashtags, markdown, headings, or lists. Plain sentences only.`;
 
 const TASKS = {
   notes: {
     max: 320,
-    prompt: (f) => `Write the liner notes for this listener: two short paragraphs (about 110 words total) about who they are as a listener, how their taste moved over time, and one thing that stands out.\n\nFacts:\n${f}`,
+    prompt: (f) => `Write one or two short liner-note paragraphs (at most 95 words total). Start with the most interesting supported change or contrast in this record. Name the relevant artists and a number or year. Add a second paragraph only if there is a different specific observation, not a restatement of total plays. Never guess how the songs sound or how the listener felt.\n\nFacts:\n${f}`,
   },
   year: {
     max: 260,
-    prompt: (f) => `Write a short year-in-review for this listener's year (about 80 words, one paragraph). Say what defined the year and what changed.\n\nFacts:\n${f}`,
+    prompt: (f) => `Write one year-in-review paragraph (about 75 words). Choose one defining artist or shift supported by the facts and explain it with a count. Make a second, distinct observation only if the facts support it.\n\nFacts:\n${f}`,
   },
   roast: {
     max: 260,
@@ -77,13 +79,13 @@ async function call(step, env, messages, max) {
         'Content-Type': 'application/json',
         ...(step.via === 'openrouter' ? { 'HTTP-Referer': 'https://liner-c7u.pages.dev', 'X-Title': 'Sleeve' } : {}),
       },
-      body: JSON.stringify({ model: step.model, messages, max_tokens: step.maxTokens || max, temperature: 0.8, top_p: 0.95 }),
+      body: JSON.stringify({ model: step.model, messages, max_tokens: step.maxTokens || max, temperature: 0.65, top_p: 0.9 }),
     });
     if (!res.ok) throw new Error(`${step.model} ${res.status}`);
     const d = await res.json();
     const text = clean(d.choices?.[0]?.message?.content);
     if (text.length < 20) throw new Error(`${step.model} empty`);
-    return text;
+    return { text, model: d.model || step.model };
   } finally {
     clearTimeout(timer);
   }
@@ -117,12 +119,12 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const messages = [{ role: 'system', content: STYLE }, { role: 'user', content: task.prompt(facts, question) }];
   const errors = [];
   const deadline = Date.now() + 44000;
-  for (const step of ROUTE) {
+  for (const step of ROUTES[body.task]) {
     const remaining = deadline - Date.now();
     if (remaining < 3000) break;
     try {
-      const text = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max);
-      const out = JSON.stringify({ text, model: step.model });
+      const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max);
+      const out = JSON.stringify(result);
       waitUntil(cache.put(cacheKey, new Response(out, { headers: { 'Cache-Control': 'public, max-age=604800' } })));
       return new Response(out, { headers: { 'Content-Type': 'application/json' } });
     } catch (e) {
