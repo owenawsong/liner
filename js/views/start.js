@@ -30,6 +30,7 @@ export function renderStart(choice = '') {
       </div>
       <section class="start__panel" id="start-panel" ${choice ? '' : 'hidden'}></section>
       <div class="start__other"><a href="#/demo">Explore a demo record ${icon.arrow}</a><a href="#/connect/spotify">Have a Spotify developer app? Connect directly ${icon.arrow}</a></div>
+      <p class="faint" style="font-size:13px;margin:14px 0 0">Already use stats.fm? If you kept the original Spotify history ZIP you imported there, you can add that same file to Sleeve.</p>
     </div>`;
   $$('[data-choice]').forEach((b) => b.addEventListener('click', () => go(`#/start/${b.dataset.choice}`)));
   if (choice) panel(choice);

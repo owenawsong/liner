@@ -23,7 +23,7 @@ export function notesPanel(A, isDemo = false) {
       <div class="seg" role="radiogroup" aria-label="Style"><button type="button" role="radio" data-mode="notes" aria-checked="true">Liner notes</button><button type="button" role="radio" data-mode="roast" aria-checked="false">Roast me</button></div>
     </div>
     <div class="ai__wrap">
-      <div class="ai__body" aria-live="polite">${isDemo ? `<p class="ai__text">${esc(DEMO_NOTES)}</p>` : '<div class="ai__ready"><p>Turn your listening history into a short story about your taste.</p><button type="button" class="btn btn--ink" data-write>Write my liner notes</button></div>'}</div>
+      <div class="ai__body" aria-live="polite">${isDemo ? `<p class="ai__text">${esc(DEMO_NOTES)}</p>` : loadingLines}</div>
       ${basis ? `<aside class="ai__basis"><span class="label">Based on</span>${basis}</aside>` : ''}
     </div>
     <div class="ai__foot">${isDemo ? '' : '<button type="button" class="link link--quiet" data-again hidden>Write another take</button>'}<span class="faint">${isDemo ? 'Example text for this demo profile.' : 'Written by AI from a short summary of your stats. Your raw plays are not sent.'}</span></div>
@@ -67,8 +67,8 @@ export function bindNotes(ctx) {
     $$('[data-mode]', root).forEach((x) => x.setAttribute('aria-checked', String(x === b)));
     demo ? example() : run();
   }));
-  $('[data-write]', root)?.addEventListener('click', () => run());
   $('[data-again]', root)?.addEventListener('click', () => run(true));
+  if (!demo) run();
 }
 
 /* ---------- Ask ---------- */
@@ -132,7 +132,8 @@ export async function nameEras(ctx) {
     return `${e.artist}, ${monthYear(e.from)} to ${monthYear(e.to)}, ${num(e.plays)} plays. Their songs then: ${songs.join(', ')}. Also playing: ${others.join(', ')}.`;
   }).join('\n');
   try {
-    const text = await write('eras', lines);
+    const text = await write('eras', lines, { signal: ctx.signal });
+    if (ctx.signal.aborted) return;
     const json = JSON.parse(text.slice(text.indexOf('['), text.lastIndexOf(']') + 1));
     json.forEach((x) => {
       const card = $$('.era').find((c) => c.dataset.artist === x.artist);
@@ -156,7 +157,7 @@ export function yearNotes() {
   if (aiOff()) return '';
   return `<section class="panel ai" id="ai-year" style="margin-top:16px">
     <div class="panel__head"><div class="ai__head"><span class="label">Written for you</span><h2 class="ai__title">The year, in a paragraph</h2></div></div>
-    <div class="ai__body" aria-live="polite"><div class="ai__ready"><p>Give this year a short write-up based on your listening.</p><button type="button" class="btn btn--ink" data-year-write>Write this year’s story</button></div></div>
+    <div class="ai__body" aria-live="polite">${loadingLines}</div>
   </section>`;
 }
 
@@ -170,17 +171,18 @@ export function bindYearNotes(ctx, y) {
     body.innerHTML = `<p class="ai__text">In ${y}, Mira played ${num(count)} songs. ${esc(top[0]?.name || 'A new favourite')} led the year${top[1] ? `, with ${esc(top[1].name)} close behind` : ''}. The months below show how that year changed, one song at a time.</p><p class="faint" style="font-size:13px;margin-top:16px">Example writing for this demo profile.</p>`;
     return;
   }
-  $('[data-year-write]', body).addEventListener('click', async () => {
+  const run = async (fresh = false) => {
     body.innerHTML = loadingLines;
     try {
-      const text = await write('year', facts(ctx.A, ctx.p, { year: y }), { signal: ctx.signal });
+      const text = await write('year', facts(ctx.A, ctx.p, { year: y }), { fresh, signal: ctx.signal });
       if (!body.isConnected) return;
       body.innerHTML = '<p class="ai__text"></p>';
       reveal($('.ai__text', body), text);
     } catch (e) {
       if (e.name === 'AbortError' || !body.isConnected) return;
       body.innerHTML = `<p class="ai__error">${esc(e.message)} <button type="button" class="link" data-year-retry>Try again</button></p>`;
-      $('[data-year-retry]', body).addEventListener('click', () => { body.innerHTML = '<button type="button" class="btn btn--ink" data-year-write>Write this year’s story</button>'; bindYearNotes(ctx, y); });
+      $('[data-year-retry]', body).addEventListener('click', () => run(true));
     }
-  });
+  };
+  run();
 }

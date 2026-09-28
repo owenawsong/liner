@@ -24,15 +24,18 @@ Do not serve the project root with `python -m http.server` or `wrangler pages de
 
 The `#/start` page directs new listeners to Last.fm and treats the Spotify data file as optional. `#/demo` shows the full experience without setup. When an archive and a live source overlap, the archive is used through its final day and newer live plays follow it. Existing ListenBrainz profiles and imports remain readable, but ListenBrainz is not part of the public setup path.
 
+Sleeve does not connect to a stats.fm account. People who kept the original Spotify history ZIP they imported there can add that same ZIP to Sleeve.
+
 The public data access decision is in [docs/DATA_ACCESS_DECISION.md](docs/DATA_ACCESS_DECISION.md).
 
 ## Explore
 
-- Overview, Top 100 with plays or minutes and date filters, Timeline, Evolution, Insights, Clock, and Data tabs
-- Evolution compares equal 90-day periods, showing rising artists, new discoveries, older favorites and a taste-shift index. On demand, Last.fm similarity suggests artists missing from your record.
+- Overview, Top 100 with plays or minutes and date filters, Timeline, Evolution, Deep dive charts, Insights, Clock, and Data tabs
+- Evolution compares equal 30-, 90-, or 365-day periods, showing rising artists, new discoveries, older favorites and a taste-shift index. On demand, Last.fm similarity suggests artists missing from your record.
+- Deep dive charts show 24 months of activity, artist breadth, discovery share, top-artist concentration, and genre/style tags with coverage. Last.fm imports save page checkpoints and resume after an interrupted setup.
 - Automatic eras, year pages with a shareable image, and detailed artist and song pages
 - Search, genres, listening anniversaries, and compare
-- Optional AI liner notes, roasts, era names, year writing, and questions. Turning AI off in Settings leaves the listening analysis available.
+- Optional AI liner notes, evolution explanations, era names, year writing, roasts, and questions. Writing appears automatically where relevant and uses cached results; turning AI off in Settings leaves the listening analysis available.
 - Themes, local profile management, play-count rules, and an installable PWA with an offline app shell
 - Local profile-picture overrides; Last.fm photos and authorized Spotify photos appear when available. Mood and musical key are not inferred from listening logs, which do not contain reliable audio features.
 

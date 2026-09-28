@@ -1,5 +1,5 @@
 // Last.fm source. Public reads only, so a username is all we need from the user.
-import { store, hash, wait } from '../ui.js';
+import { store, hash, wait, idb } from '../ui.js';
 import { CATALOG, demoRecent } from './demo.js';
 
 const BASE = 'https://ws.audioscrobbler.com/2.0/';
@@ -179,39 +179,73 @@ function simTop(name, period, kind) {
   return albums.slice(0, 15).map((t, i) => ({ name: t.album, artist: t.artist, plays: Math.round((40 - i * 2.4) * scale), image: '' }));
 }
 
-// Page through the whole scrobble history. Newest first, 200 per page.
-export async function importAll(name, { onProgress, signal, since = 0 } = {}) {
+// Keep fetched pages separately so a refresh or network failure resumes an
+// anchored snapshot instead of starting a large history over again.
+const checkpointKey = (pid) => `sync:lastfm:${pid}`;
+const pageKey = (pid, page) => `${checkpointKey(pid)}:page:${page}`;
+
+export async function clearCheckpoint(pid) {
+  const meta = await idb.get(checkpointKey(pid));
+  await idb.delMany([checkpointKey(pid), ...Array.from({ length: Math.max(0, (meta?.next || 1) - 1) }, (_, i) => pageKey(pid, i + 1))]);
+}
+
+// Page through a fixed snapshot of the whole scrobble history, 200 per page.
+export async function importAll(name, { onProgress, signal, since = 0, pid = name } = {}) {
   if (!isLive()) throw new SourceError('nokey', 'Importing needs a Last.fm API key. Add one in Settings.');
-  const params = { user: name, limit: 200, ...(since ? { from: Math.floor(since / 1000) + 1 } : {}) };
-  const first = await call('user.getrecenttracks', { ...params, page: 1 }, signal);
-  const attr = first.recenttracks?.['@attr'] || {};
-  const pages = Number(attr.totalPages || 1);
-  const total = Number(attr.total || 0);
-  const rows = [];
-  const add = (d) => {
+  let meta = await idb.get(checkpointKey(pid));
+  if (meta && (meta.name !== name || meta.since !== since || Date.now() - meta.created > 14 * 864e5)) {
+    await clearCheckpoint(pid); meta = null;
+  }
+  const chunks = new Map();
+  const unpack = (d) => {
+    const rows = [];
     for (const t of list(d.recenttracks?.track)) {
       if (t['@attr']?.nowplaying === 'true' || !t.date?.uts) continue;
       rows.push({ t: Number(t.date.uts) * 1000, track: t.name, artist: t.artist?.['#text'] ?? '', album: t.album?.['#text'] ?? '', ms: null, skipped: null, src: 'lastfm' });
     }
+    return rows;
   };
-  add(first);
-  onProgress?.(rows.length, total);
-  let next = 2;
-  const worker = async () => {
-    while (next <= pages) {
-      const page = next++;
+  if (!meta) {
+    const to = Math.floor(Date.now() / 1000);
+    const params = { user: name, limit: 200, to, ...(since ? { from: Math.floor(since / 1000) + 1 } : {}) };
+    const first = await call('user.getrecenttracks', { ...params, page: 1 }, signal);
+    const attr = first.recenttracks?.['@attr'] || {};
+    const rows = unpack(first);
+    meta = { name, since, to, pages: Math.max(1, Number(attr.totalPages || 1)), total: Number(attr.total || 0), next: 2, count: rows.length, created: Date.now() };
+    chunks.set(1, rows);
+    await idb.set(pageKey(pid, 1), rows);
+    await idb.set(checkpointKey(pid), meta);
+  }
+  onProgress?.(meta.count, meta.total, meta.next > 2 ? 'resuming' : 'reading');
+  const params = { user: name, limit: 200, to: meta.to, ...(since ? { from: Math.floor(since / 1000) + 1 } : {}) };
+  const fetchPage = async (page) => {
       let tries = 0;
       for (;;) {
-        try { add(await call('user.getrecenttracks', { ...params, page }, signal)); break; } catch (e) {
+        try { return unpack(await call('user.getrecenttracks', { ...params, page }, signal)); } catch (e) {
           if (e.name === 'AbortError' || ++tries > 4) throw e;
           await wait(1200 * tries, signal);
         }
       }
-      onProgress?.(rows.length, total);
-      await wait(120, signal);
-    }
   };
-  await Promise.all([worker(), worker(), worker()]);
+  while (meta.next <= meta.pages) {
+    if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+    const pages = Array.from({ length: Math.min(3, meta.pages - meta.next + 1) }, (_, i) => meta.next + i);
+    const results = await Promise.all(pages.map(fetchPage));
+    for (let i = 0; i < pages.length; i++) {
+      chunks.set(pages[i], results[i]);
+      await idb.set(pageKey(pid, pages[i]), results[i]);
+      meta.count += results[i].length;
+    }
+    meta.next += pages.length;
+    await idb.set(checkpointKey(pid), meta);
+    onProgress?.(meta.count, meta.total, 'reading');
+    await wait(120, signal);
+  }
+  const rows = [];
+  for (let page = 1; page <= meta.pages; page++) {
+    const stored = chunks.get(page) || await idb.get(pageKey(pid, page));
+    rows.push(...(stored || await fetchPage(page)));
+  }
   rows.sort((a, b) => a.t - b.t);
   return rows;
 }

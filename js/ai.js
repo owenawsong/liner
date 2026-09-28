@@ -79,7 +79,7 @@ export function facts(A, p, { year, detailed = false } = {}) {
   }
   if (albums.length) L.push(`Top albums: ${albums.map((a) => `${a.name} by ${a.artist}`).join('; ')}.`);
   const genres = [...new Set(artists.slice(0, 12).map((a) => cachedArtist(a.name)?.tags?.[0]).filter(Boolean))];
-  if (genres.length) L.push(`Genres of their top artists: ${genres.slice(0, 6).join(', ')}.`);
+  if (detailed && genres.length) L.push(`Genres of their top artists: ${genres.slice(0, 6).join(', ')}.`);
   const eras = A.eras.filter((e) => e.to >= from && e.from < to);
   if (eras.length) L.push(`Eras (stretches led by one artist): ${eras.map((e) => `${e.artist} ${monthYear(e.from)} to ${monthYear(e.to)}`).join('; ')}.`);
   if (!year && A.years.length > 1) L.push(`Top artist each year: ${A.years.map((y) => `${y.y} ${y.topArtist}`).join(', ')}.`);

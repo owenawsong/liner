@@ -139,12 +139,25 @@ export const idb = {
     try {
       const d = await db();
       await new Promise((res, rej) => { const tx = d.transaction('kv', 'readwrite'); tx.objectStore('kv').put(val, key); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-    } catch { /* storage unavailable */ }
+      return true;
+    } catch { return false; }
   },
   async del(key) {
     try {
       const d = await db();
       await new Promise((res) => { const tx = d.transaction('kv', 'readwrite'); tx.objectStore('kv').delete(key); tx.oncomplete = res; tx.onerror = res; });
+    } catch { /* storage unavailable */ }
+  },
+  async delMany(keys) {
+    if (!keys.length) return;
+    try {
+      const d = await db();
+      await new Promise((res) => {
+        const tx = d.transaction('kv', 'readwrite');
+        const store = tx.objectStore('kv');
+        keys.forEach((key) => store.delete(key));
+        tx.oncomplete = res; tx.onerror = res;
+      });
     } catch { /* storage unavailable */ }
   },
   async clear() {

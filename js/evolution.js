@@ -9,8 +9,8 @@ const count = (rows) => {
   return map;
 };
 
-export function evolution(A, now = Date.now()) {
-  const from = now - 90 * DAY, priorFrom = now - 180 * DAY;
+export function evolution(A, now = Date.now(), windowDays = 90) {
+  const from = now - windowDays * DAY, priorFrom = now - 2 * windowDays * DAY;
   const currentRows = A.rows.slice(lowerBound(A.rows, from), lowerBound(A.rows, now + 1));
   const priorRows = A.rows.slice(lowerBound(A.rows, priorFrom), lowerBound(A.rows, from));
   const current = count(currentRows), prior = count(priorRows);
@@ -26,7 +26,7 @@ export function evolution(A, now = Date.now()) {
   const fading = changes.filter((x) => x.before >= 5 && x.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 8);
   const discoveries = [...current].filter(([name]) => first.get(name) >= from).map(([name, plays]) => ({ name, plays }))
     .sort((a, b) => b.plays - a.plays).slice(0, 8);
-  const comebacks = [...current].filter(([name, plays]) => plays >= 5 && (prior.get(name) || 0) <= 1 && first.get(name) < from - 180 * DAY)
+  const comebacks = [...current].filter(([name, plays]) => plays >= 5 && (prior.get(name) || 0) <= 1 && first.get(name) < from - 2 * windowDays * DAY)
     .map(([name, plays]) => ({ name, plays, last: A.artists.find((a) => a.name === name)?.last }))
     .sort((a, b) => b.plays - a.plays).slice(0, 8);
   const dormant = A.artists.filter((a) => a.n >= 20 && a.last < from).slice(0, 8);
@@ -58,7 +58,7 @@ export function evolution(A, now = Date.now()) {
     bucket.plays++; bucket.artists.add(r.artist);
     if (first.get(r.artist) >= bucket.start) bucket.newPlays++;
   }
-  return { from, priorFrom, now, total, previous, shift, overlap, activeArtists: current.size, previousArtists: prior.size,
+  return { from, priorFrom, now, windowDays, total, previous, shift, overlap, activeArtists: current.size, previousArtists: prior.size,
     newArtists: [...current.keys()].filter((name) => first.get(name) >= from).length, newPlays,
     rising, fading, discoveries, comebacks, dormant,
     months: months.map(({ start: month, plays, newPlays: fresh, artists }) => ({ month, plays, fresh, artists: artists.size })) };

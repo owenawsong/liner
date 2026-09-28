@@ -55,13 +55,14 @@ export async function getArchive(pid) {
 
 export async function setArchive(pid, a) {
   a.ver = Date.now();
+  if (pid !== 'demo' && !await idb.set(`archive:${pid}`, a)) throw new Error('This browser could not save your listening history. Check available storage and try again.');
   cache.set(pid, { archive: a });
-  if (pid !== 'demo') await idb.set(`archive:${pid}`, a);
 }
 
 export async function clearArchive(pid) {
   cache.delete(pid);
   await idb.del(`archive:${pid}`);
+  if (pid.startsWith('lastfm:')) await lastfm.clearCheckpoint(pid);
 }
 
 export function mergedRows(a) {
@@ -94,7 +95,7 @@ export function dedupe(rows) {
   const seen = new Set();
   const out = [];
   for (const r of rows.sort((x, y) => x.t - y.t)) {
-    const k = `${Math.round(r.t / 60000)}|${r.track}`;
+    const k = `${Math.round(r.t / 60000)}|${String(r.artist || '').toLowerCase()}|${String(r.track || '').toLowerCase()}`;
     if (seen.has(k)) continue;
     seen.add(k);
     out.push(r);

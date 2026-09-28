@@ -9,53 +9,74 @@ const obscurity = (n) => Math.min(1, Math.max(0, (Math.log10(20e6) - Math.log10(
 export function mainstreamPanel() {
   return `<section class="panel" id="mainstream" style="margin-top:16px">
     <div class="panel__head"><h2>How mainstream is your taste?</h2><span class="label" id="ms-status">Checking artist audiences…</span></div>
-    <div id="ms-body"><div class="ai__loading"><i></i><i></i></div></div>
+    <div class="ms-progress" role="progressbar" aria-label="Checking artist audiences" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+    <div id="ms-score" class="ms-reveal"><p class="muted">Checking your most-played artists first. The score will appear once, when those counts are ready.</p></div>
+    <div id="ms-deep" class="ms-reveal"><p class="faint">Then Sleeve will search deeper in your record for less-heard artists.</p></div>
   </section>`;
 }
 
 export function bindMainstream(A, L) {
-  const scoreArtists = A.artists.slice(0, 40);
+  const scoreArtists = A.artists.slice(0, 30);
   const artists = A.artists.filter((a) => a.n >= 5).slice(0, 150);
-  let alive = true, finished = false;
+  const remaining = artists.filter((a) => !scoreArtists.some((s) => s.name === a.name));
+  const total = scoreArtists.length + remaining.length;
+  let alive = true;
   onLeave(() => { alive = false; });
-  const paint = () => {
-    const known = artists.map((a) => ({ a, n: cachedListeners(a.name) })).filter((x) => x.n);
+  const status = $('#ms-status'), progress = $('.ms-progress'), bar = $('.ms-progress i');
+  const scoreEl = $('#ms-score'), deepEl = $('#ms-deep');
+  const update = (done, stage) => {
+    if (!alive || !progress?.isConnected) return;
+    status.textContent = `${stage} · ${done} of ${total} artists checked`;
+    const pct = total ? Math.round(done / total * 100) : 100;
+    progress.setAttribute('aria-valuenow', String(pct));
+    bar.style.width = `${pct}%`;
+  };
+  const row = (x) => `<a class="ms-artist" href="${L.artist(x.a.name)}">${sleeve(x.a.name, x.a.name, { size: 36, round: true, kind: 'artist' })}<span><b>${esc(x.a.name)}</b><span>${num(x.a.n)} plays here · ${compact(x.n)} Last.fm listeners</span></span></a>`;
+  const paintScore = () => {
+    if (!alive || !scoreEl?.isConnected) return;
     const scored = scoreArtists.map((a) => ({ a, n: cachedListeners(a.name) })).filter((x) => x.n);
-    const checked = artists.filter((a) => cachedListeners(a.name) !== undefined).length;
-    const el = $('#ms-body');
-    if (!el || !alive) return;
-    $('#ms-status').textContent = finished ? `${known.length} of ${artists.length} listener counts available` : `Checked ${checked} of ${artists.length} artists`;
     if (scored.length < Math.min(5, scoreArtists.length)) {
-      el.innerHTML = `<p class="muted">${finished ? 'Last.fm did not return enough exact artist counts to score this record right now.' : 'Checking exact artist names on Last.fm. Your score and deeper cuts will appear here.'}</p>`;
+      scoreEl.innerHTML = '<p class="muted">Last.fm did not return enough exact artist counts to score this record. Try reopening Insights later.</p>';
       return;
     }
     const w = scored.reduce((s, x) => s + x.a.n, 0);
     const score = Math.round((scored.reduce((s, x) => s + x.a.n * obscurity(x.n), 0) / w) * 100);
-    const sorted = [...known].sort((x, y) => x.n - y.n);
     const label = score >= 70 ? 'Deep cuts' : score >= 50 ? 'Off the beaten path' : score >= 30 ? 'A healthy mix' : score >= 15 ? 'Mostly mainstream' : 'Chart regular';
-    const row = (x) => `<a class="ms-artist" href="${L.artist(x.a.name)}">${sleeve(x.a.name, x.a.name, { size: 36, round: true, kind: 'artist' })}<span><b>${esc(x.a.name)}</b><span>${num(x.a.n)} plays here · ${compact(x.n)} Last.fm listeners</span></span></a>`;
-    el.innerHTML = `
+    const coverage = Math.round(w / scoreArtists.reduce((sum, a) => sum + a.n, 0) * 100);
+    scoreEl.innerHTML = `
       <div class="ms">
         <div class="ms__score"><b>${score}</b><span>out of 100 obscurity</span><p>${label}</p></div>
         <div class="ms__meter"><div class="ms__track"><i style="left:${score}%"></i></div><div class="ms__ends"><span>Everyone knows them</span><span>Almost nobody does</span></div></div>
       </div>
-      <p class="faint" style="font-size:13px;margin:2px 0 16px">Score weights your top 40 artists by plays. Deep cuts search up to 150 artists you played at least five times. Exact Last.fm artist names; listener totals are global, not monthly.</p>
-      <div class="grid" style="margin-top:8px">
-        <div class="c-6"><span class="label">Your deeper cuts${!finished && checked < artists.length ? ' · still checking' : ''}</span>${sorted.slice(0, 5).map(row).join('')}</div>
-        <div class="c-6"><span class="label">Your most mainstream</span>${sorted.slice(-3).reverse().map(row).join('')}</div>
-      </div>`;
-    hydrate(el);
+      <p class="faint" style="font-size:13px;margin:2px 0 16px">Fixed score based on your top ${scoreArtists.length} artists, weighted by plays. Exact Last.fm listener counts cover ${coverage}% of those plays. Listener totals are global, not monthly.</p>`;
+    scoreEl.classList.add('is-ready');
   };
-  paint();
+  const paintDeep = () => {
+    if (!alive || !deepEl?.isConnected) return;
+    const known = artists.map((a) => ({ a, n: cachedListeners(a.name) })).filter((x) => x.n);
+    const sorted = [...known].sort((x, y) => x.n - y.n);
+    deepEl.innerHTML = `<p class="faint" style="font-size:13px;margin:2px 0 16px">Deep cuts searched ${artists.length} artists with at least five plays; ${known.length} had an exact listener count.</p>
+      <div class="grid" style="margin-top:8px"><div class="c-6"><span class="label">Your deeper cuts</span>${sorted.slice(0, 5).map(row).join('') || '<p class="empty">No counts available.</p>'}</div>
+      <div class="c-6"><span class="label">Your most mainstream</span>${sorted.slice(-3).reverse().map(row).join('') || '<p class="empty">No counts available.</p>'}</div></div>`;
+    deepEl.classList.add('is-ready');
+    hydrate(deepEl);
+  };
+  update(0, 'Building your score');
   (async () => {
-    for (let i = 0; i < artists.length; i++) {
+    let done = 0;
+    for (const a of scoreArtists) {
       if (!alive) return;
-      const a = artists[i];
       if (cachedListeners(a.name) === undefined) await listeners(a.name);
-      if (i < 8 || i % 10 === 9) paint();
+      update(++done, 'Building your score');
     }
-    finished = true;
-    paint();
+    paintScore();
+    for (const a of remaining) {
+      if (!alive) return;
+      if (cachedListeners(a.name) === undefined) await listeners(a.name);
+      update(++done, 'Finding your deeper cuts');
+    }
+    paintDeep();
+    if (alive && status?.isConnected) status.textContent = `${total} artists checked`;
   })();
 }
 

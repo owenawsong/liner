@@ -23,7 +23,7 @@ export async function handleFiles(files, el) {
       status.lastElementChild.textContent = `${msg}…`;
     });
     const pid = state.pid && state.pid !== 'demo' ? state.pid : 'file';
-    const a = await getArchive(pid);
+    const a = { ...await getArchive(pid) };
     a.export = ex;
     await setArchive(pid, a);
     if (pid === 'file') profiles.remember({ pid: 'file', source: 'file', display: 'Spotify export', image: '' });
@@ -43,22 +43,26 @@ export async function handleFiles(files, el) {
 // Pull someone's whole history from Last.fm or ListenBrainz. Only fetches new plays if we have some.
 export async function importHistory(pid, sourceId, name, { onProgress, signal } = {}) {
   const src = SOURCES[sourceId];
-  const a = await getArchive(pid);
-  const since = a.live?.source === sourceId ? a.live.to || 0 : 0;
-  const rows = await src.importAll(name, { onProgress, signal, since });
+  const before = await getArchive(pid);
+  const since = before.live?.source === sourceId ? before.live.to || 0 : 0;
+  const rows = await src.importAll(name, { onProgress, signal, since, pid });
   onProgress?.(rows.length, rows.length, 'saving');
   if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
-  const all = since ? dedupe([...(a.live.rows || []), ...rows]) : rows;
+  // An export can be added while a long live import is running. Read the
+  // newest archive now so saving the live rows does not erase that export.
+  const a = { ...await getArchive(pid) };
+  const all = a.live?.source === sourceId ? dedupe([...(a.live.rows || []), ...rows]) : rows;
   if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
   a.live = { rows: all, source: sourceId, from: all[0]?.t, to: all[all.length - 1]?.t, synced: Date.now() };
   await setArchive(pid, a);
+  if (sourceId === 'lastfm') await src.clearCheckpoint(pid);
   return rows.length;
 }
 
 // Spotify only exposes the last 50 plays, so keep every batch we see.
 export async function keepSpotifyPlays(rows) {
   if (!rows?.length) return;
-  const a = await getArchive('spotify');
+  const a = { ...await getArchive('spotify') };
   const all = dedupe([...(a.live?.rows || []), ...rows]);
   if (all.length === (a.live?.rows?.length || 0)) return;
   a.live = { rows: all, source: 'spotify', from: all[0]?.t, to: all[all.length - 1]?.t, synced: Date.now() };

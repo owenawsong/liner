@@ -27,6 +27,7 @@ export async function renderHome() {
   const TRACKS = [
     { side: 'A', title: 'Timeline and eras', desc: 'Every month you have ever listened, on one line, with your eras found for you.', vis: `<div id="pv-timeline">${timeline(A, { height: 170, fit: true })}</div>` },
     { side: 'A', title: 'How your taste changes', desc: 'See the artists rising, the old favorites fading, and who you discovered this season.', vis: '<div class="minichat"><p class="minichat__q">Your next chapter</p><p class="minichat__a">Compare two equal 90-day stretches. Find discoveries, comebacks and the artists moving into your rotation.</p></div>' },
+    { side: 'A', title: 'Your listening, four ways', desc: 'Explore 24 months of plays, artist breadth, discoveries and how much one favorite dominated.', vis: '<div class="minichat"><p class="minichat__q">More than a top list</p><p class="minichat__a">See how wide your rotation got, when it narrowed, and when new artists arrived.</p></div>' },
     { side: 'A', title: 'Year in review, any year', desc: 'Wrapped for every year you have been listening, with a card you can share.', vis: `<div class="minicard"><span class="mono">SLEEVE · ${year.y}</span><b>${year.y}</b><ol>${yArtists.map((a) => `<li>${esc(a.name)}</li>`).join('')}</ol><span class="mono">${num(year.n)} plays</span></div>` },
     { side: 'A', title: 'Every artist, every song', desc: 'First play, biggest month, longest break and your favourite songs, for everything you have played.', vis: `<a class="miniartist" href="#/demo/artist/${encodeURIComponent(topArtist.name)}">${sleeve(topArtist.name, topArtist.name, { size: 72, round: true, kind: 'artist' })}<span><b>${esc(topArtist.name)}</b><span>${num(topArtist.n)} plays · since ${new Date(topArtist.first).getFullYear()}</span></span></a>` },
     { side: 'A', title: 'The listening clock', desc: 'When the music actually happens, hour by hour across your week.', vis: heatmap(A) },
@@ -142,7 +143,7 @@ export async function renderHome() {
       <div class="sl-back__cols" data-reveal>
         <div>
           <h3>Privacy</h3>
-          <p>Your Spotify file is opened in your browser and never uploaded. There are no Sleeve accounts and no analytics. What you connect is saved on this device only. For AI writing, Sleeve sends a few lines of totals and top artists, never your plays. Clear everything any time in <a href="#/settings">Settings</a>.</p>
+          <p>Your Spotify file is opened in your browser and never uploaded. There are no Sleeve accounts and no analytics. What you connect is saved on this device only. When AI writing is on, Sleeve automatically sends a short summary of totals and top artists, never your raw plays. Turn it off or clear everything in <a href="#/settings">Settings</a>.</p>
           <h3>How is this free?</h3>
           <p>Sleeve runs almost entirely in your browser, so it costs very little to keep online, and the AI uses free models. If it ever costs more, donations will cover it. Features won't go behind a paywall.</p>
         </div>
@@ -151,6 +152,8 @@ export async function renderHome() {
           <details><summary>How do I get my Spotify export?</summary><p>Tick "Extended streaming history" on Spotify's privacy page. It includes your lifetime plays, but Spotify can take up to 30 days to prepare it. <a href="#/connect/file">Step-by-step guide</a>.</p></details>
           <details><summary>Why don't my numbers match Wrapped?</summary><p>Spotify counts a stream at 30 seconds, Last.fm at half a song, and Wrapped only covers part of the year. Sleeve shows its rule and lets you change it.</p></details>
           <details><summary>What happens when I first connect Last.fm?</summary><p>A new Last.fm account begins recording future Spotify plays. Once a song appears, Sleeve can show it. Longer patterns and eras need more listening history; the optional Spotify file can add your past.</p></details>
+          <details><summary>Can I use my stats.fm history?</summary><p>If you kept the original Spotify history ZIP that you uploaded to stats.fm, you can use that same file in Sleeve. Sleeve does not connect to your stats.fm account.</p></details>
+          <details><summary>Why no happiness or danceability score?</summary><p>Those need analysis of each recording, which a listening history does not contain. Sleeve shows measured play patterns and artist-tag genres, with coverage, rather than guessing audio properties from names.</p></details>
           <details><summary>Does it count my phone?</summary><p>Yes. Plays come from Spotify itself, so every device counts.</p></details>
         </div>
       </div>

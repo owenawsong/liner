@@ -1,20 +1,22 @@
-import { $, $$, esc, avatar, sleeve, trackSleeve, num, monthYear, longMonth, ago, icon, eq, toast, store, idb } from '../ui.js';
+import { $, $$, esc, avatar, sleeve, trackSleeve, num, monthYear, longMonth, fullDate, ago, icon, eq, toast, store, idb } from '../ui.js';
 import { SOURCES, state, view, onLeave, go, rerender, hrefFor, profiles, getArchive, setArchive, clearArchive, analysisFor, setMinMs } from '../core.js';
 import { topIn, monthDetail, lowerBound } from '../analysis.js';
 import { health, healthLine, trackRows, rankList, statStrip, timeline, bindTimeline, heatmap, heatLegend, hoursChart, daysChart, insightCard, dropzone, bindDrops, sourceBadge } from '../components.js';
 import { handleFiles, keepSpotifyPlays } from '../actions.js';
 import { autoSync, startSync, cancelSync, cancelAllSync, watchSync } from '../sync.js';
 import { linker, artistPage, songPage, yearPage, bindYear, onThisDay, mountSearch, genres, genresHTML } from './detail.js';
-import { hydrate, art } from '../meta.js';
+import { hydrate, art, cachedArtist, artistInfo } from '../meta.js';
 import { palette, paint } from '../color.js';
 import { mainstreamPanel, bindMainstream, milestonesPanel } from './mainstream.js';
 import { notesPanel, bindNotes, askPanel, bindAsk, nameEras, yearNotes, bindYearNotes } from './aiviews.js';
 import { evolutionView } from './evolution.js';
+import { patternsView } from './patterns.js';
+import { evolution } from '../evolution.js';
 import { demoRecent, DEMO_USER } from '../sources/demo.js';
 import * as lastfm from '../sources/lastfm.js';
 import * as spotify from '../sources/spotify.js';
 
-const TABS = [['overview', 'Overview'], ['top', 'Top'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
+const TABS = [['overview', 'Overview'], ['top', 'Top'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['patterns', 'Deep dive'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
 const LABEL = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export', demo: 'Demo' };
 const DAY = 864e5;
 let overviewPick = -1;
@@ -66,7 +68,7 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
     <nav class="tabs" aria-label="Profile sections"><div class="wrap tabs__inner">${TABS.map(([t, l]) => `<a href="${hrefFor(pid, t === 'overview' ? '' : t)}"${t === current ? ' aria-current="page"' : ''}>${l}${t === 'insights' && A ? `<small>${A.insights.length}</small>` : ''}</a>`).join('')}</div></nav>
     <div class="wrap" id="sync-banner" aria-live="polite"></div>
     <div class="wrap fade-in" id="tab"></div>`;
-  ({ overview, top, timeline: timelineTab, evolution: evolutionTab, insights: insightsTab, clock, data, artist: detail, song: detail, year: detail })[tab](ctx);
+  ({ overview, top, timeline: timelineTab, evolution: evolutionTab, patterns: patternsTab, insights: insightsTab, clock, data, artist: detail, song: detail, year: detail })[tab](ctx);
   bindSyncBanner(ctx);
   autoSync(ctx);
   mountSearch($('#search'), A, ctx.L);
@@ -139,6 +141,7 @@ export function overviewHTML(ctx) {
   }
   if (A) {
     parts.push(`<div class="c-12">${statStrip(A)}</div>`);
+    if (!ctx.preview) parts.push(storyPanel(ctx));
     if (!ctx.preview) parts.push(notesPanel(A, source === 'demo'));
     parts.push(`<section class="panel c-12"><div class="panel__head"><h2>Month by month</h2><a class="link link--quiet" href="${hrefFor(pid, 'timeline')}">Open the timeline ${icon.arrow}</a></div>${timeline(A, { height: 140, fit: true })}</section>`);
   } else if (!ctx.preview) {
@@ -165,6 +168,7 @@ function overview(ctx) {
   $('#tab').innerHTML = overviewHTML(ctx);
   bindCommon(ctx);
   if (A) bindTimeline($('#tab'), A, (i) => { overviewPick = i; go(hrefFor(ctx.pid, 'timeline')); });
+  $$('[data-story-month]', $('#tab')).forEach((button) => button.addEventListener('click', () => { overviewPick = Number(button.dataset.storyMonth); go(hrefFor(ctx.pid, 'timeline')); }));
   if (!ctx.topArtists) {
     const src = SOURCES[source];
     // Fall back to longer periods when the short one is empty or not calculated yet.
@@ -224,6 +228,20 @@ function firstPlayCTA() {
   return `<section class="panel c-12"><div class="cta"><div><span class="label">Your first play</span><h2 style="margin-top:8px">Your record starts with the next song.</h2><p>Connect Spotify in Last.fm, then play something. Your Last.fm account starts empty and will grow from there. Sleeve checks for new plays while this page is open.</p></div><div class="cta__actions"><a class="btn btn--ink" href="#/connect/lastfm/2">Check Spotify connection ${icon.arrow}</a><a class="btn btn--line" href="#/demo">Explore the demo</a></div></div><p class="muted" style="margin-top:18px;font-size:14px">Want your older plays too? <a href="#/connect/file">Spotify can email you an optional history file</a>.</p></section>`;
 }
 
+function storyPanel(ctx) {
+  const { A, L } = ctx;
+  const first = A.rows[0];
+  const peak = A.months.reduce((best, month, i) => month.n > best.month.n ? { month, i } : best, { month: A.months[0], i: 0 });
+  const latest = topIn(A, 'artists', A.to - 90 * DAY, A.to + 1, 1)[0];
+  const E = evolution(A, A.to + 1);
+  return `<section class="panel c-12 story"><div class="panel__head"><div><span class="label">A record in chapters</span><h2>Your story so far</h2></div><a class="link link--quiet" href="${hrefFor(ctx.pid, 'evolution')}">See what changed ${icon.arrow}</a></div>
+    <div class="story__chapters">
+      <article class="story__chapter"><span class="story__no">01 / THE FIRST PLAY</span>${trackSleeve(first, { size: 70 })}<h3><a href="${L.song(first.track, first.artist)}">${esc(first.track)}</a></h3><p>${esc(first.artist)} · ${fullDate(first.t)}</p><small>The earliest song in this record.</small></article>
+      <article class="story__chapter"><span class="story__no">02 / THE BIGGEST MONTH</span>${sleeve(peak.month.topArtist || 'Your music', peak.month.topArtist || 'Your music', { size: 70, round: true, kind: 'artist' })}<h3><button type="button" data-story-month="${peak.i}">${monthYear(peak.month.start)}</button></h3><p>${num(peak.month.n)} plays${peak.month.topArtist ? ` · led by ${esc(peak.month.topArtist)}` : ''}</p><small>Your busiest recorded month. Open it on the timeline.</small></article>
+      <article class="story__chapter"><span class="story__no">03 / THE LATEST CHAPTER</span>${sleeve(latest?.name || 'Your music', latest?.name || 'Your music', { size: 70, round: true, kind: 'artist' })}<h3>${latest ? `<a href="${L.artist(latest.name)}">${esc(latest.name)}</a>` : 'Still taking shape'}</h3><p>${latest ? `${num(latest.plays)} plays in your latest recorded 90 days` : 'No recent plays in this record'}</p><small>${E.newArtists ? `${num(E.newArtists)} artists first heard in that stretch.` : 'A chapter built from the plays you have.'}</small></article>
+    </div></section>`;
+}
+
 function bindSyncBanner(ctx) {
   const el = $('#sync-banner');
   const off = watchSync(ctx.pid, (job) => {
@@ -242,7 +260,7 @@ function bindSyncBanner(ctx) {
       return;
     }
     const pct = job.total ? Math.min(100, Math.round(job.done / job.total * 100)) : 0;
-    el.innerHTML = `<div class="sync-note"><div><b>${job.phase === 'saving' ? 'Saving your listening record' : ctx.A ? 'Updating your listening history' : 'Setting up your listening record'}</b><span>${job.phase === 'saving' ? `Putting ${num(job.done)} plays in this browser…` : job.total ? `${num(job.done)} of ${num(job.total)} plays · ${pct}%` : 'Finding your plays…'} You can explore while this runs.</span></div><div class="sync-note__side"><div class="bar" role="progressbar" aria-label="Listening history setup" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div><button type="button" class="link link--quiet" data-sync-cancel>Cancel</button></div></div>`;
+    el.innerHTML = `<div class="sync-note"><div><b>${job.phase === 'saving' ? 'Saving your listening record' : job.phase === 'resuming' ? 'Resuming your history setup' : ctx.A ? 'Updating your listening history' : 'Setting up your listening record'}</b><span>${job.phase === 'saving' ? `Putting ${num(job.done)} plays in this browser…` : job.total ? `${num(job.done)} of ${num(job.total)} plays · ${pct}%${job.phase === 'resuming' ? ' · saved from your last visit' : ''}` : 'Finding your plays…'} You can explore while this runs.</span></div><div class="sync-note__side"><div class="bar" role="progressbar" aria-label="Listening history setup" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div><button type="button" class="link link--quiet" data-sync-cancel>Cancel</button></div></div>`;
     $('[data-sync-cancel]', el).onclick = () => cancelSync(ctx.pid);
   });
   onLeave(off);
@@ -386,17 +404,27 @@ function top(ctx) {
     if (!el) return;
     if (topState.kind === 'genres') {
       const sum = total || items.reduce((s, x) => s + (x.plays || 0), 0);
-      let g;
-      const paint = () => {
-        if (request !== topRequest || ctx.signal.aborted) { g?.stop(); return; }
-        const e = $('#top-body');
-        g?.stop();
-        if (!e) return;
-        g = genres(items.slice(0, 60), () => setTimeout(paint, 0));
-        e.innerHTML = `<section class="panel">${genresHTML(g, sum)}</section>`;
-      };
-      paint();
-      onLeave(() => g?.stop());
+      const sample = items.slice(0, 24);
+      const pending = sample.filter((a) => !cachedArtist(a.name));
+      el.innerHTML = `<section class="panel"><div class="panel__head"><h2>Top genres & styles</h2><span class="label" id="top-genre-status">Checking ${sample.length} artists</span></div><p class="muted">Artist tags are weighted by your plays. The list appears when the scan is complete, so its rankings do not jump around.</p><div class="ms-progress" role="progressbar" aria-label="Checking genre tags" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><i></i></div><div id="top-genre-list"></div></section>`;
+      (async () => {
+        let done = sample.length - pending.length;
+        const update = () => {
+          if (request !== topRequest || ctx.signal.aborted || !el.isConnected) return;
+          const value = sample.length ? Math.round(done / sample.length * 100) : 100;
+          $('#top-genre-status', el).textContent = `${done} of ${sample.length} artists checked`;
+          const bar = $('.ms-progress', el); bar.setAttribute('aria-valuenow', String(value)); $('i', bar).style.width = `${value}%`;
+        };
+        update();
+        for (const artist of pending) {
+          if (request !== topRequest || ctx.signal.aborted) return;
+          await artistInfo(artist.name);
+          done++; update();
+        }
+        if (request !== topRequest || ctx.signal.aborted || !el.isConnected) return;
+        const g = genres(sample, () => {});
+        $('#top-genre-list', el).innerHTML = `<p class="faint" style="font-size:13px;margin-bottom:14px">Tags cover ${sum ? (g.covered / sum * 100).toFixed(1) : '0.0'}% of ${archive ? 'plays in this period' : 'plays represented by these artists'}.</p>${genresHTML(g, sum)}`;
+      })();
       return;
     }
     el.innerHTML = topBody(items, topState.kind, periodLabel, total, ctx.L);
@@ -454,16 +482,19 @@ function needArchive(ctx, what) {
   const copy = (empty ? {
     timeline: ['Your timeline starts with your first song', 'Connect Spotify in Last.fm, then listen. Your months and eras will take shape as your record grows.'],
     evolution: ['Your taste changes from the first song', 'Connect Spotify in Last.fm, then listen. Once you have history, Sleeve can compare your recent chapters.'],
+    patterns: ['Your deeper charts start with the first song', 'Connect Spotify in Last.fm, then listen. Activity, discovery and genre charts will grow with your record.'],
     insights: ['Insights grow from your listening', 'Connect Spotify in Last.fm, then listen. Sleeve will find patterns as more plays arrive.'],
     clock: ['Your listening clock starts with your first song', 'Connect Spotify in Last.fm, then listen. Sleeve will map when you play music.'],
   } : preparing ? {
     timeline: ['Your timeline is being prepared', 'Sleeve is reading your Last.fm history in the background. You can explore while it works.'],
     evolution: ['Your taste evolution is being prepared', 'Sleeve is reading your Last.fm history so it can compare your recent listening with earlier periods.'],
+    patterns: ['Your deeper charts are being prepared', 'Sleeve is reading your Last.fm history to build month-by-month activity and discovery charts.'],
     insights: ['Your insights are being prepared', 'Sleeve is reading your Last.fm history to find patterns across your record.'],
     clock: ['Your listening clock is being prepared', 'Sleeve is reading your Last.fm history to map when you listen.'],
   } : {
     timeline: ['Your timeline needs your full history', 'Import it once and Sleeve lays out every month you have listened, finds your eras, and sums up each year.'],
     evolution: ['Taste evolution needs your listening history', 'Sleeve compares equal periods to find discoveries, rising artists, fading favorites and comebacks.'],
+    patterns: ['Deeper charts need your listening history', 'Import your plays to see month-by-month activity, discovery, breadth and genres.'],
     insights: ['Insights need your full history', 'Import it once and Sleeve looks for obsessions, comebacks, streaks, late nights and more.'],
     clock: ['Your listening clock needs your full history', 'Import it once and Sleeve maps when you listen, hour by hour, across the week.'],
   })[what];
@@ -515,6 +546,11 @@ function timelineTab(ctx) {
 function evolutionTab(ctx) {
   if (!ctx.A) return needArchive(ctx, 'evolution');
   evolutionView(ctx, banner(ctx));
+}
+
+function patternsTab(ctx) {
+  if (!ctx.A) return needArchive(ctx, 'patterns');
+  patternsView(ctx, banner(ctx));
 }
 
 function monthHTML(A, i, L = {}) {
@@ -604,7 +640,7 @@ function data(ctx) {
       </section>
       <section class="panel c-6">
         <div class="panel__head"><h2>Stored in this browser</h2></div>
-        <p class="muted" style="font-size:14.5px">Sleeve has no accounts and no server. Everything above lives in this browser only, and nothing leaves your device except the requests to ${source === 'spotify' ? 'Spotify' : src ? src.label : 'nobody'}.</p>
+        <p class="muted" style="font-size:14.5px">Your listening archive stays in this browser. Sleeve requests live data from ${source === 'spotify' ? 'Spotify' : src ? src.label : 'its music sources'} and artwork or artist tags from public music services. When AI writing is on, a short summary of your stats is sent to Sleeve's writer; raw plays are not sent. You can turn AI off in Settings.</p>
         <div class="flow__actions" id="danger">
           ${ctx.source !== 'demo' ? '<button type="button" class="btn btn--line btn--sm" data-forget>Remove this profile</button>' : ''}
           <button type="button" class="btn btn--line btn--sm" data-wipe>Clear everything</button>
@@ -615,7 +651,7 @@ function data(ctx) {
   bindDrops($('#tab'), handleFiles);
   $$('[data-min]').forEach((b) => b.addEventListener('click', () => { setMinMs(Number(b.dataset.min)); toast(Number(b.dataset.min) ? 'Counting plays of 30 seconds or more.' : 'Counting every play.'); rerender(); }));
   $$('[data-remove]').forEach((b) => b.addEventListener('click', async () => {
-    const a = await getArchive(pid);
+    const a = { ...await getArchive(pid) };
     a[b.dataset.remove] = null;
     await setArchive(pid, a);
     toast('Removed.');
