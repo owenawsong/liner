@@ -104,6 +104,12 @@ body {
   text-rendering: optimizeLegibility;
 }
 main { flex: 1; outline: none; }
+.boot { min-height: min(70vh, 600px); display: grid; align-content: center; justify-items: start; gap: 20px; max-width: var(--max); margin: auto; padding: 48px var(--gutter); }
+.boot__mark { font: 500 12px var(--f-mono); letter-spacing: .12em; color: var(--ink-3); }
+.boot strong { font: 800 clamp(40px, 8vw, 100px)/.9 var(--f-display); max-width: 9ch; text-transform: uppercase; }
+.boot__bar { width: min(320px, 75vw); height: 5px; border-radius: 9px; background: var(--line); overflow: hidden; }
+.boot__bar::after { content: ""; display: block; width: 35%; height: 100%; background: var(--accent); animation: boot-progress 1.25s ease-in-out infinite alternate; }
+@keyframes boot-progress { to { transform: translateX(190%); } }
 img, svg { display: block; max-width: 100%; }
 a { color: inherit; text-decoration-color: color-mix(in srgb, currentColor 38%, transparent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
 a:hover { text-decoration-color: currentColor; }
@@ -145,7 +151,17 @@ code { font-size: .88em; background: var(--bg-2); padding: .12em .4em; border-ra
 .nav__right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .nav__user { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none; font-size: 14px; font-weight: 500; }
 .nav__user:hover { border-color: var(--line-2); }
-@media (max-width: 760px) { .nav__links { display: none; } .nav__inner { gap: 12px; } }
+.nav__menu-btn { display: none !important; }
+.nav__mobile { display: none; }
+@media (max-width: 760px) {
+  .nav__links { display: none; }
+  .nav__inner { gap: 12px; }
+  .nav__menu-btn { display: inline-flex !important; }
+  .nav__mobile:not([hidden]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 8px var(--gutter) 16px; background: var(--bg); color: var(--ink); border-top: 1px solid var(--line); box-shadow: var(--shadow); }
+  .nav__mobile a { padding: 11px 12px; border-radius: 8px; text-decoration: none; font-weight: 500; }
+  .nav__mobile a:hover, .nav__mobile a:focus-visible { background: var(--bg-2); }
+}
+@media (max-width: 420px) { #nav-user { display: none; } }
 
 .footer { border-top: 1px solid var(--line); margin-top: 40px; }
 .footer__inner { max-width: var(--max); margin-inline: auto; padding: 40px var(--gutter) 48px; display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 32px; }
@@ -431,7 +447,9 @@ a.rank__item:hover .rank__name b { text-decoration: underline; text-decoration-c
 .drop .i { width: 22px; height: 22px; color: var(--ink-2); }
 .drop b { font-weight: 500; display: block; }
 .drop small { color: var(--ink-3); font-size: 13.5px; }
-.drop.is-busy { pointer-events: none; opacity: .6; }
+.drop.is-busy { pointer-events: none; cursor: progress; border-style: solid; border-color: var(--accent); }
+.import-status { position: fixed; z-index: 90; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(500px, calc(100vw - 32px)); display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 12px; background: var(--ink); color: var(--bg); box-shadow: var(--shadow); font-size: 14px; }
+.import-status__dot { flex: none; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
 .drop--big { flex-direction: column; justify-content: center; text-align: center; padding: 56px 20px; gap: 10px; }
 .drop--big .i { width: 28px; height: 28px; }
 
@@ -757,6 +775,7 @@ a.era:hover, a.year:hover { border-color: var(--line-2); transform: translateY(-
 .ai__head { display: grid; gap: 4px; }
 .ai__title { font: 500 clamp(22px, 2.4vw, 28px)/1.1 var(--f-display) !important; letter-spacing: -.03em !important; }
 .ai__body { min-height: 96px; display: grid; gap: 14px; max-width: 72ch; }
+.ai__ready { display: grid; justify-items: start; align-content: start; gap: 16px; color: var(--ink-2); }
 .ai__wrap { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 40px; align-items: start; }
 .ai__basis { display: grid; gap: 10px; padding-left: 24px; border-left: 1px solid var(--line); font-size: 13.5px; color: var(--ink-3); }
 .ai__basis b { display: block; font: 500 20px/1.1 var(--f-display); color: var(--ink); letter-spacing: -.02em; }

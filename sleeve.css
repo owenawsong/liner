@@ -63,7 +63,7 @@
 /* The deck: a sleeve with the record sliding out */
 .deck { position: relative; width: min(460px, 78vw); aspect-ratio: 1; justify-self: center; margin-right: min(90px, 12vw); }
 .deck__sleeve { position: absolute; inset: 0; z-index: 2; border-radius: 6px; overflow: hidden; box-shadow: 0 40px 80px -30px rgb(0 0 0 / .55), 0 0 0 1px rgb(0 0 0 / .08); background: var(--deep); }
-.deck__cover { position: absolute; inset: 0; opacity: 0; transform: scale(1.04); transition: opacity 1s var(--ease), transform 1.4s var(--ease); }
+.deck__cover { position: absolute; inset: 0; opacity: 0; transform: scale(1.04); transition: opacity .7s var(--ease), transform 1s var(--ease); }
 .deck__cover.is-on { opacity: 1; transform: none; }
 .deck__cover .sleeve { width: 100% !important; height: 100% !important; border-radius: 0; box-shadow: none; }
 .deck__disc { position: absolute; z-index: 1; width: 94%; aspect-ratio: 1; top: 3%; left: 22%; border-radius: 50%; background: repeating-radial-gradient(circle at 50% 50%, #101010 0 1.4px, #1d1d1c 1.4px 3.2px); box-shadow: 0 30px 60px -30px rgb(0 0 0 / .7); animation: spin 5s linear infinite; transition: left 1s var(--ease); display: grid; place-items: center; }
@@ -71,7 +71,8 @@
 .deck__disc::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 40deg, transparent 0 60%, rgb(255 255 255 / .1) 68%, transparent 76%); }
 .deck__label { width: 34%; aspect-ratio: 1; border-radius: 50%; background: var(--hero-soft, var(--marigold)); transition: background-color 1.2s var(--ease); box-shadow: inset 0 0 0 5px rgb(0 0 0 / .12); position: relative; }
 .deck__label::after { content: ""; position: absolute; inset: 46%; border-radius: 50%; background: var(--deep); }
-.deck__sticker { position: absolute; z-index: 3; left: -26px; bottom: 26px; rotate: -6deg; background: var(--bone); color: var(--deep); padding: 12px 16px; border-radius: 10px; display: grid; gap: 2px; min-width: 170px; max-width: 240px; box-shadow: 0 16px 30px -16px rgb(0 0 0 / .5); }
+.deck__sticker { position: absolute; z-index: 3; left: -26px; bottom: 26px; rotate: -6deg; background: var(--bone); color: var(--deep); padding: 12px 16px; border-radius: 10px; display: grid; gap: 2px; min-width: 170px; max-width: 240px; box-shadow: 0 16px 30px -16px rgb(0 0 0 / .5); transition: opacity .18s ease; }
+.deck__sticker.is-changing { opacity: 0; }
 .deck__sticker span:first-child { font: 500 10.5px/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: #8a8378; }
 .deck__sticker b { font-family: var(--f-poster); font-stretch: 80%; font-weight: 800; font-size: 22px; line-height: 1.05; text-transform: uppercase; }
 .deck__sticker span:last-child { font-size: 13.5px; color: #5b554c; }
@@ -212,8 +213,16 @@
 .choice__no { font: 500 12px var(--f-mono); letter-spacing: .12em; }
 .choice__title { font-family: var(--f-poster); font-stretch: 72%; font-weight: 800; font-size: clamp(30px, 3vw, 40px); line-height: .92; text-transform: uppercase; margin-top: auto; position: relative; z-index: 1; }
 .choice__sub { font-size: 15px; line-height: 1.4; position: relative; z-index: 1; }
-.choice__disc { position: absolute; width: 150px; aspect-ratio: 1; right: -50px; top: -40px; border-radius: 50%; background: repeating-radial-gradient(circle, rgb(0 0 0 / .2) 0 1px, transparent 1px 6px); transition: transform .8s var(--ease); }
+.choice__disc { position: absolute; width: 150px; aspect-ratio: 1; right: -50px; top: -40px; border-radius: 50%; background: radial-gradient(circle at center, transparent 0 12%, rgb(0 0 0 / .13) 13% 14%, transparent 15% 29%, rgb(0 0 0 / .13) 30% 31%, transparent 32% 45%, rgb(0 0 0 / .13) 46% 47%, transparent 48%); transition: transform .8s var(--ease); }
 .choice:hover .choice__disc { transform: rotate(120deg) translate(-10px, 10px); }
+@media (max-width: 520px) {
+  .start__head { margin-bottom: 22px; }
+  .choices { gap: 10px; }
+  .choice { min-height: 116px; padding: 15px 18px; gap: 4px; }
+  .choice__title { font-size: 25px; margin-top: 9px; }
+  .choice__sub { font-size: 13px; line-height: 1.3; max-width: 28ch; }
+  .choice__disc { width: 92px; right: -28px; top: -25px; }
+}
 .start__panel { margin-top: 24px; padding: clamp(22px, 3vw, 36px); border-radius: 20px; background: var(--surface); border: 1px solid var(--line); display: grid; gap: 18px; max-width: 760px; animation: rise .35s var(--ease); }
 .start__panel h2 { font-family: var(--f-poster); font-stretch: 78%; font-weight: 800; font-size: 32px; text-transform: uppercase; line-height: 1; }
 .start__other { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 22px; font-size: 14px; }

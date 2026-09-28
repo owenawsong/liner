@@ -14,7 +14,9 @@ import { hydrate } from './meta.js';
 
 /* ---------- Router ---------- */
 let lastPid = null;
+let routeSeq = 0;
 async function route() {
+  const seq = ++routeSeq;
   leave();
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map((s) => { try { return decodeURIComponent(s); } catch { return s; } });
   const [a, b, c, d] = parts;
@@ -31,9 +33,11 @@ async function route() {
     else if (a === 'history') go('#/connect/file');
     else await renderHome();
   } catch (e) {
+    if (seq !== routeSeq) return;
     console.error(e);
     view().innerHTML = `<div class="wrap"><div class="flow"><span class="label">Error</span><h1>Something broke on this page</h1><p class="flow__lede">${esc(e.message)}</p><div class="flow__actions"><a class="btn btn--ink" href="#/">Back to start</a></div></div></div>`;
   }
+  if (seq !== routeSeq) return;
   if (state.scrollTo) {
     const target = document.getElementById(state.scrollTo);
     state.scrollTo = null;
@@ -89,6 +93,21 @@ function initThemes() {
   });
 }
 
+function initMenu() {
+  const btn = $('#menu-btn'), menu = $('#mobile-menu');
+  const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-label', 'Open menu'); };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+    btn.setAttribute('aria-expanded', String(!menu.hidden));
+    btn.setAttribute('aria-label', menu.hidden ? 'Open menu' : 'Close menu');
+  });
+  menu.addEventListener('click', (e) => { if (e.target.closest('a')) close(); });
+  document.addEventListener('click', (e) => { if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) { close(); btn.focus(); } });
+  addEventListener('resize', () => { if (innerWidth > 760 && !menu.hidden) close(); });
+}
+
 function updateStatus() {
   $('#source-status').textContent = lastfm.isLive() ? '' : 'Last.fm: simulated until a key is added in Settings';
 }
@@ -112,6 +131,7 @@ function initDrop() {
 /* ---------- Boot ---------- */
 async function boot() {
   initThemes();
+  initMenu();
   initDrop();
   updateStatus();
   const cb = await spotify.handleCallback();

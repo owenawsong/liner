@@ -67,7 +67,7 @@ export function mountLookup(root, { source = 'lastfm', id, cta = 'Continue', ini
     }
   }
   const later = debounce(run, 360);
-  onLeave(() => ctrl?.abort());
+  onLeave(() => { later.cancel(); ctrl?.abort(); });
 
   input.addEventListener('input', () => {
     const name = cleanUsername(input.value);

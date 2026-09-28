@@ -1,6 +1,6 @@
 // Artist, song and year pages, plus the pieces that link into them.
 import { $, $$, esc, sleeve, trackSleeve, num, pct, plural, fullDate, longMonth, monthYear, span, icon, toast } from '../ui.js';
-import { hrefFor } from '../core.js';
+import { hrefFor, onLeave } from '../core.js';
 import { topIn, lowerBound } from '../analysis.js';
 import { rankList, insightCard } from '../components.js';
 import { artistInfo, cachedArtist } from '../meta.js';
@@ -323,8 +323,14 @@ export function mountSearch(root, A, L) {
     if (e.key === 'Escape') { input.value = ''; out.hidden = true; input.blur(); }
     if (e.key === 'Enter') { const first = $('a', out); if (first) location.hash = first.getAttribute('href'); }
   });
-  document.addEventListener('click', (e) => { if (!root.contains(e.target)) out.hidden = true; });
-  document.addEventListener('keydown', (e) => { if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); input.focus(); } });
+  const outside = (e) => { if (!root.contains(e.target)) out.hidden = true; };
+  const shortcut = (e) => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
+    e.preventDefault(); input.focus();
+  };
+  document.addEventListener('click', outside);
+  document.addEventListener('keydown', shortcut);
+  onLeave(() => { document.removeEventListener('click', outside); document.removeEventListener('keydown', shortcut); });
 }
 
 /* ---------- Genres ---------- */
@@ -332,6 +338,7 @@ export function mountSearch(root, A, L) {
 // so this re-renders as more artists are looked up.
 export function genres(items, onUpdate) {
   const pending = items.filter((a) => !cachedArtist(a.name));
+  const unavailable = items.some((a) => cachedArtist(a.name)?.unavailable);
   const tally = new Map();
   let covered = 0;
   for (const a of items) {
@@ -351,7 +358,7 @@ export function genres(items, onUpdate) {
       if (alive) onUpdate();
     }
   })();
-  return { list: [...tally.values()].sort((a, b) => b.plays - a.plays), pending: pending.length, covered, stop: () => { alive = false; } };
+  return { list: [...tally.values()].sort((a, b) => b.plays - a.plays), pending: pending.length, covered, unavailable, stop: () => { alive = false; } };
 }
 
 export function genresHTML(g, total) {
@@ -361,7 +368,7 @@ export function genresHTML(g, total) {
       <div class="genres__top"><b>${esc(x.name)}</b><span class="mono faint">${total ? pct(x.plays / total) : num(x.plays)}</span></div>
       <span class="rank__bar"><i style="width:${(x.plays / max) * 100}%"></i></span>
       <span class="genres__who">${x.artists.slice(0, 4).map(esc).join(', ')}${x.artists.length > 4 ? ` and ${x.artists.length - 4} more` : ''}</span>
-    </li>`).join('')}</ol>` : '<p class="empty">No genres yet.</p>'}`;
+    </li>`).join('')}</ol>` : `<p class="empty">${g.pending ? 'Genres will appear as artist details load.' : g.unavailable ? 'MusicBrainz is unavailable right now. Try again later.' : 'No genres are listed for these artists.'}</p>`}`;
 }
 
 export { insightCard };

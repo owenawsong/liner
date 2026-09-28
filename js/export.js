@@ -14,16 +14,26 @@ export async function readExport(files, onProgress = () => {}) {
     if (/\.zip$/i.test(f.name) || /zip/.test(f.type)) {
       if (!window.JSZip) throw new Error("The ZIP reader didn't load. Check your connection and refresh the page.");
       let zip;
+      onProgress(`Opening ${f.name}`);
+      await new Promise((resolve) => setTimeout(resolve, 0));
       try { zip = await window.JSZip.loadAsync(f); } catch { throw new Error(`"${f.name}" isn't a ZIP file Sleeve can open.`); }
       const names = Object.keys(zip.files).filter((n) => wanted(n) && !zip.files[n].dir);
       for (let j = 0; j < names.length; j++) {
-        onProgress(`Reading ${names[j].split('/').pop()}`);
-        chunks.push(parse(await zip.file(names[j]).async('string'), names[j]));
+        const label = names[j].split('/').pop();
+        let lastPercent = -10;
+        onProgress(`Reading ${label}`);
+        const raw = await zip.file(names[j]).async('string', ({ percent }) => {
+          const rounded = Math.floor(percent / 10) * 10;
+          if (rounded > lastPercent) { lastPercent = rounded; onProgress(`Reading ${label} · ${rounded}%`); }
+        });
+        onProgress(`Adding plays from ${label}`);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        chunks.push(parse(raw, names[j]));
       }
       if (!names.length) skipped.push(f.name);
     } else if (/\.jsonl?$/i.test(f.name)) {
       onProgress(`Reading ${f.name}`);
-      if (wanted(f.name)) chunks.push(parse(await f.text(), f.name));
+      if (wanted(f.name)) { const raw = await f.text(); await new Promise((resolve) => setTimeout(resolve, 0)); chunks.push(parse(raw, f.name)); }
       else skipped.push(f.name);
     } else {
       skipped.push(f.name);
@@ -36,13 +46,29 @@ export async function readExport(files, onProgress = () => {}) {
       ? `No listening history in ${skipped.map((s) => `"${s}"`).join(', ')}. Drop the ZIP from Spotify's email, or the Streaming_History files inside it.`
       : 'No listening history in those files.');
   }
+  onProgress('Sorting your plays');
+  await new Promise((resolve) => setTimeout(resolve, 0));
   rows.sort((a, b) => a.t - b.t);
-  const music = rows.filter((r) => r.track);
+  let music = rows.filter((r) => r.track);
+  const podcasts = rows.length - music.length;
+  if (!music.length) throw new Error('The file has no music plays Sleeve can show. Try a Spotify listening-history ZIP.');
+  if (music.some((r) => r.src === 'listenbrainz') && music.some((r) => r.src === 'export')) throw new Error('Choose Spotify files or a ListenBrainz export, not both at once.');
+  const detailed = music.filter((r) => r.skipped !== null);
+  if (detailed.length) {
+    const from = detailed[0].t, to = detailed[detailed.length - 1].t;
+    music = music.filter((r) => r.skipped !== null || r.t + (r.ms || 0) < from || r.t + (r.ms || 0) > to);
+  }
+  const seen = new Set();
+  music = music.filter((r) => {
+    const key = `${r.t}|${r.artist}|${r.track}`;
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
   const lb = music.length && music.every((r) => r.src === 'listenbrainz');
   return {
     rows: music,
     kind: lb ? 'listenbrainz' : music.some((r) => r.skipped !== null) ? 'extended' : 'basic',
-    podcasts: rows.length - music.length,
+    podcasts,
     extended: music.some((r) => r.skipped !== null),
     from: music[0]?.t,
     to: music[music.length - 1]?.t,

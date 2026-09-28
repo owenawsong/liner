@@ -4,20 +4,22 @@ import { timeline, bindTimeline, heatmap, rankList, dropzone, bindDrops } from '
 import { topIn } from '../analysis.js';
 import { handleFiles } from '../actions.js';
 import { mountLookup } from './connect.js';
-import { art } from '../meta.js';
+import { art, hydrate } from '../meta.js';
 import { palette } from '../color.js';
+import { DEMO_NOTES, DEMO_ROAST } from '../sources/demo.js';
 
 let homeSource = 'lastfm';
 const HERO_ALBUMS = [
   ['Blonde', 'Frank Ocean'], ['Melodrama', 'Lorde'], ['SOS', 'SZA'], ['Punisher', 'Phoebe Bridgers'], ['brat', 'Charli xcx'],
   ['GNX', 'Kendrick Lamar'], ["Short n' Sweet", 'Sabrina Carpenter'], ['Charm', 'Clairo'], ['The Rise and Fall of a Midwest Princess', 'Chappell Roan'],
 ];
-const SAMPLE_NOTES = 'Your journey began with a heavy Lorde obsession that lasted through your first two years, before you shifted into a long era defined by Phoebe Bridgers and Mitski. What stands out most is your loyalty to Frank Ocean, who has appeared in your rotation every single year since you started.';
-const SAMPLE_ROAST = 'You played Nobody by Mitski 19 times in one day, and your busiest hour is 10 pm, which tells me you only schedule your emotional crises for after everyone else goes to sleep.';
 
 export async function renderHome() {
+  const routeAtStart = location.hash;
+  await new Promise((resolve) => setTimeout(resolve, 0));
   const archive = await getArchive('demo');
   const A = analysisFor('demo', archive);
+  if (location.hash !== routeAtStart) return;
   const returning = profiles.list();
   const topArtist = A.artists[0];
   const year = A.years[A.years.length - 2] || A.years[0];
@@ -31,8 +33,8 @@ export async function renderHome() {
     { side: 'A', title: 'The listening clock', desc: 'When the music actually happens, hour by hour across your week.', vis: heatmap(A) },
     { side: 'A', title: 'Top 100, any dates', desc: 'Artists, songs, albums and genres. By plays or by minutes, for any stretch of time.', vis: rankList(topIn(A, 'albums', -Infinity, Infinity, 5), { kind: 'albums', size: 40 }) },
     { side: 'A', title: 'Things you never noticed', desc: 'Obsessions, comebacks, streaks, late nights. Sleeve goes looking so you don\'t have to.', vis: `<div class="bento__stack">${['comeback', 'loop', 'streak'].map(insight).filter(Boolean).slice(0, 2).map((x) => `<div class="minisight"><span class="label">${esc(x.kicker)}</span><p>${x.title}</p></div>`).join('')}</div>` },
-    { side: 'B', title: 'Liner notes, written for you', desc: 'A short write-up of your taste, by AI, from a summary of your stats.', vis: `<div class="pv-quote"><p>${esc(SAMPLE_NOTES)}</p></div>` },
-    { side: 'B', title: 'Roast my taste', desc: 'The same, but mean. Affectionately.', vis: `<div class="pv-quote pv-quote--ink"><p>${esc(SAMPLE_ROAST)}</p></div>` },
+    { side: 'B', title: 'Liner notes, written for you', desc: 'A short write-up of your taste, by AI, from a summary of your stats.', vis: `<div class="pv-quote"><p>${esc(DEMO_NOTES)}</p></div>` },
+    { side: 'B', title: 'Roast my taste', desc: 'The same, but mean. Affectionately.', vis: `<div class="pv-quote pv-quote--ink"><p>${esc(DEMO_ROAST)}</p></div>` },
     { side: 'B', title: 'Ask your stats anything', desc: 'When did I get into Mitski? What was last summer? Just ask.', vis: '<div class="minichat"><p class="minichat__q">When did I get into Mitski?</p><p class="minichat__a">Your first Mitski play was in 2019, and she took over completely from late 2020 into 2022.</p></div>' },
     { side: 'B', title: 'Compare with a friend', desc: 'A match score, what you share, and what you would each get from the other.', vis: '<div class="miniring"><div class="cmp-ring" style="--p:73"><div><b>73</b><span>% match</span></div></div></div>' },
     { side: 'B', title: 'How mainstream are you?', desc: 'Scored from how many people listen to your favourite artists.', vis: '<div class="minims"><div class="ms__score"><b>34</b><span>out of 100 obscurity</span><p>A healthy mix</p></div><div class="ms__track" style="margin-top:18px"><i style="left:34%"></i></div><div class="ms__ends"><span>Everyone knows them</span><span>Nobody does</span></div></div>' },
@@ -187,27 +189,45 @@ export async function renderHome() {
 function runDeck() {
   const root = document.documentElement;
   const hero = $('#sl-hero');
-  let i = 0, alive = true, timer = 0;
-  const urls = HERO_ALBUMS.map(([al, ar]) => art('album', al, ar, true));
-  const show = async (k) => {
-    const url = await urls[k];
-    if (!alive) return;
-    const pal = await palette(url);
-    if (!alive) return;
-    $$('.deck__cover').forEach((c) => c.classList.toggle('is-on', Number(c.dataset.i) === k));
-    $('#deck-title').textContent = HERO_ALBUMS[k][0];
-    $('#deck-artist').textContent = HERO_ALBUMS[k][1];
-    if (pal) {
+  const sticker = $('.deck__sticker');
+  const covers = $$('.deck__cover');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  let i = 0, alive = true, timer = 0, labelTimer = 0, generation = 0;
+  const show = (k, initial = false) => {
+    const current = ++generation;
+    covers.forEach((c) => c.classList.toggle('is-on', Number(c.dataset.i) === k));
+    hydrate(covers[k]);
+    clearTimeout(labelTimer);
+    if (!initial) sticker.classList.add('is-changing');
+    labelTimer = setTimeout(() => {
+      if (!alive || current !== generation) return;
+      $('#deck-title').textContent = HERO_ALBUMS[k][0];
+      $('#deck-artist').textContent = HERO_ALBUMS[k][1];
+      sticker.classList.remove('is-changing');
+    }, initial || reduced.matches ? 0 : 350);
+    art('album', ...HERO_ALBUMS[k], true).then((url) => palette(url)).then((pal) => {
+      if (!alive || current !== generation || !pal) return;
       root.style.setProperty('--hero-bg', pal.bg);
       root.style.setProperty('--hero-ink', pal.ink);
       root.style.setProperty('--hero-soft', pal.soft);
       hero.classList.toggle('is-dark-ink', pal.dark);
-    }
+    }).catch(() => {});
   };
-  const next = () => { i = (i + 1) % HERO_ALBUMS.length; show(i); timer = setTimeout(next, 4200); };
-  show(0);
-  timer = setTimeout(next, 4200);
-  onLeave(() => { alive = false; clearTimeout(timer); ['--hero-bg', '--hero-ink', '--hero-soft'].forEach((p) => root.style.removeProperty(p)); });
+  const schedule = () => {
+    clearTimeout(timer);
+    if (!alive || document.hidden || reduced.matches) return;
+    timer = setTimeout(() => { i = (i + 1) % HERO_ALBUMS.length; show(i); schedule(); }, 6500);
+  };
+  const visibility = () => schedule();
+  document.addEventListener('visibilitychange', visibility);
+  show(0, true);
+  schedule();
+  onLeave(() => {
+    alive = false;
+    clearTimeout(timer); clearTimeout(labelTimer);
+    document.removeEventListener('visibilitychange', visibility);
+    ['--hero-bg', '--hero-ink', '--hero-soft'].forEach((p) => root.style.removeProperty(p));
+  });
 }
 
 // The nav takes the hero's colour until you scroll past it.

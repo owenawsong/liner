@@ -116,9 +116,12 @@ export async function onRequestPost({ request, env, waitUntil }) {
 
   const messages = [{ role: 'system', content: STYLE }, { role: 'user', content: task.prompt(facts, question) }];
   const errors = [];
+  const deadline = Date.now() + 44000;
   for (const step of ROUTE) {
+    const remaining = deadline - Date.now();
+    if (remaining < 3000) break;
     try {
-      const text = await call(step, env, messages, task.max);
+      const text = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max);
       const out = JSON.stringify({ text, model: step.model });
       waitUntil(cache.put(cacheKey, new Response(out, { headers: { 'Cache-Control': 'public, max-age=604800' } })));
       return new Response(out, { headers: { 'Content-Type': 'application/json' } });

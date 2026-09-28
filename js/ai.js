@@ -12,25 +12,34 @@ async function key(s) {
   return [...new Uint8Array(buf)].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function write(task, facts, { question = '', fresh = false } = {}) {
+export async function write(task, facts, { question = '', fresh = false, signal } = {}) {
   const k = `ai:${task}:${await key(`${facts}|${question}`)}`;
   if (!fresh) {
     if (local.has(k)) return local.get(k);
     const saved = await idb.get(k);
     if (saved) { local.set(k, saved); return saved; }
   }
-  let res;
+  if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const abort = () => ctrl.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, 50000);
+  let res, d;
   try {
     res = await fetch('/api/ai', {
       method: 'POST',
+      signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ task, facts, question, seed: fresh ? Date.now() : '' }),
     });
-  } catch {
+    d = await res.json().catch(() => ({}));
+  } catch (e) {
+    if (timedOut) throw new Error('The writer took too long. Try again.');
+    if (e.name === 'AbortError') throw e;
     throw new Error("Couldn't reach Sleeve's writer. Check your connection.");
-  }
+  } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
   if (res.status === 404) throw new Error('AI writing only works on the live site.');
-  const d = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(d.error || 'The writer is busy. Try again in a moment.');
   local.set(k, d.text);
   idb.set(k, d.text);

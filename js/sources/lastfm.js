@@ -24,13 +24,25 @@ export class SourceError extends Error {
 async function call(method, params, signal) {
   const url = new URL(BASE);
   url.search = new URLSearchParams({ method, api_key: apiKey(), format: 'json', ...params });
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const abort = () => ctrl.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) ctrl.abort();
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, 12000);
   let res;
-  try { res = await fetch(url, { signal }); } catch (e) {
-    if (e.name === 'AbortError') throw e;
-    throw new SourceError('network', "Couldn't reach Last.fm. Check your connection and try again.");
-  }
   let data;
-  try { data = await res.json(); } catch { throw new SourceError('bad', 'Last.fm sent back something unreadable. Try again in a moment.'); }
+  try {
+    res = await fetch(url, { signal: ctrl.signal });
+    try { data = await res.json(); } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      throw new SourceError('bad', 'Last.fm sent back something unreadable. Try again in a moment.');
+    }
+  } catch (e) {
+    if (timedOut) throw new SourceError('timeout', 'Last.fm took too long to respond. Try again.');
+    if (e.name === 'AbortError' || e instanceof SourceError) throw e;
+    throw new SourceError('network', "Couldn't reach Last.fm. Check your connection and try again.");
+  } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
   if (data.error) {
     const friendly = {
       6: 'There is no Last.fm user with that name.',

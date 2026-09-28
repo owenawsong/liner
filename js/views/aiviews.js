@@ -4,11 +4,12 @@ import { onLeave } from '../core.js';
 import { topIn } from '../analysis.js';
 import { write, facts, reveal, loadingLines, paragraphs } from '../ai.js';
 import { store } from '../ui.js';
+import { DEMO_NOTES, DEMO_ROAST } from '../sources/demo.js';
 const aiOff = () => store.get('liner.ai') === 'off';
 
 const TITLES = { notes: 'Your liner notes', roast: 'Your taste, roasted' };
 
-export function notesPanel(A) {
+export function notesPanel(A, isDemo = false) {
   if (aiOff()) return '';
   const basis = A ? [
     [num(A.plays), 'plays'],
@@ -18,14 +19,14 @@ export function notesPanel(A) {
   ].map(([v, l]) => `<span><b>${v}</b>${l}</span>`).join('') : '';
   return `<section class="panel c-12 ai" id="ai-notes">
     <div class="panel__head">
-      <div class="ai__head"><span class="label">Written for you</span><h2 class="ai__title">Your liner notes</h2></div>
+      <div class="ai__head"><span class="label">${isDemo ? 'Example writing' : 'Written for you'}</span><h2 class="ai__title">Your liner notes</h2></div>
       <div class="seg" role="radiogroup" aria-label="Style"><button type="button" role="radio" data-mode="notes" aria-checked="true">Liner notes</button><button type="button" role="radio" data-mode="roast" aria-checked="false">Roast me</button></div>
     </div>
     <div class="ai__wrap">
-      <div class="ai__body" aria-live="polite">${loadingLines}</div>
+      <div class="ai__body" aria-live="polite">${isDemo ? `<p class="ai__text">${esc(DEMO_NOTES)}</p>` : '<div class="ai__ready"><p>Turn your listening history into a short story about your taste.</p><button type="button" class="btn btn--ink" data-write>Write my liner notes</button></div>'}</div>
       ${basis ? `<aside class="ai__basis"><span class="label">Based on</span>${basis}</aside>` : ''}
     </div>
-    <div class="ai__foot"><button type="button" class="link link--quiet" data-again>Write another take</button><span class="faint">Written by AI from a short summary of your stats. Nothing else is sent.</span></div>
+    <div class="ai__foot">${isDemo ? '' : '<button type="button" class="link link--quiet" data-again hidden>Write another take</button>'}<span class="faint">${isDemo ? 'Example text for this demo profile.' : 'Written by AI from a short summary of your stats. Your raw plays are not sent.'}</span></div>
   </section>`;
 }
 
@@ -33,20 +34,30 @@ export function bindNotes(ctx) {
   const root = $('#ai-notes');
   if (!root) return;
   let mode = 'notes';
-  let alive = true;
+  let alive = true, request = 0;
   onLeave(() => { alive = false; });
   const body = $('.ai__body', root);
+  const demo = ctx.source === 'demo';
   const f = facts(ctx.A, { ...ctx.p, topArtists: ctx.topArtists });
+  const example = () => {
+    $('.ai__title', root).textContent = TITLES[mode];
+    body.innerHTML = `<p class="ai__text">${esc(mode === 'notes' ? DEMO_NOTES : DEMO_ROAST)}</p>`;
+  };
   const run = async (fresh = false) => {
+    if (demo) return example();
+    const mine = ++request;
     body.innerHTML = loadingLines;
+    $('[data-again]', root).hidden = true;
     $('.ai__title', root).textContent = TITLES[mode];
     try {
-      const text = await write(mode, f, { fresh });
-      if (!alive) return;
-      body.innerHTML = paragraphs(text).map(() => '<p class="ai__text"></p>').join('');
-      $$('.ai__text', body).forEach((p, i) => reveal(p, paragraphs(text)[i]));
+      const text = await write(mode, f, { fresh, signal: ctx.signal });
+      if (!alive || mine !== request) return;
+      const lines = paragraphs(text);
+      body.innerHTML = lines.map(() => '<p class="ai__text"></p>').join('');
+      $$('.ai__text', body).forEach((p, i) => reveal(p, lines[i]));
+      $('[data-again]', root).hidden = false;
     } catch (e) {
-      if (!alive) return;
+      if (!alive || mine !== request || e.name === 'AbortError') return;
       body.innerHTML = `<p class="ai__error">${esc(e.message)} <button type="button" class="link" data-retry>Try again</button></p>`;
       $('[data-retry]', body).addEventListener('click', () => run(true));
     }
@@ -54,10 +65,10 @@ export function bindNotes(ctx) {
   $$('[data-mode]', root).forEach((b) => b.addEventListener('click', () => {
     mode = b.dataset.mode;
     $$('[data-mode]', root).forEach((x) => x.setAttribute('aria-checked', String(x === b)));
-    run();
+    demo ? example() : run();
   }));
-  $('[data-again]', root).addEventListener('click', () => run(true));
-  run();
+  $('[data-write]', root)?.addEventListener('click', () => run());
+  $('[data-again]', root)?.addEventListener('click', () => run(true));
 }
 
 /* ---------- Ask ---------- */
@@ -87,15 +98,22 @@ export function bindAsk(ctx) {
   if (!root) return;
   const input = $('#ask-q', root), out = $('.ask__out', root);
   const f = facts(ctx.A, ctx.p, { detailed: true });
+  let request = 0, pending;
+  onLeave(() => pending?.abort());
   const ask = async (q) => {
     if (!q.trim()) return;
+    pending?.abort();
+    pending = new AbortController();
+    const mine = ++request;
     input.value = q;
     out.innerHTML = `<div class="ask__q">${esc(q)}</div>${loadingLines}`;
     try {
-      const text = await write('ask', f, { question: q });
+      const text = await write('ask', f, { question: q, signal: pending.signal });
+      if (mine !== request || !root.isConnected) return;
       out.innerHTML = `<div class="ask__q">${esc(q)}</div><p class="ai__text"></p>`;
       reveal($('.ai__text', out), text);
     } catch (e) {
+      if (mine !== request || e.name === 'AbortError' || !root.isConnected) return;
       out.innerHTML = `<div class="ask__q">${esc(q)}</div><p class="ai__error">${esc(e.message)}</p>`;
     }
   };
@@ -138,19 +156,31 @@ export function yearNotes() {
   if (aiOff()) return '';
   return `<section class="panel ai" id="ai-year" style="margin-top:16px">
     <div class="panel__head"><div class="ai__head"><span class="label">Written for you</span><h2 class="ai__title">The year, in a paragraph</h2></div></div>
-    <div class="ai__body" aria-live="polite">${loadingLines}</div>
+    <div class="ai__body" aria-live="polite"><div class="ai__ready"><p>Give this year a short write-up based on your listening.</p><button type="button" class="btn btn--ink" data-year-write>Write this year’s story</button></div></div>
   </section>`;
 }
 
-export async function bindYearNotes(ctx, y) {
+export function bindYearNotes(ctx, y) {
   const body = $('#ai-year .ai__body');
   if (!body) return;
-  try {
-    const text = await write('year', facts(ctx.A, ctx.p, { year: y }));
-    if (!document.body.contains(body)) return;
-    body.innerHTML = '<p class="ai__text"></p>';
-    reveal($('.ai__text', body), text);
-  } catch (e) {
-    body.innerHTML = `<p class="ai__error">${esc(e.message)}</p>`;
+  if (ctx.source === 'demo') {
+    const from = new Date(y, 0, 1).getTime(), to = new Date(y + 1, 0, 1).getTime();
+    const top = topIn(ctx.A, 'artists', from, to, 2);
+    const count = ctx.A.years.find((row) => row.y === y)?.n || 0;
+    body.innerHTML = `<p class="ai__text">In ${y}, Mira played ${num(count)} songs. ${esc(top[0]?.name || 'A new favourite')} led the year${top[1] ? `, with ${esc(top[1].name)} close behind` : ''}. The months below show how that year changed, one song at a time.</p><p class="faint" style="font-size:13px;margin-top:16px">Example writing for this demo profile.</p>`;
+    return;
   }
+  $('[data-year-write]', body).addEventListener('click', async () => {
+    body.innerHTML = loadingLines;
+    try {
+      const text = await write('year', facts(ctx.A, ctx.p, { year: y }), { signal: ctx.signal });
+      if (!body.isConnected) return;
+      body.innerHTML = '<p class="ai__text"></p>';
+      reveal($('.ai__text', body), text);
+    } catch (e) {
+      if (e.name === 'AbortError' || !body.isConnected) return;
+      body.innerHTML = `<p class="ai__error">${esc(e.message)} <button type="button" class="link" data-year-retry>Try again</button></p>`;
+      $('[data-year-retry]', body).addEventListener('click', () => { body.innerHTML = '<button type="button" class="btn btn--ink" data-year-write>Write this year’s story</button>'; bindYearNotes(ctx, y); });
+    }
+  });
 }

@@ -48,19 +48,30 @@
       </nav>
       <div class="nav__right">
         <span id="nav-user"></span>
+        <button type="button" class="iconbtn nav__menu-btn" id="menu-btn" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open menu">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
         <button type="button" class="iconbtn" id="theme-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="theme-pop" title="Theme">
           <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 2.75a7.25 7.25 0 0 1 0 14.5z" fill="currentColor"/></svg>
           <span class="sr">Theme</span>
         </button>
       </div>
     </div>
+    <nav class="nav__mobile" id="mobile-menu" aria-label="Mobile" hidden>
+      <a href="#/" data-scroll="features">What it does</a>
+      <a href="#/start">Get started</a>
+      <a href="#/demo">Demo profile</a>
+      <a href="#/compare">Compare</a>
+      <a href="#/" data-scroll="sources">Data sources</a>
+      <a href="#/" data-scroll="faq">Questions</a>
+    </nav>
     <div class="popover" id="theme-pop" role="dialog" aria-label="Theme" hidden>
       <div class="panel__head"><span class="label">Theme</span><span class="faint" style="font-size:12.5px">Saved in this browser</span></div>
       <div class="themes" role="radiogroup" id="themes"></div>
     </div>
   </header>
 
-  <main id="view" tabindex="-1"></main>
+  <main id="view" tabindex="-1"><div class="boot" role="status" aria-live="polite"><span class="boot__mark">SLV · LOADING</span><strong>Getting your record ready.</strong><span class="boot__bar" aria-hidden="true"></span></div></main>
 
   <footer class="footer">
     <div class="footer__inner">

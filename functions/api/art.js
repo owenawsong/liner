@@ -11,10 +11,14 @@ const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀
 const same = (a, b) => { const x = norm(a), y = norm(b); return !!x && !!y && (x === y || x.startsWith(y) || y.startsWith(x)); };
 
 async function deezer(path) {
-  const r = await fetch(`https://api.deezer.com${path}`, { cf: { cacheTtl: TTL, cacheEverything: true } });
-  if (!r.ok) return null;
-  const d = await r.json();
-  return d.error ? null : d.data || [];
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 7000);
+  try {
+    const r = await fetch(`https://api.deezer.com${path}`, { signal: ctrl.signal, cf: { cacheTtl: TTL, cacheEverything: true } });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.error ? null : d.data || [];
+  } finally { clearTimeout(timer); }
 }
 
 async function lookup([kind, name, artist]) {

@@ -39,9 +39,13 @@ const mbQ = queue(1100);
 const inflight = new Map();
 
 async function getJSON(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(String(r.status));
-  return r.json();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 9000);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) throw new Error(String(r.status));
+    return await r.json();
+  } finally { clearTimeout(timer); }
 }
 
 /* ---------- Artwork ---------- */
@@ -78,10 +82,13 @@ function flush() {
   const jobs = batch.splice(0, 40);
   if (batch.length) batchTimer = setTimeout(flush, 0); else batchTimer = 0;
   const q = JSON.stringify(jobs.map((j) => j.item));
-  fetch(`/api/art?q=${encodeURIComponent(q)}`)
-    .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  fetch(`/api/art?q=${encodeURIComponent(q)}`, { signal: ctrl.signal })
+    .then((r) => { if (r.status === 404) apiOk = false; if (!r.ok) throw new Error(String(r.status)); return r.json(); })
     .then((d) => jobs.forEach((j, i) => j.done(d.results?.[i] ?? null)))
-    .catch(() => { apiOk = false; jobs.forEach((j) => j.done(undefined)); });
+    .catch(() => jobs.forEach((j) => j.done(undefined)))
+    .finally(() => clearTimeout(timer));
 }
 
 function viaApi(item) {
@@ -111,20 +118,35 @@ export function art(kind, name, artist = '', front = false) {
   return p;
 }
 
-// Swap real artwork into every sleeve under root that asks for it.
+// Load covers near the viewport so long profiles don't queue hundreds at once.
+const watched = new Set();
+const observer = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+  entries.forEach(({ target, isIntersecting }) => {
+    if (!isIntersecting && target.isConnected) return;
+    observer.unobserve(target); watched.delete(target);
+    if (target.isConnected) startArt(target);
+  });
+}, { rootMargin: '450px' }) : null;
+
+function startArt(el) {
+  if (el.dataset.done) return;
+  el.dataset.done = '1';
+  const [kind, name, artist] = JSON.parse(el.dataset.art);
+  const hit = cachedArt(kind, name, artist);
+  if (hit !== undefined) { apply(el, hit); return; }
+  art(kind, name, artist).then((url) => {
+    $$('[data-art]').forEach((x) => { if (x.dataset.art === el.dataset.art) apply(x, url); });
+  });
+}
+
 export async function hydrate(root = document) {
   if (!loaded) await loading;
-  const els = $$('[data-art]', root).filter((el) => !el.dataset.done);
-  // Visible ones first.
-  els.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
-  for (const el of els) {
-    el.dataset.done = '1';
-    const [kind, name, artist] = JSON.parse(el.dataset.art);
-    const hit = cachedArt(kind, name, artist);
-    if (hit !== undefined) { apply(el, hit); continue; }
-    art(kind, name, artist).then((url) => {
-      $$(`[data-art]`).forEach((x) => { if (x.dataset.art === el.dataset.art) apply(x, url); });
-    });
+  watched.forEach((el) => { if (!el.isConnected) { observer?.unobserve(el); watched.delete(el); } });
+  for (const el of $$('[data-art]', root)) {
+    if (el.dataset.done || watched.has(el)) continue;
+    if (el.closest('.deck__cover:not(.is-on)')) continue;
+    if (observer && !el.closest('.deck__cover')) { watched.add(el); observer.observe(el); }
+    else startArt(el);
   }
 }
 function apply(el, url) {
@@ -139,11 +161,17 @@ function apply(el, url) {
 
 /* ---------- Artist details (MusicBrainz) ---------- */
 export function cachedArtist(name) { return mem.get(`mb:${norm(name)}`); }
+let mbUnavailableUntil = 0;
 
 export function artistInfo(name, front = false) {
   const key = `mb:${norm(name)}`;
   if (mem.has(key)) return Promise.resolve(mem.get(key));
   if (inflight.has(key)) return inflight.get(key);
+  if (Date.now() < mbUnavailableUntil) {
+    const info = { tags: [], unavailable: true };
+    mem.set(key, info);
+    return Promise.resolve(info);
+  }
   const p = mbQ(async () => {
     try {
       const d = await getJSON(`https://musicbrainz.org/ws/2/artist/?query=${encodeURIComponent(`artist:"${name}"`)}&fmt=json&limit=3`);
@@ -157,7 +185,12 @@ export function artistInfo(name, front = false) {
       } : { tags: [], area: '', begin: '', type: '', mbid: '' };
       mem.set(key, info); save();
       return info;
-    } catch { return null; } finally { inflight.delete(key); }
+    } catch {
+      mbUnavailableUntil = Date.now() + 60000;
+      const info = { tags: [], unavailable: true };
+      mem.set(key, info);
+      return info;
+    } finally { inflight.delete(key); }
   }, front);
   inflight.set(key, p);
   return p;

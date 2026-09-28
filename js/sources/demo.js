@@ -129,5 +129,7 @@ export function demoRecent(count = 20) {
 }
 
 export const DEMO_USER = { name: 'mira_spins', display: 'Mira', image: '', playcount: 0, since: new Date(2017, 8, 3).getTime(), url: '' };
+export const DEMO_NOTES = 'Your journey began with a heavy Lorde obsession that lasted through your first two years, before you shifted into a long era defined by Phoebe Bridgers and Mitski. What stands out most is your loyalty to Frank Ocean, who has appeared in your rotation every single year since you started.';
+export const DEMO_ROAST = 'You played Nobody by Mitski 19 times in one day, and your busiest hour is 10 pm, which tells me you only schedule your emotional crises for after everyone else goes to sleep.';
 
 export const wait = (ms) => new Promise((r) => setTimeout(r, ms));

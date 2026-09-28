@@ -88,7 +88,7 @@ function renderError(e, source, name) {
   view().innerHTML = `<div class="wrap"><div class="flow">
     <span class="label">${nf ? 'Not found' : 'Something went wrong'}</span>
     <h1>${nf ? `No one called ${esc(name)} on ${LABEL[source]}` : "We couldn't load this profile"}</h1>
-    <p class="flow__lede">${nf ? 'Check the spelling, or set up an account in about a minute.' : esc(e.message)}</p>
+    <p class="flow__lede">${nf ? 'Check the spelling, or set up a new account to start recording your plays.' : esc(e.message)}</p>
     <div class="flow__actions">${nf ? `<a class="btn btn--ink" href="#/connect/${source}">Set up ${LABEL[source]}</a>` : '<button type="button" class="btn btn--ink" id="retry">Try again</button>'}<a class="btn btn--line" href="#/">Back to start</a></div>
   </div></div>`;
   $('#retry')?.addEventListener('click', rerender);
@@ -132,11 +132,10 @@ export function overviewHTML(ctx) {
   }
   if (A) {
     parts.push(`<div class="c-12">${statStrip(A)}</div>`);
-    if (!ctx.preview) parts.push(notesPanel(A));
+    if (!ctx.preview) parts.push(notesPanel(A, source === 'demo'));
     parts.push(`<section class="panel c-12"><div class="panel__head"><h2>Month by month</h2><a class="link link--quiet" href="${hrefFor(pid, 'timeline')}">Open the timeline ${icon.arrow}</a></div>${timeline(A, { height: 140, fit: true })}</section>`);
   } else if (!ctx.preview) {
-    if (liveSource) parts.push(notesPanel());
-    parts.push(importCTA(ctx));
+    parts.push(source === 'lastfm' && !p.user.playcount ? firstPlayCTA() : importCTA(ctx));
   }
   const topLabel = source === 'file' ? 'All time' : source === 'spotify' ? 'Last 4 weeks' : 'Last 7 days';
   parts.push(`<section class="panel c-5"><div class="panel__head"><h2>Top artists</h2><span class="label" id="top-label">${topLabel}</span></div><div id="top-artists">${ctx.topArtists ? rankList(ctx.topArtists.slice(0, 8), { link: ctx.L?.rank }) : loadingRows()}</div></section>`);
@@ -213,6 +212,10 @@ function countsHTML(p, A) {
 }
 
 const loadingRows = () => `<div class="skel" style="flex-direction:column;align-items:stretch;padding:0;gap:14px">${Array.from({ length: 6 }, () => '<i style="height:34px"></i>').join('')}</div>`;
+
+function firstPlayCTA() {
+  return `<section class="panel c-12"><div class="cta"><div><span class="label">Your first play</span><h2 style="margin-top:8px">Your record starts with the next song.</h2><p>Connect Spotify in Last.fm, then play something. Your Last.fm account starts empty and will grow from there. Sleeve checks for new plays while this page is open.</p></div><div class="cta__actions"><a class="btn btn--ink" href="#/connect/lastfm/2">Check Spotify connection ${icon.arrow}</a><a class="btn btn--line" href="#/demo">Explore the demo</a></div></div><p class="muted" style="margin-top:18px;font-size:14px">Want your older plays too? <a href="#/connect/file">Spotify can email you an optional history file</a>.</p></section>`;
+}
 
 function estimate(sec) {
   if (sec < 60) return `${Math.max(10, Math.round(sec / 10) * 10)} seconds`;
@@ -293,28 +296,42 @@ function startWatch() {
 function startPolling(ctx) {
   if (ctx.source === 'demo' || ctx.p.hidden) return;
   const every = ctx.source === 'listenbrainz' ? 30000 : 15000;
-  let timer = 0;
+  let timer = 0, running = false, lastPaint = Date.now();
+  const signature = (rows) => (rows || []).slice(0, 9).map((t) => `${t.artist}|${t.name}|${t.nowPlaying ? 'now' : t.t}`).join('\n');
+  let lastSignature = signature(ctx.p.recent);
+  const schedule = () => { clearTimeout(timer); if (!ctx.signal.aborted && !document.hidden) timer = setTimeout(run, every); };
   const run = async () => {
+    if (running || ctx.signal.aborted || document.hidden) return;
+    running = true;
     try {
       const rec = ctx.source === 'demo' ? demoRecent(20) : await SOURCES[ctx.source].recent(ctx.name, 20, ctx.signal);
+      if (ctx.signal.aborted) return;
       ctx.p.recent = rec;
       live.p = ctx.p;
-      const now = $('#now'), recent = $('#recent'), pl = $('#pill');
-      if (now) now.innerHTML = nowHTML(ctx.p);
-      if (recent) { recent.innerHTML = trackRows(rec, 9, ctx.L?.track); hydrate(recent); }
-      if (pl) pl.innerHTML = pill(ctx.p);
+      const nextSignature = signature(rec);
+      if (nextSignature !== lastSignature || Date.now() - lastPaint > 60000) {
+        lastSignature = nextSignature; lastPaint = Date.now();
+        const now = $('#now'), recent = $('#recent'), pl = $('#pill');
+        if (now) { now.innerHTML = nowHTML(ctx.p); hydrate(now); }
+        if (recent) { recent.innerHTML = trackRows(rec, 9, ctx.L?.track); hydrate(recent); }
+        if (pl) pl.innerHTML = pill(ctx.p);
+      }
     } catch (e) { if (e.name === 'AbortError') return; }
-    timer = setTimeout(run, document.hidden ? every * 3 : every);
+    finally { running = false; schedule(); }
   };
-  timer = setTimeout(run, every);
-  onLeave(() => clearTimeout(timer));
+  const visibility = () => { if (!document.hidden) { clearTimeout(timer); run(); } else clearTimeout(timer); };
+  document.addEventListener('visibilitychange', visibility);
+  schedule();
+  onLeave(() => { clearTimeout(timer); document.removeEventListener('visibilitychange', visibility); });
 }
 
 /* ---------- Top ---------- */
 const topState = { kind: 'artists', period: null, mode: null, metric: 'plays', custom: null, all: false };
+let topRequest = 0;
 const isoDay = (t) => new Date(t - new Date(t).getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 
 function top(ctx) {
+  const request = ++topRequest;
   const { A, source } = ctx;
   const src = SOURCES[source];
   const hasLive = !!src;
@@ -360,12 +377,14 @@ function top(ctx) {
     : periods.find((x) => x.id === topState.period).label;
 
   const draw = (items, total) => {
+    if (request !== topRequest || ctx.signal.aborted) return;
     const el = $('#top-body');
     if (!el) return;
     if (topState.kind === 'genres') {
       const sum = total || items.reduce((s, x) => s + (x.plays || 0), 0);
       let g;
       const paint = () => {
+        if (request !== topRequest || ctx.signal.aborted) { g?.stop(); return; }
         const e = $('#top-body');
         g?.stop();
         if (!e) return;
@@ -381,6 +400,13 @@ function top(ctx) {
     hydrate(el);
   };
   const fetchKind = topState.kind === 'genres' ? 'artists' : topState.kind;
+  const fail = (message) => {
+    if (request !== topRequest || ctx.signal.aborted) return;
+    const el = $('#top-body');
+    if (!el) return;
+    el.innerHTML = `<div class="panel"><p class="empty">${esc(message)}</p><button type="button" class="btn btn--line btn--sm" data-top-retry>Try again</button></div>`;
+    $('[data-top-retry]', el).addEventListener('click', () => top(ctx));
+  };
 
   if (archive) {
     const end = A.to + 1;
@@ -393,9 +419,10 @@ function top(ctx) {
     draw(topIn(A, fetchKind, range[0], range[1], topState.kind === 'genres' ? 60 : 100, metric), metric === 'plays' ? to - from : 0);
   } else {
     src.top(ctx.name, topState.period, fetchKind, ctx.signal, topState.kind === 'genres' ? 60 : 100).then((items) => {
+      if (request !== topRequest || ctx.signal.aborted) return;
       if (items) draw(items);
-      else { const el = $('#top-body'); if (el) el.innerHTML = '<div class="panel"><p class="empty">ListenBrainz works out top lists once a day, and hasn\'t done this one yet. Check back tomorrow, or import your history to rank it yourself.</p></div>'; }
-    }).catch((e) => { if (e.name !== 'AbortError') { const el = $('#top-body'); if (el) el.innerHTML = `<div class="panel"><p class="empty">${esc(e.message)}</p></div>`; } });
+      else fail(source === 'listenbrainz' ? 'ListenBrainz has not calculated top lists for this profile yet. Try again tomorrow.' : 'No top list is available right now.');
+    }).catch((e) => { if (e.name !== 'AbortError') fail(e.message || 'Could not load the top list.'); });
   }
 }
 
@@ -418,14 +445,19 @@ function topBody(items, kind, periodLabel, total, L = {}) {
 
 /* ---------- Timeline ---------- */
 function needArchive(ctx, what) {
-  const copy = {
+  const empty = ctx.source === 'lastfm' && !ctx.p.user.playcount;
+  const copy = (empty ? {
+    timeline: ['Your timeline starts with your first song', 'Connect Spotify in Last.fm, then listen. Your months and eras will take shape as your record grows.'],
+    insights: ['Insights grow from your listening', 'Connect Spotify in Last.fm, then listen. Sleeve will find patterns as more plays arrive.'],
+    clock: ['Your listening clock starts with your first song', 'Connect Spotify in Last.fm, then listen. Sleeve will map when you play music.'],
+  } : {
     timeline: ['Your timeline needs your full history', 'Import it once and Sleeve lays out every month you have listened, finds your eras, and sums up each year.'],
     insights: ['Insights need your full history', 'Import it once and Sleeve looks for obsessions, comebacks, streaks, late nights and more.'],
     clock: ['Your listening clock needs your full history', 'Import it once and Sleeve maps when you listen, hour by hour, across the week.'],
-  }[what];
+  })[what];
   $('#tab').innerHTML = `${banner(ctx)}<div class="grid">
     <div class="c-12 subhead" style="margin-top:0"><div><h2>${copy[0]}</h2><p class="muted" style="margin-top:6px">${copy[1]} <a href="${hrefFor('demo', what)}">See it on the demo profile</a>.</p></div></div>
-    ${importCTA(ctx)}
+    ${empty ? firstPlayCTA() : importCTA(ctx)}
   </div>`;
   bindCommon(ctx);
 }

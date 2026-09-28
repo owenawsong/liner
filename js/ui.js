@@ -99,7 +99,9 @@ export const hourLabel = (h) => (h === 0 ? '12 am' : h < 12 ? `${h} am` : h === 
 
 export function debounce(fn, ms) {
   let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  const later = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  later.cancel = () => clearTimeout(t);
+  return later;
 }
 
 export const wait = (ms, signal) => new Promise((res, rej) => {
