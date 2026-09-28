@@ -69,7 +69,7 @@ export function renderSettings() {
 
       <section class="setrow">
         <div class="setrow__label"><h2>About</h2></div>
-        <p class="faint" style="font-size:14px;max-width:52ch">Sleeve is free, every feature, for everyone. Live data comes from <a href="https://www.last.fm" target="_blank" rel="noopener">Last.fm</a> and <a href="https://listenbrainz.org" target="_blank" rel="noopener">ListenBrainz</a>, artwork from Deezer and iTunes, artist details from <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a>. Sleeve isn't affiliated with Spotify or Last.fm.</p>
+        <p class="faint" style="font-size:14px;max-width:52ch">Sleeve is free, every feature, for everyone. New listening records use <a href="https://www.last.fm" target="_blank" rel="noopener">Last.fm</a>, artwork comes from Deezer and iTunes, and artist details come from <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a>. Sleeve isn't affiliated with Spotify or Last.fm.</p>
       </section>
     </div>`;
 

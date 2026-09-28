@@ -52,7 +52,6 @@ export async function renderHome() {
             ${returning.length ? `<div class="returning"><span>Welcome back</span>${returning.map((r) => `<a href="${hrefFor(r.pid)}">${avatar(r.display, r.image, 26)}${esc(r.display)}</a>`).join('')}</div>` : ''}
             <div class="sl-srcs" role="tablist" aria-label="How to connect">
               <button type="button" role="tab" data-src="lastfm" aria-selected="${homeSource === 'lastfm'}">Last.fm</button>
-              <button type="button" role="tab" data-src="listenbrainz" aria-selected="${homeSource === 'listenbrainz'}">ListenBrainz</button>
               <button type="button" role="tab" data-src="file" aria-selected="${homeSource === 'file'}">Spotify file</button>
             </div>
             <div id="hero-src" role="tabpanel"></div>
@@ -132,12 +131,10 @@ export async function renderHome() {
 
   <section class="sl-ways" id="sources">
     <div class="wrap">
-      <div class="sl-tracks__head" data-reveal><span class="catno">FOUR WAYS IN</span><h2>Use one. Or all of them.</h2><p>Pick a live listening log, bring your Spotify history, or connect your own developer app.</p></div>
+      <div class="sl-tracks__head" data-reveal><span class="catno">GET YOUR MUSIC IN</span><h2>Start with Last.fm. Add your past whenever you want.</h2><p>Last.fm records new Spotify plays. A Spotify data file can fill in your earlier listening.</p></div>
       <div class="ways">
         <a class="way way--vermilion" href="#/connect/lastfm" data-reveal><span class="way__no">01</span><b>Last.fm</b><span>Open your existing log or start tracking new Spotify plays.</span><em>Free Last.fm account needed</em></a>
-        <a class="way way--cobalt" href="#/connect/listenbrainz" aria-label="Connect ListenBrainz" data-reveal><span class="way__no">02</span><b>Listen<br>Brainz</b><span>Open your existing log or start tracking new Spotify plays.</span><em>Free MetaBrainz account needed</em></a>
-        <a class="way way--moss" href="#/connect/file" data-reveal><span class="way__no">03</span><b>Spotify export</b><span>Add past plays, listening time and skips whenever you want.</span><em>Spotify prepares the file by email</em></a>
-        <a class="way way--ink" href="#/connect/spotify" data-reveal><span class="way__no">04</span><b>Your Spotify app</b><span>Advanced: connect through a developer app you create.</span><em>Requires Premium and setup</em></a>
+        <a class="way way--moss" href="#/connect/file" data-reveal><span class="way__no">02 · OPTIONAL</span><b>Spotify export</b><span>Add past plays, listening time and skips whenever you want.</span><em>Spotify prepares the file by email</em></a>
       </div>
     </div>
   </section>
@@ -156,7 +153,7 @@ export async function renderHome() {
           <details><summary>Why no one-click Spotify login?</summary><p>Spotify limits new developer apps to five authorized users. A Spotify login also cannot provide your lifetime play history. For now, <a href="#/start/none">start a listening log</a> for future plays or add your Spotify data file for the past. If you have your own developer app, you can <a href="#/connect/spotify">connect it as an advanced option</a>.</p></details>
           <details><summary>How do I get my Spotify export?</summary><p>Tick "Extended streaming history" on Spotify's privacy page. It includes your lifetime plays, but Spotify can take up to 30 days to prepare it. <a href="#/connect/file">Step-by-step guide</a>.</p></details>
           <details><summary>Why don't my numbers match Wrapped?</summary><p>Spotify counts a stream at 30 seconds, Last.fm at half a song, and Wrapped only covers part of the year. Sleeve shows its rule and lets you change it.</p></details>
-          <details><summary>Last.fm or ListenBrainz?</summary><p>Already on Last.fm? Use it. Starting fresh? Either works. ListenBrainz is open source and run by a non-profit.</p></details>
+          <details><summary>What happens when I first connect Last.fm?</summary><p>A new Last.fm account begins recording future Spotify plays. Once a song appears, Sleeve can show it. Longer patterns and eras need more listening history; the optional Spotify file can add your past.</p></details>
           <details><summary>Does it count my phone?</summary><p>Yes. Plays come from Spotify itself, so every device counts.</p></details>
         </div>
       </div>

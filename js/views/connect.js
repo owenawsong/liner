@@ -315,7 +315,7 @@ function fileFlow() {
       <div class="panel__head"><h2>Don't have it yet?</h2><span class="label">Takes 2 minutes</span></div>
       ${requestSteps}
     </div>
-    <p class="flow__note">Waiting for Spotify? ${'<a href="#/connect/lastfm">Last.fm</a>'} or ${'<a href="#/connect/listenbrainz">ListenBrainz</a>'} can start recording new plays now. A newly created log won't contain your older Spotify plays.</p>` });
+    <p class="flow__note">Waiting for Spotify? ${'<a href="#/connect/lastfm">Last.fm</a>'} can start recording new plays now. A newly created log won't contain your older Spotify plays.</p>` });
   bindDrops(view(), handleFiles);
 }
 
