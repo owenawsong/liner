@@ -77,6 +77,7 @@ export function statStrip(A) {
 export function timeline(A, { height = 220, selected = -1, labels = true, fit = false } = {}) {
   const n = A.months.length;
   const max = Math.max(1, ...A.months.map((m) => m.n));
+  const peak = A.months.find((m) => m.n === max);
   const eraAt = new Array(n).fill(null);
   A.eras.forEach((e) => { for (let i = e.start; i <= e.end; i++) eraAt[i] = e; });
   const years = [];
@@ -84,13 +85,16 @@ export function timeline(A, { height = 220, selected = -1, labels = true, fit = 
   years.forEach((y, k) => { y.span = (years[k + 1]?.i ?? n) - y.i; });
   return `
     <div class="tl${fit ? ' tl--fit' : ''}" style="--n:${n};--h:${height}px">
+      ${labels && !fit ? `<div class="tl__context"><span>${num(n)} months in your record</span><span>Peak: ${longMonth(peak.start)} · ${num(max)} plays</span></div>` : ''}
       <div class="tl__scroll">
         <div class="tl__inner">
-          ${labels ? `<div class="tl__eras">${A.eras.map((e) => `<span class="tl__era" style="left:${(e.start / n) * 100}%;width:${((e.end - e.start + 1) / n) * 100}%;--era:var(--c${e.color})" title="${esc(e.artist)}, ${monthYear(e.from)} to ${monthYear(e.to)}">${(e.months / n) * (fit ? 560 : Math.max(760, n * 7)) > 64 ? esc(e.artist) : ''}</span>`).join('')}</div>` : ''}
-          <div class="tl__bars">${A.months.map((m, i) => `<button type="button" class="tl__bar" data-i="${i}"${eraAt[i] ? ` data-era style="--era:var(--c${eraAt[i].color})"` : ''} aria-pressed="${i === selected}" aria-label="${longMonth(m.start)}: ${num(m.n)} plays"><i style="height:${(m.n / max) * 100}%;animation-delay:${Math.min(i * 5, 500)}ms"></i></button>`).join('')}</div>
+          <div class="tl__axis"><span>${num(max)} plays</span><span>Monthly plays</span></div>
+          <div class="tl__bars">${A.months.map((m, i) => `<button type="button" class="tl__bar" data-i="${i}"${eraAt[i] ? ` data-era style="--era:var(--c${eraAt[i].color})"` : ''} aria-pressed="${i === selected}" aria-label="${longMonth(m.start)}: ${num(m.n)} plays${m.topArtist ? `, led by ${esc(m.topArtist)}` : ''}"><i style="height:${(m.n / max) * 100}%"></i></button>`).join('')}</div>
+          <div class="tl__months">${A.months.map((m, i) => `<span>${m.m % 3 === 0 || i === 0 ? new Date(m.start).toLocaleDateString('en', { month: 'short' }) : ''}</span>`).join('')}</div>
           <div class="tl__years">${years.map((y) => `<span style="grid-column:${y.i + 1} / span ${y.span}">${y.span >= 6 ? y.y : ''}</span>`).join('')}</div>
         </div>
       </div>
+      ${labels && !fit && A.eras.length ? `<div class="tl__legend"><span class="label">Jump to an era</span>${A.eras.map((e) => `<button type="button" data-jump="${e.start}" style="--era:var(--c${e.color})"><i></i><span>${esc(e.artist)}<small>${monthYear(e.from)} – ${monthYear(e.to)}</small></span></button>`).join('')}</div>` : ''}
     </div>`;
 }
 
@@ -117,8 +121,13 @@ export function bindTimeline(root, A, onSelect) {
     bar.addEventListener('blur', () => { tip.hidden = true; });
     if (onSelect) bar.addEventListener('click', () => onSelect(Number(bar.dataset.i)));
   });
+  $$('.tl__legend [data-jump]', tl).forEach((button) => button.addEventListener('click', () => {
+    const bar = $(`.tl__bar[data-i="${button.dataset.jump}"]`, tl);
+    bar?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    onSelect?.(Number(button.dataset.jump));
+  }));
   const scroller = $('.tl__scroll', tl);
-  scroller.scrollLeft = scroller.scrollWidth;
+  if (!tl.classList.contains('tl--fit')) scroller.scrollLeft = scroller.scrollWidth;
 }
 
 /* ---------- Listening clock ---------- */

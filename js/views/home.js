@@ -1,14 +1,12 @@
 import { $, $$, esc, avatar, num, icon, sleeve } from '../ui.js';
 import { view, hrefFor, profiles, getArchive, analysisFor, go, pidFor, onLeave } from '../core.js';
-import { timeline, bindTimeline, heatmap, rankList, dropzone, bindDrops } from '../components.js';
+import { timeline, bindTimeline, heatmap, rankList } from '../components.js';
 import { topIn } from '../analysis.js';
-import { handleFiles } from '../actions.js';
 import { mountLookup } from './connect.js';
 import { art, hydrate } from '../meta.js';
 import { palette } from '../color.js';
 import { DEMO_NOTES, DEMO_ROAST } from '../sources/demo.js';
 
-let homeSource = 'lastfm';
 const HERO_ALBUMS = [
   ['Blonde', 'Frank Ocean'], ['Melodrama', 'Lorde'], ['SOS', 'SZA'], ['Punisher', 'Phoebe Bridgers'], ['brat', 'Charli xcx'],
   ['GNX', 'Kendrick Lamar'], ["Short n' Sweet", 'Sabrina Carpenter'], ['Charm', 'Clairo'], ['The Rise and Fall of a Midwest Princess', 'Chappell Roan'],
@@ -28,6 +26,7 @@ export async function renderHome() {
 
   const TRACKS = [
     { side: 'A', title: 'Timeline and eras', desc: 'Every month you have ever listened, on one line, with your eras found for you.', vis: `<div id="pv-timeline">${timeline(A, { height: 170, fit: true })}</div>` },
+    { side: 'A', title: 'How your taste changes', desc: 'See the artists rising, the old favorites fading, and who you discovered this season.', vis: '<div class="minichat"><p class="minichat__q">Your next chapter</p><p class="minichat__a">Compare two equal 90-day stretches. Find discoveries, comebacks and the artists moving into your rotation.</p></div>' },
     { side: 'A', title: 'Year in review, any year', desc: 'Wrapped for every year you have been listening, with a card you can share.', vis: `<div class="minicard"><span class="mono">SLEEVE · ${year.y}</span><b>${year.y}</b><ol>${yArtists.map((a) => `<li>${esc(a.name)}</li>`).join('')}</ol><span class="mono">${num(year.n)} plays</span></div>` },
     { side: 'A', title: 'Every artist, every song', desc: 'First play, biggest month, longest break and your favourite songs, for everything you have played.', vis: `<a class="miniartist" href="#/demo/artist/${encodeURIComponent(topArtist.name)}">${sleeve(topArtist.name, topArtist.name, { size: 72, round: true, kind: 'artist' })}<span><b>${esc(topArtist.name)}</b><span>${num(topArtist.n)} plays · since ${new Date(topArtist.first).getFullYear()}</span></span></a>` },
     { side: 'A', title: 'The listening clock', desc: 'When the music actually happens, hour by hour across your week.', vis: heatmap(A) },
@@ -45,19 +44,15 @@ export async function renderHome() {
   view().innerHTML = `
   <section class="sl-hero" id="sl-hero">
     <div class="wrap sl-hero__inner">
-      <div class="sl-hero__meta"><span>SLV-001</span><span>Every feature free · No Sleeve account · Files stay on your device</span><span>33⅓ RPM</span></div>
+      <div class="sl-hero__meta"><span>YOUR MUSIC, IN FULL</span><span>Every feature free · No Sleeve account · Files stay on your device</span><span>EVERY LISTEN COUNTS</span></div>
       <div class="sl-hero__grid">
         <div class="sl-hero__copy">
           <h1 class="sl-hero__title" data-reveal>${'Your whole record.'.split(' ').map((w, i) => `<span style="--i:${i}">${w}</span>`).join(' ')}</h1>
           <p class="sl-hero__lede" data-reveal>Sleeve turns your listening history into your eras, a year in review for every year, and the small things you never noticed about how you listen. Every feature is free.</p>
           <div class="sl-connect" data-reveal>
             ${returning.length ? `<div class="returning"><span>Welcome back</span>${returning.map((r) => `<a href="${hrefFor(r.pid)}">${avatar(r.display, r.image, 26)}${esc(r.display)}</a>`).join('')}</div>` : ''}
-            <div class="sl-srcs" role="tablist" aria-label="How to connect">
-              <button type="button" role="tab" data-src="lastfm" aria-selected="${homeSource === 'lastfm'}">Last.fm</button>
-              <button type="button" role="tab" data-src="file" aria-selected="${homeSource === 'file'}">Spotify file</button>
-            </div>
-            <div id="hero-src" role="tabpanel"></div>
-            <p class="sl-hero__none">Only use Spotify? <a href="#/start/none">See how to start tracking</a> · <a href="#/demo">Explore a demo profile</a></p>
+            <div class="sl-hero__actions"><a class="btn btn--ink sl-hero__cta" href="#/start">Get started ${icon.arrow}</a><a class="btn btn--line sl-hero__cta" href="#/demo">Explore the demo</a></div>
+            <p class="sl-hero__none">Already use Last.fm? <a href="#/start/lastfm">Open your listening record</a></p>
           </div>
         </div>
         <div class="deck" aria-hidden="true">
@@ -69,14 +64,14 @@ export async function renderHome() {
     </div>
   </section>
 
-  <div class="marquee" aria-hidden="true"><div class="marquee__row">${Array.from({ length: 2 }, () => ['Every feature free', 'Your eras, found for you', 'Year in review for every year', 'AI liner notes', 'Compare with friends', 'Files stay on your device', 'No Sleeve account', 'Top 100, any dates', 'Listening clock', 'Your whole history'].map((s) => `<span>${s}</span><i>●</i>`).join('')).join('')}</div></div>
+    <div class="marquee" aria-hidden="true"><div class="marquee__row">${Array.from({ length: 2 }, () => ['Every feature free', 'Your eras, found for you', 'Taste evolution', 'Year in review for every year', 'AI liner notes', 'Compare with friends', 'Files stay on your device', 'No Sleeve account', 'Top 100, any dates', 'Listening clock', 'Your whole history'].map((s) => `<span>${s}</span><i>●</i>`).join('')).join('')}</div></div>
 
   <section class="sl-tracks" id="features">
     <div class="wrap">
       <div class="sl-tracks__head" data-reveal>
         <span class="catno">TRACKLIST</span>
         <h2>What's on the record</h2>
-        <p>Eleven things Sleeve does. Every one of them free.</p>
+        <p>More ways to understand your music. Every one of them free.</p>
       </div>
       <div class="sl-tracks__grid">
         <ol class="tracklist" id="tracklist">
@@ -143,7 +138,7 @@ export async function renderHome() {
 
   <section class="sl-back" id="faq">
     <div class="wrap">
-      <div class="sl-back__head"><span class="catno">LINER NOTES</span><span class="catno">SLV-001 · BACK COVER</span></div>
+      <div class="sl-back__head"><span class="catno">LINER NOTES</span><span class="catno">YOUR MUSIC, IN FULL</span></div>
       <div class="sl-back__cols" data-reveal>
         <div>
           <h3>Privacy</h3>
@@ -172,12 +167,6 @@ export async function renderHome() {
     </div>
   </section>`;
 
-  mountHeroSource();
-  $$('[data-src]').forEach((b) => b.addEventListener('click', () => {
-    homeSource = b.dataset.src;
-    $$('[data-src]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
-    mountHeroSource(true);
-  }));
   mountLookup($('#final-lookup'), { source: 'lastfm', id: 'final-lastfm', cta: 'Drop it', onConfirm: (res) => go(hrefFor(pidFor('lastfm', res.user.name))) });
   bindTracks(TRACKS, A);
   runDeck();
@@ -281,18 +270,3 @@ function revealOnScroll() {
   els.forEach((el) => io.observe(el));
   onLeave(() => { io.disconnect(); document.documentElement.classList.remove('reveal-ready'); });
 }
-
-function mountHeroSource(focus = false) {
-  const root = $('#hero-src');
-  if (homeSource === 'file') {
-    root.innerHTML = `<div style="display:grid;gap:10px">${dropzone({ title: 'Drop your Spotify ZIP here', sub: "Or click to choose it. It's read on your device and never uploaded." })}</div>`;
-    bindDrops(root, handleFiles);
-    return;
-  }
-  const input = mountLookup(root, {
-    source: homeSource, id: `home-${homeSource}`, cta: 'Continue',
-    onConfirm: (res) => go(hrefFor(pidFor(homeSource, res.user.name))),
-  });
-  if (focus) input.focus();
-}
-

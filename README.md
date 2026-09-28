@@ -18,7 +18,7 @@ Do not serve the project root with `python -m http.server` or `wrangler pages de
 
 | Source | What you need | What it adds |
 | --- | --- | --- |
-| Last.fm | A username | Recent plays, top lists, and optional full-history import. A newly created account starts logging future plays; it has no earlier Spotify history. |
+| Last.fm | A username | Recent plays, top lists, and automatic full-history setup in the background. A newly created account starts logging future plays; it has no earlier Spotify history. |
 | Spotify Account Data or Extended Streaming History | The ZIP Spotify emails you | Account Data covers about a year; Extended History covers the life of the account and includes skips and devices. The ZIP is opened in the browser and is never uploaded. |
 | Direct Spotify, advanced | Your own Spotify developer app and Client ID | Now playing, recent plays, Spotify top lists, and skip tracking while Sleeve is open. Uses browser PKCE and is not a public one-click Spotify login. |
 
@@ -28,11 +28,13 @@ The public data access decision is in [docs/DATA_ACCESS_DECISION.md](docs/DATA_A
 
 ## Explore
 
-- Overview, Top 100 with plays or minutes and date filters, Timeline, Insights, Clock, and Data tabs
+- Overview, Top 100 with plays or minutes and date filters, Timeline, Evolution, Insights, Clock, and Data tabs
+- Evolution compares equal 90-day periods, showing rising artists, new discoveries, older favorites and a taste-shift index. On demand, Last.fm similarity suggests artists missing from your record.
 - Automatic eras, year pages with a shareable image, and detailed artist and song pages
 - Search, genres, listening anniversaries, and compare
 - Optional AI liner notes, roasts, era names, year writing, and questions. Turning AI off in Settings leaves the listening analysis available.
 - Themes, local profile management, play-count rules, and an installable PWA with an offline app shell
+- Local profile-picture overrides; Last.fm photos and authorized Spotify photos appear when available. Mood and musical key are not inferred from listening logs, which do not contain reliable audio features.
 
 ## Architecture
 

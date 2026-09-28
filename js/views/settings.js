@@ -4,6 +4,7 @@ import { view, profiles, hrefFor, clearArchive, state, setMinMs, rerender } from
 import { themeButtons, setTheme } from '../theme.js';
 import * as lastfm from '../sources/lastfm.js';
 import * as spotify from '../sources/spotify.js';
+import { cancelSync, cancelAllSync } from '../sync.js';
 
 const SOURCE = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export' };
 
@@ -26,11 +27,13 @@ export function renderSettings() {
       </section>
 
       <section class="setrow">
-        <div class="setrow__label"><h2>Your profiles</h2><p>Profiles you've opened on this device.</p></div>
+        <div class="setrow__label"><h2>Your profiles</h2><p>Profiles you've opened on this device. You can set a picture locally if Last.fm has none.</p></div>
         <div>${list.length ? `<ul class="setlist">${list.map((p) => `<li>
-          ${avatar(p.display, p.image, 36)}
+          ${avatar(p.display, store.get(`liner.avatar:${p.pid}`) || p.image, 36)}
           <span><b>${esc(p.display)}</b><span>${SOURCE[p.source] || ''}</span></span>
           <a class="btn btn--line btn--sm" href="${hrefFor(p.pid)}">Open</a>
+          <label class="btn btn--line btn--sm setlist__photo">Photo<input type="file" accept="image/*" data-photo="${esc(p.pid)}" class="sr"></label>
+          ${store.get(`liner.avatar:${p.pid}`) ? `<button type="button" class="btn btn--quiet btn--sm" data-photo-remove="${esc(p.pid)}">Reset photo</button>` : ''}
           <button type="button" class="btn btn--quiet btn--sm" data-forget="${esc(p.pid)}">Remove</button>
         </li>`).join('')}</ul>` : `<p class="faint">No profiles yet. <a href="#/start">Connect your music</a>.</p>`}</div>
       </section>
@@ -80,10 +83,33 @@ export function renderSettings() {
     $('#set-themes').innerHTML = themeButtons();
   });
   $$('[data-forget]').forEach((b) => b.addEventListener('click', async () => {
+    await cancelSync(b.dataset.forget);
+    store.set(`liner.avatar:${b.dataset.forget}`, null);
     await clearArchive(b.dataset.forget);
     profiles.forget(b.dataset.forget);
     toast('Profile removed from this browser.');
     rerender();
+  }));
+  $$('[data-photo]').forEach((input) => input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) { toast('Choose an image smaller than 10 MB.', 'bad'); return; }
+    try {
+      const url = URL.createObjectURL(file), img = new Image();
+      try { img.src = url; await img.decode(); } finally { URL.revokeObjectURL(url); }
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
+      const image = canvas.toDataURL('image/jpeg', .82);
+      store.set(`liner.avatar:${input.dataset.photo}`, image);
+      if (store.get(`liner.avatar:${input.dataset.photo}`) !== image) throw new Error('This browser could not save the picture.');
+      toast('Picture saved on this device.'); rerender();
+    } catch (error) { toast(error.message || 'Could not read that image.', 'bad'); }
+  }));
+  $$('[data-photo-remove]').forEach((button) => button.addEventListener('click', () => {
+    store.set(`liner.avatar:${button.dataset.photoRemove}`, null);
+    toast('Local picture removed.'); rerender();
   }));
   $$('[data-min]').forEach((b) => b.addEventListener('click', () => { setMinMs(Number(b.dataset.min)); rerender(); }));
   $('#set-ai').addEventListener('change', (e) => { store.set('liner.ai', e.target.checked ? null : 'off'); toast(e.target.checked ? 'AI writing is on.' : 'AI writing is off.'); });
@@ -100,6 +126,7 @@ export function renderSettings() {
   let armed = false;
   $('#set-wipe').addEventListener('click', async (e) => {
     if (!armed) { armed = true; e.target.textContent = 'Tap again to clear everything'; e.target.style.color = 'var(--bad)'; return; }
+    await cancelAllSync();
     await idb.clear();
     Object.keys(localStorage).filter((k) => k.startsWith('liner.')).forEach((k) => store.set(k, null));
     toast('Everything Sleeve stored in this browser is gone.');

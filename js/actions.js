@@ -46,7 +46,10 @@ export async function importHistory(pid, sourceId, name, { onProgress, signal } 
   const a = await getArchive(pid);
   const since = a.live?.source === sourceId ? a.live.to || 0 : 0;
   const rows = await src.importAll(name, { onProgress, signal, since });
+  onProgress?.(rows.length, rows.length, 'saving');
+  if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
   const all = since ? dedupe([...(a.live.rows || []), ...rows]) : rows;
+  if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
   a.live = { rows: all, source: sourceId, from: all[0]?.t, to: all[all.length - 1]?.t, synced: Date.now() };
   await setArchive(pid, a);
   return rows.length;

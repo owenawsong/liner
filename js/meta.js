@@ -52,20 +52,16 @@ async function getJSON(url) {
 const big = (u) => u?.replace(/\/\d+x\d+bb\./, '/400x400bb.') || '';
 
 async function fetchArt(kind, name, artist) {
-  const term = encodeURIComponent(kind === 'artist' ? name : `${artist} ${name}`);
+  if (kind === 'artist') return '';
+  const term = encodeURIComponent(`${artist} ${name}`);
   const entity = kind === 'track' ? 'song' : 'album';
   const d = await getJSON(`https://itunes.apple.com/search?term=${term}&entity=${entity}&limit=8`);
-  const want = kind === 'artist' ? name : artist;
-  const hits = (d.results || []).filter((x) => same(x.artistName, want));
-  // For an artist picture, prefer a real album over singles and EPs.
-  const full = hits.filter((x) => !/ - (single|ep)$/i.test(x.collectionName || '') && (x.trackCount || 0) >= 7);
-  let pick = kind === 'artist' ? full[0] || hits[0] : hits[0];
-  if (kind === 'album') pick = hits.find((x) => same(x.collectionName, name)) || pick;
-  if (kind === 'track') pick = hits.find((x) => same(x.trackName, name)) || pick;
+  const hits = (d.results || []).filter((x) => same(x.artistName, artist));
+  const pick = kind === 'album' ? hits.find((x) => same(x.collectionName, name)) : hits.find((x) => same(x.trackName, name));
   return pick ? big(pick.artworkUrl100) : '';
 }
 
-export const artKey = (kind, name, artist = '') => `art:${kind}:${norm(artist)}|${norm(name)}`;
+export const artKey = (kind, name, artist = '') => `art2:${kind}:${norm(artist)}|${norm(name)}`;
 
 export function cachedArt(kind, name, artist) {
   const v = mem.get(artKey(kind, name, artist));
@@ -109,7 +105,7 @@ export function art(kind, name, artist = '', front = false) {
   const p = (async () => {
     let url = apiOk ? await viaApi([kind, name, artist]) : undefined;
     // Deezer found nothing, or the API is down: try iTunes before giving up.
-    if (!url) url = await viaItunes(kind, name, artist, front);
+    if (!url && kind !== 'artist') url = await viaItunes(kind, name, artist, front);
     if (url !== null && url !== undefined) { mem.set(key, url); save(); }
     inflight.delete(key);
     return url || '';
@@ -200,10 +196,11 @@ export const ready = () => loading;
 
 /* ---------- Listener counts (Last.fm), for the obscurity score ---------- */
 const lastfmQ = queue(220);
-export const cachedListeners = (name) => mem.get(`lfl:${norm(name)}`);
+// v2 avoids old counts returned by Last.fm's autocorrect for a different artist.
+export const cachedListeners = (name) => mem.get(`lfl2:${norm(name)}`);
 
 export function listeners(name) {
-  const key = `lfl:${norm(name)}`;
+  const key = `lfl2:${norm(name)}`;
   if (mem.has(key)) return Promise.resolve(mem.get(key));
   if (inflight.has(key)) return inflight.get(key);
   let apiKey = '';
@@ -212,8 +209,8 @@ export function listeners(name) {
   if (!apiKey) return Promise.resolve(null);
   const p = lastfmQ(async () => {
     try {
-      const d = await getJSON(`https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=${encodeURIComponent(name)}&autocorrect=1&api_key=${apiKey}&format=json`);
-      const n = Number(d.artist?.stats?.listeners || 0) || null;
+      const d = await getJSON(`https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=${encodeURIComponent(name)}&autocorrect=0&api_key=${apiKey}&format=json`);
+      const n = same(d.artist?.name, name) ? Number(d.artist?.stats?.listeners || 0) || null : null;
       mem.set(key, n); save();
       return n;
     } catch { return null; } finally { inflight.delete(key); }

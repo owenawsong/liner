@@ -30,11 +30,11 @@ async function lookup([kind, name, artist]) {
   if (kind === 'album') {
     const list = await deezer(`/search/album?q=${encodeURIComponent(`artist:"${artist}" album:"${name}"`)}&limit=5`)
       || [];
-    const hit = list.find((a) => same(a.artist?.name, artist) && same(a.title, name)) || list.find((a) => same(a.artist?.name, artist));
+    const hit = list.find((a) => same(a.artist?.name, artist) && same(a.title, name));
     return hit?.cover_big || '';
   }
   const list = await deezer(`/search/track?q=${encodeURIComponent(`artist:"${artist}" track:"${name}"`)}&limit=5`) || [];
-  const hit = list.find((t) => same(t.artist?.name, artist) && same(t.title, name)) || list.find((t) => same(t.artist?.name, artist));
+  const hit = list.find((t) => same(t.artist?.name, artist) && same(t.title, name));
   return hit?.album?.cover_big || '';
 }
 
@@ -46,7 +46,7 @@ export async function onRequestGet({ request, waitUntil }) {
   }
   const cache = caches.default;
   const results = await Promise.all(items.map(async (item) => {
-    const key = new Request(`https://liner-art.cache/${item.map((x) => encodeURIComponent(norm(x))).join('/')}`);
+    const key = new Request(`https://liner-art.cache/v2/${item.map((x) => encodeURIComponent(norm(x))).join('/')}`);
     const hit = await cache.match(key);
     if (hit) return hit.text();
     let url = '';

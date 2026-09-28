@@ -44,6 +44,10 @@
 .reveal-ready .sl-hero__title.is-in span { opacity: 1; transform: none; }
 .sl-hero__lede { margin-top: 26px; font-size: clamp(17px, 1.6vw, 20px); line-height: 1.5; max-width: 34ch; }
 .sl-connect { margin-top: 30px; max-width: 580px; }
+.sl-hero__actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.sl-hero__cta { min-height: 52px; padding-inline: 23px; font-size: 16px; }
+.sl-hero__actions .btn--ink { background: var(--hero-ink, var(--deep)); color: var(--hero-bg, var(--vermilion)); }
+.sl-hero__actions .btn--line { border-color: var(--hero-ink, var(--deep)); color: var(--hero-ink, var(--deep)); }
 .sl-srcs { display: flex; gap: 6px; margin-bottom: 12px; }
 .sl-srcs button { border: 1.5px solid currentColor; background: transparent; border-radius: 999px; height: 32px; padding: 0 14px; font-size: 13.5px; font-weight: 500; color: inherit; opacity: .7; }
 .sl-srcs button[aria-selected="true"] { background: var(--hero-ink, var(--deep)); color: var(--hero-bg, var(--vermilion)); border-color: transparent; opacity: 1; }
@@ -247,9 +251,12 @@
 @media (max-width: 760px) { .setrow { grid-template-columns: 1fr; gap: 14px; } }
 .themes--wide { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
 .setlist { list-style: none; margin: 0; padding: 0; display: grid; }
-.setlist li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.setlist li { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
 .setlist li:first-child { border-top: 0; padding-top: 0; }
-.setlist li > span { display: grid; min-width: 0; }
+.setlist li > span:not(.avatar) { display: grid; min-width: 130px; flex: 1 1 150px; }
+.setlist__photo { cursor: pointer; }
+.setlist__photo input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.setlist__photo:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .setlist b { font-weight: 500; }
 .setlist li > span > span { font-size: 13px; color: var(--ink-3); }
 .setstack { display: grid; gap: 14px; }

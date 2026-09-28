@@ -95,6 +95,7 @@ export function analyze(all, { minMs = 30000 } = {}) {
 
   A.artists = [...artists.values()].sort((x, y) => y.n - x.n);
   A.tracks = [...tracks.values()].sort((x, y) => y.n - x.n);
+  A.trackAlbums = new Map([...tracks].map(([key, value]) => [key, value.album]));
   A.albums = [...albums.values()].sort((x, y) => y.n - x.n);
   A.heat = heat;
   A.days = days;
@@ -162,7 +163,7 @@ export function topIn(A, kind, from = -Infinity, to = Infinity, limit = 25, metr
     const n = Math.round(v);
     if (kind === 'artists') return { name: k, artist: '', plays: n, unit };
     const [name, artist] = k.split('\u0000');
-    const album = kind === 'tracks' ? A.tracks.find((t) => t.track === name && t.artist === artist)?.album : name;
+    const album = kind === 'tracks' ? A.trackAlbums?.get(k) : name;
     return { name, artist, plays: n, album, unit };
   });
 }

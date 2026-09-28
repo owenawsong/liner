@@ -2,6 +2,7 @@
 // their raw history. Answers are remembered in this browser too.
 import { $$, esc, num, pct, monthYear, idb, hourLabel } from './ui.js';
 import { topIn, lowerBound } from './analysis.js';
+import { evolution } from './evolution.js';
 import { cachedArtist } from './meta.js';
 
 const DAY = 864e5;
@@ -70,6 +71,12 @@ export function facts(A, p, { year, detailed = false } = {}) {
     : `Listener: ${who}. Listening since ${monthYear(A.from)}. ${num(A.plays)} plays, about ${num(A.hours)} hours, ${num(A.artists.length)} artists, ${num(A.tracks.length)} songs.`);
   L.push(`Top artists: ${artists.map((a) => `${a.name} (${num(a.plays)})`).join(', ')}.`);
   L.push(`Top songs: ${tracks.map((t) => `${t.name} by ${t.artist} (${num(t.plays)})`).join('; ')}.`);
+  if (detailed) {
+    const E = evolution(A);
+    L.push(`Taste change across the latest and previous 90 days: ${num(E.total)} vs ${num(E.previous)} plays, ${E.shift == null ? 'not enough data for a shift score' : `${E.shift}/100 shift`}, ${E.newArtists} newly heard artists, ${E.overlap} top-20 artists shared across both periods.`);
+    if (E.rising.length) L.push(`Artists gaining share: ${E.rising.slice(0, 5).map((x) => `${x.name} ${x.before} to ${x.plays} plays`).join('; ')}.`);
+    if (E.discoveries.length) L.push(`New discoveries: ${E.discoveries.slice(0, 5).map((x) => `${x.name} ${x.plays} plays`).join('; ')}.`);
+  }
   if (albums.length) L.push(`Top albums: ${albums.map((a) => `${a.name} by ${a.artist}`).join('; ')}.`);
   const genres = [...new Set(artists.slice(0, 12).map((a) => cachedArtist(a.name)?.tags?.[0]).filter(Boolean))];
   if (genres.length) L.push(`Genres of their top artists: ${genres.slice(0, 6).join(', ')}.`);

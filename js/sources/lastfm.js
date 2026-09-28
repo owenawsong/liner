@@ -162,6 +162,13 @@ export async function top(name, period, kind, signal, limit = 25) {
   }));
 }
 
+export async function similar(artist, signal, limit = 15) {
+  if (!isLive()) return [];
+  const d = await call('artist.getsimilar', { artist, autocorrect: 0, limit }, signal);
+  return list(d.similarartists?.artist).map((a) => ({ name: a.name, match: Number(a.match || 0) }))
+    .filter((a) => a.name && Number.isFinite(a.match));
+}
+
 function simTop(name, period, kind) {
   const scale = { '7day': 1, '1month': 4, '3month': 12, '6month': 24, '12month': 50, overall: 160 }[period] || 1;
   const artists = Object.keys(CATALOG).sort((a, b) => hash(name + a) - hash(name + b));
