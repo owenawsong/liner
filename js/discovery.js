@@ -32,11 +32,17 @@ export function discoverySeeds(A, taste, edition = 0) {
   const recent = topIn(A, 'artists', A.to - 180 * DAY, A.to + 1, 10);
   recent.forEach((a, i) => add(a.name, .9 / (i + 2) ** .55, 'in your recent rotation'));
   A.artists.slice(0, 24).forEach((a, i) => add(a.name, .55 / (i + 2) ** .55, 'an all-time favorite'));
-  Object.values(taste.items).filter((x) => x.rating >= 4)
-    .forEach((x) => add(x.kind === 'album' ? x.artist : x.name, .45 * (x.rating / 5), 'rated highly by you'));
+  const favorites = Object.values(taste.items).filter((x) => x.rating >= 4 || x.status === 'saved')
+    .sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  favorites.forEach((x) => add(x.kind === 'album' ? x.artist : x.name,
+    x.rating >= 4 ? .8 + .1 * (x.rating - 4) : .8,
+    x.rating >= 4 ? 'rated highly by you' : 'saved by you'));
   const pool = [...map.values()].sort((a, b) => b.weight - a.weight);
-  const core = pool.slice(0, 10);
-  const tail = pool.slice(10, 25);
+  const pinned = [...new Set(favorites.map((x) => normalize(x.kind === 'album' ? x.artist : x.name)))]
+    .map((key) => map.get(key)).filter(Boolean).slice(0, 5);
+  const rest = pool.filter((x) => !pinned.includes(x));
+  const core = [...pinned, ...rest.slice(0, 10 - pinned.length)];
+  const tail = rest.slice(10 - pinned.length, 25);
   if (!tail.length) return core;
   const offset = (Math.max(0, edition) * 2) % tail.length;
   return [...core, tail[offset], tail[(offset + Math.min(6, tail.length - 1)) % tail.length]]
@@ -119,7 +125,7 @@ export async function albumsFor(artists, A, taste, signal, onProgress = () => {}
     const pick = albums.find((album) => {
       const key = tasteKey('album', album.name, album.artist);
       const feedback = taste.items[key];
-      return album.mbid && !heard.has(key) && feedback?.status !== 'hidden' && feedback?.status !== 'known' && !feedback?.rating;
+      return album.mbid && !heard.has(key) && !feedback?.status && !feedback?.rating;
     });
     if (pick) picks.push({ ...pick, reason: artist.sources.slice(0, 2).map((x) => x.name), match: artist.match });
     onProgress(Math.min(picks.length, 6), 6, artist.name);

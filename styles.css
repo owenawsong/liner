@@ -1149,7 +1149,8 @@ a.era:hover, a.year:hover { border-color: var(--line-2); transform: translateY(-
 .disc-head__count { display: grid; align-content: end; gap: 2px; padding: 0 8px 5px 26px; border-left: 1px solid var(--line-2); white-space: nowrap; }
 .disc-head__count b { font: 500 clamp(42px, 5vw, 64px)/.9 var(--f-display); letter-spacing: -.055em; }
 .disc-head__count span { color: var(--ink-3); font: 11px/1.35 var(--f-mono); text-transform: uppercase; letter-spacing: .04em; }
-.disc-seeds { flex-wrap: nowrap; gap: 0; overflow-x: auto; scrollbar-width: thin; align-items: stretch; margin: 0 0 44px; border-bottom: 1px solid var(--line-2); }
+.disc-seeds { flex-wrap: nowrap; gap: 0; overflow-x: auto; scrollbar-width: none; align-items: stretch; margin: 0 0 44px; border-bottom: 1px solid var(--line-2); }
+.disc-seeds::-webkit-scrollbar { display: none; }
 .disc-seeds .label { flex: none; display: flex; align-items: center; padding-right: 17px; margin: 0; white-space: nowrap; }
 .disc-seeds button { flex: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 15px 12px 13px; background: none; font: 13px var(--f-body); }
 .disc-seeds button:hover, .disc-seeds button[aria-pressed="true"] { border-color: var(--accent); background: none; color: var(--ink); }

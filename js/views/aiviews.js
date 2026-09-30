@@ -38,7 +38,7 @@ export function bindNotes(ctx) {
   onLeave(() => { alive = false; });
   const body = $('.ai__body', root);
   const demo = ctx.source === 'demo';
-  const f = facts(ctx.A, { ...ctx.p, topArtists: ctx.topArtists });
+  const f = facts(ctx.A, { ...ctx.p, topArtists: ctx.topArtists }, { detailed: true });
   const example = () => {
     $('.ai__title', root).textContent = TITLES[mode];
     body.innerHTML = `<p class="ai__text">${esc(mode === 'notes' ? DEMO_NOTES : DEMO_ROAST)}</p>`;

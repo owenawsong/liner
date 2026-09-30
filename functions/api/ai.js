@@ -4,14 +4,17 @@
 // the browser. Prompts are fixed here, so this can't be used as a general chatbot.
 // Answers are cached, so the same request is only paid for once.
 
-// Use a fixed, responsive writer first. The larger Gemma route is a fallback:
-// its free provider may be unavailable, and should not delay the first reveal.
-// Never use a random free router, which changes the site's voice between runs.
-const GEMMA = { via: 'openrouter', model: 'google/gemma-4-31b-it:free', timeout: 15000 };
-const DIFFUSION = { via: 'nvidia', model: 'google/diffusiongemma-26b-a4b-it', timeout: 19000 };
+// Fixed OpenRouter models keep the voice testable. NVIDIA's hosted developer
+// endpoint is for local evaluation only; public traffic must never use it.
+const CACHE_VERSION = 'v7';
+// Thinking models spend part of max_tokens on their private reasoning. Leave enough
+// room for the short visible answer, otherwise it returns an empty message.
+const EDITOR = { via: 'openrouter', model: 'qwen/qwen3.8-27b:free', timeout: 12000, maxTokens: 850 };
+const QUICK = { via: 'openrouter', model: 'google/gemma-4-26b-a4b-it:free', timeout: 8000 };
+const DIFFUSION = { via: 'nvidia', model: 'google/diffusiongemma-26b-a4b-it', timeout: 16000 };
 const ROUTES = {
-  notes: [DIFFUSION, GEMMA], year: [DIFFUSION, GEMMA], eras: [DIFFUSION, GEMMA],
-  roast: [DIFFUSION, GEMMA], ask: [DIFFUSION, GEMMA],
+  notes: [QUICK, EDITOR], year: [EDITOR, QUICK], eras: [QUICK, EDITOR],
+  roast: [QUICK, EDITOR], ask: [EDITOR, QUICK],
 };
 const ENDPOINT = {
   nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
@@ -19,13 +22,13 @@ const ENDPOINT = {
 };
 
 const STYLE = `You write for Sleeve, a music stats site. Sound like a perceptive music editor speaking directly to "you": plain, specific, and a little surprising.
-Use only the supplied facts. Make a concrete observation about a change, contrast, or pattern; back it with artist names and counts from those facts. Do not infer personality, emotion, genre, or audio qualities from play counts. If the evidence is thin, say less.
+Use only the supplied facts. Make a concrete observation about a change, contrast, or pattern; back it with artist names and counts from those facts. Every number you mention must appear verbatim in the facts. Do not calculate new differences, percentages, or time spans. A fall to a nonzero count is not a disappearance. Do not infer personality, emotion, genre, or audio qualities from play counts. If the evidence is thin, say less.
 Avoid praise, corporate wording, and stock phrases: "eclectic", "sonic journey", "tapestry", "soundtrack of your life", "vibes", "delve", "engagement", "in contrast", "the record accumulated", "during this period", "clearly", "you have always". Every sentence should add evidence or interpretation grounded in evidence. No filler closing summary. No emojis, hashtags, markdown, headings, or lists. Plain sentences only.`;
 
 const TASKS = {
   notes: {
     max: 320,
-    prompt: (f) => `Write one or two short liner-note paragraphs (at most 95 words total). Start with the most interesting supported change or contrast in this record. Name the relevant artists and a number or year. Add a second paragraph only if there is a different specific observation, not a restatement of total plays. Never guess how the songs sound or how the listener felt.\n\nFacts:\n${f}`,
+    prompt: (f) => `Write one or two short liner-note paragraphs (at most 95 words total). Lead with a specific artist-level change or contrast, not total plays or "Your listening". Name the relevant artists and a number or year. Add a second paragraph only if there is a different specific observation. Do not restate the overall play count or add a filler conclusion. Never guess how the songs sound or how the listener felt.\n\nFacts:\n${f}`,
   },
   year: {
     max: 260,
@@ -45,21 +48,41 @@ const TASKS = {
   },
 };
 
-// Best-effort limit per visitor, per server instance.
+// Best-effort local protection. A public deployment also needs an account-level
+// Cloudflare rate rule or durable quota; isolate memory is not a global budget.
 const hits = new Map();
+const inflight = new Map();
+const cooldowns = new Map();
+async function reserveOpenRouter(env) {
+  if (!env.AI_BUDGET) {
+    if (env.AI_BUDGET_REQUIRED !== '1') return;
+    const error = new Error('AI budget is not configured');
+    error.budget = true;
+    throw error;
+  }
+  try {
+    const stub = env.AI_BUDGET.get(env.AI_BUDGET.idFromName('openrouter-free-v1'));
+    const response = await stub.fetch('https://budget.internal/take', { method: 'POST' });
+    if (!response.ok) {
+      const error = new Error(`AI budget ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+  } catch (error) { error.budget = true; throw error; }
+}
 function limited(ip) {
   const now = Date.now();
   const list = (hits.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
   list.push(now);
   hits.set(ip, list);
   if (hits.size > 5000) hits.clear();
-  return list.length > 25;
+  return list.length > 12;
 }
 
 function clean(text) {
   return String(text || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/^\s*(here'?s a thinking process|thinking process)[\s\S]*$/i, '')
+    .replace(/^\s*(here'?s a thinking process|thinking process|we need to|the user wants)[\s\S]*$/i, '')
     .replace(/\*\*|__|^#+\s*/gm, '')
     .replace(/^\s*[-*]\s+/gm, '')
     .trim();
@@ -68,6 +91,7 @@ function clean(text) {
 async function call(step, env, messages, max) {
   const key = step.via === 'nvidia' ? env.NVIDIA_API_KEY : env.OPENROUTER_API_KEY;
   if (!key) throw new Error(`no key for ${step.via}`);
+  if (step.via === 'openrouter') await reserveOpenRouter(env);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), step.timeout);
   try {
@@ -79,9 +103,15 @@ async function call(step, env, messages, max) {
         'Content-Type': 'application/json',
         ...(step.via === 'openrouter' ? { 'HTTP-Referer': 'https://liner-c7u.pages.dev', 'X-Title': 'Sleeve' } : {}),
       },
-      body: JSON.stringify({ model: step.model, messages, max_tokens: step.maxTokens || max, temperature: 0.65, top_p: 0.9 }),
+      body: JSON.stringify({ model: step.model, messages, max_tokens: step.maxTokens || max, temperature: 0.65, top_p: 0.9,
+        ...(step.via === 'openrouter' ? { provider: { data_collection: 'deny' } } : {}),
+        ...(step.model === EDITOR.model ? { reasoning: { effort: 'low' } } : {}) }),
     });
-    if (!res.ok) throw new Error(`${step.model} ${res.status}`);
+    if (!res.ok) {
+      const error = new Error(`${step.model} ${res.status}`);
+      error.status = res.status;
+      throw error;
+    }
     const d = await res.json();
     const text = clean(d.choices?.[0]?.message?.content);
     if (text.length < 20) throw new Error(`${step.model} empty`);
@@ -101,14 +131,16 @@ export async function onRequestPost({ request, env, waitUntil }) {
   if (raw.length > 8000) return Response.json({ error: 'That request is too big.' }, { status: 413 });
   let body;
   try { body = JSON.parse(raw); } catch { return Response.json({ error: 'Send JSON.' }, { status: 400 }); }
-  const task = TASKS[body.task];
+  if (!body || typeof body !== 'object' || Array.isArray(body))
+    return Response.json({ error: 'Send a JSON object.' }, { status: 400 });
+  const task = Object.hasOwn(TASKS, body.task) ? TASKS[body.task] : null;
   if (!task) return Response.json({ error: 'Unknown task.' }, { status: 400 });
   const facts = String(body.facts || '').slice(0, 5000);
   const question = String(body.question || '').slice(0, 300);
   if (!facts) return Response.json({ error: 'No facts sent.' }, { status: 400 });
   if (body.task === 'ask' && !question.trim()) return Response.json({ error: 'Ask a question.' }, { status: 400 });
 
-  const cacheKey = new Request(`https://liner-ai.cache/${body.task}/${await sha(`${facts}|${question}|${body.seed || ''}`)}`);
+  const cacheKey = new Request(`https://liner-ai.cache/${CACHE_VERSION}/${body.task}/${await sha(`${facts}|${question}|${body.seed || ''}`)}`);
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
   if (cached) return new Response(cached.body, { headers: { 'Content-Type': 'application/json', 'X-Liner-Cache': 'hit' } });
@@ -117,21 +149,45 @@ export async function onRequestPost({ request, env, waitUntil }) {
   if (limited(ip)) return Response.json({ error: "You've asked a lot in the last few minutes. Try again in a bit." }, { status: 429 });
 
   const messages = [{ role: 'system', content: STYLE }, { role: 'user', content: task.prompt(facts, question) }];
-  const errors = [];
-  const deadline = Date.now() + 44000;
-  for (const step of ROUTES[body.task]) {
-    const remaining = deadline - Date.now();
-    if (remaining < 3000) break;
-    try {
-      const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max);
-      const out = JSON.stringify(result);
-      waitUntil(cache.put(cacheKey, new Response(out, { headers: { 'Cache-Control': 'public, max-age=604800' } })));
-      return new Response(out, { headers: { 'Content-Type': 'application/json' } });
-    } catch (e) {
-      errors.push(String(e.message || e));
-    }
+  const key = cacheKey.url;
+  let work = inflight.get(key);
+  if (!work) {
+    work = (async () => {
+      const errors = [];
+      let budgetFailure = null;
+      const deadline = Date.now() + 37000;
+      const host = new URL(request.url).hostname;
+      const localPreview = host === 'localhost' || host === '127.0.0.1';
+      const routes = [...ROUTES[body.task], ...(localPreview ? [DIFFUSION] : [])];
+      for (const step of routes) {
+        if (budgetFailure && step.via === 'openrouter') continue;
+        const remaining = deadline - Date.now();
+        if (remaining < 3000) break;
+        if ((cooldowns.get(step.model) || 0) > Date.now()) continue;
+        const started = Date.now();
+        try {
+          const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max);
+          console.log('ai: served', body.task, step.model, `${Date.now() - started}ms`);
+          const out = JSON.stringify(result);
+          waitUntil?.(cache.put(cacheKey, new Response(out, { headers: { 'Cache-Control': 'public, max-age=604800' } })).catch(() => {}));
+          return { out, status: 200 };
+        } catch (e) {
+          errors.push(String(e.message || e));
+          console.log('ai: provider failed', body.task, step.model, e.status || e.name || 'unknown', `${Date.now() - started}ms`);
+          if (e.budget) { budgetFailure = e; if (!localPreview) break; else continue; }
+          if (e.status === 429 || e.status >= 500) cooldowns.set(step.model, Date.now() + (e.status === 429 ? 30000 : 60000));
+        }
+      }
+      if (budgetFailure) return { out: JSON.stringify({ error: budgetFailure.status === 429
+        ? "Sleeve's writing quota is full right now. Your listening stats still work; try again later."
+        : "Sleeve's writing budget is unavailable. Your listening stats still work; try again later." }), status: budgetFailure.status === 429 ? 429 : 503 };
+      console.log('ai: every model failed', errors);
+      const unconfigured = errors.length && errors.every((e) => e.startsWith('no key'));
+      return { out: JSON.stringify({ error: unconfigured ? "AI writing isn't switched on for this site yet." : 'The writing models are busy right now. Your listening stats still work; try the note again shortly.' }), status: 503 };
+    })();
+    inflight.set(key, work);
+    work.then(() => { if (inflight.get(key) === work) inflight.delete(key); }, () => { if (inflight.get(key) === work) inflight.delete(key); });
   }
-  console.log('ai: every model failed', errors);
-  const unconfigured = errors.every((e) => e.startsWith('no key'));
-  return Response.json({ error: unconfigured ? "AI writing isn't switched on for this site yet." : 'The writing models are all busy right now. Try again in a minute.' }, { status: 503 });
+  const result = await work;
+  return new Response(result.out, { status: result.status, headers: { 'Content-Type': 'application/json' } });
 }

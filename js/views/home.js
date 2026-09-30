@@ -144,9 +144,9 @@ export async function renderHome() {
       <div class="sl-back__cols" data-reveal>
         <div>
           <h3>Privacy</h3>
-          <p>Your Spotify file is opened in your browser and never uploaded. There are no Sleeve accounts and no analytics. What you connect is saved on this device only. When AI writing is on, Sleeve automatically sends a short summary of totals and top artists, never your raw plays. Turn it off or clear everything in <a href="#/settings">Settings</a>.</p>
+          <p>Your Spotify file is opened in your browser and never uploaded. There are no Sleeve accounts and no analytics. What you connect is saved on this device only. When AI writing is on, Sleeve sends a short summary of totals, top artists and songs, eras, and listening patterns to its writing provider. It never sends your raw play history. Turn AI off or clear everything in <a href="#/settings">Settings</a>.</p>
           <h3>How is this free?</h3>
-          <p>Sleeve runs almost entirely in your browser, so it costs very little to keep online, and the AI uses free models. If it ever costs more, donations will cover it. Features won't go behind a paywall.</p>
+          <p>Sleeve runs mostly in your browser. The writing provider has usage limits, so AI writing may pause when demand is high; your listening analysis still works. We will publish a sustainable funding plan before a wider launch.</p>
         </div>
         <div class="faq faq--small">
           <details><summary>Why no one-click Spotify login?</summary><p>Spotify limits new developer apps to five authorized users. A Spotify login also cannot provide your lifetime play history. For now, <a href="#/start/none">start a listening log</a> for future plays or add your Spotify data file for the past. If you have your own developer app, you can <a href="#/connect/spotify">connect it as an advanced option</a>.</p></details>

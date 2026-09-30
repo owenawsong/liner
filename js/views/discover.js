@@ -1,6 +1,6 @@
 import { $, $$, esc, sleeve, num, compact, toast, store } from '../ui.js';
 import { onLeave } from '../core.js';
-import { hydrate, listeners, releaseGroupForAlbum, critiqueCount } from '../meta.js';
+import { hydrate, listeners, cachedListeners, releaseGroupForAlbum, critiqueCount } from '../meta.js';
 import { discoverySeeds, candidatePool, rankCandidates, albumsFor } from '../discovery.js';
 import { getTaste, setTasteItem, tasteKey, tasteExport, importTaste, normalize } from '../taste.js';
 import * as lastfm from '../sources/lastfm.js';
@@ -14,7 +14,7 @@ const lastfmAlbum = (name, artist) => `${lastfmArtist(artist)}/${encodeURICompon
 export function discoverView(ctx, banner) {
   const root = $('#tab');
   root.innerHTML = `${banner}
-    <header class="disc-head"><div><span class="label">SLEEVE / DISCOVER</span><h2>Follow the thread.</h2><p>Artists outside your history, connected to the ones inside it. Pick a starting point, then see where it goes.</p><button type="button" class="link" data-refresh>Change the starting points ↗</button></div><div class="disc-head__count"><b>${num(ctx.A.artists.length)}</b><span>artists already<br>in your record</span></div></header>
+    <header class="disc-head"><div><span class="label">SLEEVE / DISCOVER</span><h2>Follow the thread.</h2><p>Your listening makes the first connection. Save what interests you and the next set of picks will follow that thread. Ratings are optional.</p><button type="button" class="link" data-refresh>Find a new set of picks ↗</button></div><div class="disc-head__count"><b>${num(ctx.A.artists.length)}</b><span>artists already<br>in your record</span></div></header>
     <div class="disc-seeds" id="disc-seeds"></div>
     <section class="disc-section"><div class="disc-section__head"><div><span class="label">SIDE A / SOMEWHERE NEW</span><h2>Artists to follow</h2></div><span class="label" id="disc-count"></span></div>
       <div class="disc-toolbar"><div class="seg" role="group" aria-label="Discovery distance">${modes.map(([id, label]) => `<button type="button" data-disc-mode="${id}" aria-pressed="${id === 'for-you'}"${id === 'deep' ? ' disabled title="Checking artist audiences"' : ''}>${label}</button>`).join('')}</div><p id="disc-mode-copy" class="faint"></p></div>
@@ -23,10 +23,10 @@ export function discoverView(ctx, banner) {
       <div id="disc-artists" class="disc-artists"></div>
     </section>
     <section class="disc-section"><div class="disc-section__head"><div><span class="label">SIDE B / PUT ON A RECORD</span><h2>Albums to take home</h2></div><span class="label">Identity checked with MusicBrainz</span></div>
-      <p class="muted">One starting record from each artist. Your own rating is separate from the small amount of community opinion available here.</p><div id="disc-album-status" class="disc-status" role="status" aria-live="polite">Finding artists first…</div><div id="disc-albums" class="disc-albums"></div>
+      <p class="muted">A starting record from each artist. Save one for later; a community score is only a side note when enough people have rated it.</p><div id="disc-album-status" class="disc-status" role="status" aria-live="polite">Finding artists first…</div><div id="disc-albums" class="disc-albums"></div>
     </section>
-    <div class="disc-lower"><section class="disc-section"><div class="disc-section__head"><div><span class="label">THE RECORD YOU KNOW</span><h2>What did you actually love?</h2></div></div><p class="muted">A play count cannot tell us that. Rate albums you already heard to sharpen the next set of suggestions.</p><label class="sr" for="disc-album-search">Find an album in your history</label><input id="disc-album-search" class="input" type="search" placeholder="Search your listened albums…" autocomplete="off"><div id="disc-listened"></div></section>
-      <section class="disc-section"><div class="disc-section__head"><div><span class="label">KEPT FOR LATER</span><h2>Your shelf</h2></div><span class="label" id="disc-shelf-count"></span></div><div id="disc-shelf"></div><div class="disc-backup"><p>Your ratings and saves stay in this browser. Keep a copy to move them to another device.</p><div><button class="btn btn--line btn--sm" type="button" data-disc-export>Export ratings</button><label class="btn btn--line btn--sm" for="disc-import">Import ratings</label><input id="disc-import" type="file" accept=".json,application/json" hidden></div></div></section></div>
+    <div class="disc-lower"><section class="disc-section"><div class="disc-section__head"><div><span class="label">KEPT FOR LATER</span><h2>Your shelf</h2></div><span class="label" id="disc-shelf-count"></span></div><div id="disc-shelf"></div><div class="disc-backup"><p>Saved artists and records influence the next recommendations. Your shelf stays in this browser; keep a copy for another device.</p><div><button class="btn btn--line btn--sm" type="button" data-disc-export>Export shelf</button><label class="btn btn--line btn--sm" for="disc-import">Import shelf</label><input id="disc-import" type="file" accept=".json,application/json" hidden></div></div></section>
+      <section class="disc-section"><div class="disc-section__head"><div><span class="label">OPTIONAL / FINE-TUNE</span><h2>Records you know</h2></div></div><p class="muted">Play counts show what you heard, not what you loved. Rate an album only if you want that opinion to shape later picks.</p><label class="sr" for="disc-album-search">Find an album in your history</label><input id="disc-album-search" class="input" type="search" placeholder="Search your listened albums…" autocomplete="off"><div id="disc-listened"></div></section></div>
     <p class="disc-method">Artist connections and album popularity come from Last.fm. Album identities and available community scores come from MusicBrainz. Community ratings show their vote count; they do not override your own ratings. Sleeve does not pull ratings from Album of the Year or Rate Your Music.</p>`;
 
   let alive = true, taste, pool = [], albums = [], mode = 'for-you', selectedSeed = '', runCtrl;
@@ -130,7 +130,7 @@ export function discoverView(ctx, banner) {
       if (!taste) return;
       const blob = new Blob([JSON.stringify(tasteExport(taste), null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob), link = document.createElement('a');
-      link.href = url; link.download = `sleeve-ratings-${ctx.pid.replace(/[^a-z0-9-]+/gi, '-')}.json`;
+      link.href = url; link.download = `sleeve-shelf-${ctx.pid.replace(/[^a-z0-9-]+/gi, '-')}.json`;
       document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
       return;
     }
@@ -159,9 +159,9 @@ export function discoverView(ctx, banner) {
   $('#disc-import', root).addEventListener('change', async (event) => {
     const file = event.target.files?.[0]; if (!file) return;
     try {
-      if (file.size > 2e6) throw new Error('That ratings file is too large.');
+      if (file.size > 2e6) throw new Error('That shelf file is too large.');
       const count = await importTaste(ctx.pid, JSON.parse(await file.text()));
-      if (alive) { repaint(); toast(`Imported ${num(count)} ratings and saves.`); }
+      if (alive) { repaint(); toast(`Imported ${num(count)} shelf entries.`); }
     } catch (e) { toast(e instanceof SyntaxError ? 'That file is not valid JSON.' : e.message, 'bad'); }
     event.target.value = '';
   });
@@ -187,7 +187,7 @@ export function discoverView(ctx, banner) {
       status('Following connections from your favorite artists…', 4);
       pool = await candidatePool(ctx.A, seeds, signal, (done, total) => status(`Checking connections · ${done} of ${total} artists`, Math.round(done / total * 54)));
       if (!alive || signal.aborted) return;
-      if (!pool.length) { status('Last.fm returned no new matches. Try again later or rate more artists.', 100); $('#disc-album-status', root).textContent = 'No album candidates yet.'; return; }
+      if (!pool.length) { status('Last.fm returned no new matches. Try again later or save a few artists.', 100); $('#disc-album-status', root).textContent = 'No album candidates yet.'; return; }
       status(`${pool.length} unheard artists found · checking the first picks`, 57);
       const firstLook = rankCandidates(pool, taste, 'for-you').slice(0, 12);
       await Promise.all(firstLook.map((x) => listeners(x.name)));
@@ -212,12 +212,12 @@ export function discoverView(ctx, banner) {
         if (!alive || signal.aborted) return;
         albums.forEach((x, i) => { x.reviews = counts[i]; }); paintAlbums();
       });
-      const top = [...pool].sort((a, b) => b.score - a.score).slice(0, 60);
-      for (let i = 0; i < top.length; i++) {
+      const top = [...pool].sort((a, b) => b.score - a.score).slice(0, 36);
+      for (let i = 0; i < top.length; i += 4) {
         if (!alive || signal.aborted) return;
-        const x = top[i];
-        if (x.audience === undefined) await listeners(x.name);
-        if (alive && !signal.aborted) deepButton.innerHTML = `Deep cuts <small>${i + 1}/${top.length}</small>`;
+        await Promise.allSettled(top.slice(i, i + 4).map((x) => listeners(x.name)));
+        if (alive && !signal.aborted) deepButton.innerHTML = `Deep cuts <small>${Math.min(i + 4, top.length)}/${top.length}</small>`;
+        if (i >= 16 && top.filter((x) => cachedListeners(x.name) > 0).length >= 20) break;
       }
       if (!alive || signal.aborted) return;
       deepButton.disabled = false;

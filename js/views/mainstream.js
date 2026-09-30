@@ -24,6 +24,13 @@ export function bindMainstream(A, L) {
   onLeave(() => { alive = false; });
   const status = $('#ms-status'), progress = $('.ms-progress'), bar = $('.ms-progress i');
   const scoreEl = $('#ms-score'), deepEl = $('#ms-deep');
+  if (!scoreArtists.length) {
+    status.textContent = 'No artists to score yet';
+    scoreEl.innerHTML = '<p class="muted">Add listening history to see how familiar your artists are to Last.fm listeners.</p>';
+    deepEl.innerHTML = '';
+    progress?.setAttribute('aria-valuenow', '100');
+    return;
+  }
   const update = (done, stage) => {
     if (!alive || !progress?.isConnected) return;
     status.textContent = `${stage} · ${done} of ${total} artists checked`;
