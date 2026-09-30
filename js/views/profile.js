@@ -8,7 +8,7 @@ import { linker, artistPage, songPage, yearPage, bindYear, onThisDay, mountSearc
 import { hydrate, art, cachedArtist, artistInfo, clearMetadata } from '../meta.js';
 import { palette, paint } from '../color.js';
 import { mainstreamPanel, bindMainstream, milestonesPanel } from './mainstream.js';
-import { notesPanel, bindNotes, askPanel, bindAsk, nameEras, yearNotes, bindYearNotes, listeningRead } from './aiviews.js';
+import { notesPanel, bindNotes, askPanel, bindAsk, nameEras, yearNotes, bindYearNotes, listeningRead, findingHTML } from './aiviews.js';
 import { evolutionView } from './evolution.js';
 import { patternsView } from './patterns.js';
 import { discoverView } from './discover.js';
@@ -17,6 +17,11 @@ import { demoRecent, DEMO_USER } from '../sources/demo.js';
 import * as lastfm from '../sources/lastfm.js';
 import * as spotify from '../sources/spotify.js';
 import { preparedProfile, startPreparation, watchPreparation, preparationStatus } from '../preparation.js';
+import { recordEvidence, selectFindings } from '../dossier.js';
+import { getTaste } from '../taste.js';
+import { savedStartingRecords } from '../recommendations.js';
+import { exclusionPanelHTML, bindExclusions, bindDetailExclusions } from './filters.js';
+import { audioPanelHTML, bindAudioPanel, cancelAllAudioAudits } from './audio.js';
 
 const TABS = [['overview', 'Overview'], ['discover', 'Discover'], ['top', 'Top'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['patterns', 'Deep dive'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
 const LABEL = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export', demo: 'Demo' };
@@ -100,9 +105,10 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
 /* ---------- Profile sources ---------- */
 function demoProfile(A) {
   const now = Date.now();
-  const today = A.rows.length - lowerBound(A.rows, new Date().setHours(0, 0, 0, 0));
-  const week = A.rows.length - lowerBound(A.rows, now - 7 * DAY);
-  return { source: 'demo', simulated: false, user: { ...DEMO_USER, playcount: A.plays }, recent: demoRecent(20), today, week };
+  const rows=A?.rows||[];
+  const today = rows.length - lowerBound(rows, new Date().setHours(0, 0, 0, 0));
+  const week = rows.length - lowerBound(rows, now - 7 * DAY);
+  return { source: 'demo', simulated: false, user: { ...DEMO_USER, playcount: A?.plays||0 }, recent: demoRecent(20), today, week };
 }
 function fileProfile(archive) {
   const ex = archive.export;
@@ -132,20 +138,18 @@ function header({ p, A, source, pid }) {
   const total = A ? A.plays : u.playcount;
   if (total) bits.push(`<span>${num(total)} plays</span>`);
   const since = A?.from || u.since;
-  if (since) bits.push(`<span>Listening since ${monthYear(since)}</span>`);
+  if (since) bits.push(`<span>${new Date(since).getFullYear()}${A && new Date(A.to).getFullYear() !== new Date(since).getFullYear() ? `—${new Date(A.to).getFullYear()}` : ''}</span>`);
   bits.push(sourceBadge(p));
-  const catno = { lastfm: 'LAST.FM', listenbrainz: 'LISTENBRAINZ', spotify: 'SPOTIFY', file: 'SPOTIFY EXPORT', demo: 'DEMO' }[source] || '';
-  return `<header class="phead" id="phead">
-    ${avatar(u.display, store.get(`liner.avatar:${pid}`) || u.image, 64)}
-    <div class="phead__body"><span class="phead__catno">SLEEVE / ${catno}${A ? ` / ${new Date(A.from).getFullYear()}–${new Date(A.to).getFullYear()}` : ''}</span><h1>${esc(u.display)}</h1><div class="phead__meta">${bits.join('')}</div></div>
-    <div class="phead__covers" id="phead-covers"></div>
+  return `<header class="phead profile-identity" id="phead">
+    ${avatar(u.display, store.get(`liner.avatar:${pid}`) || u.image, 40)}
+    <div class="phead__body"><h1>${esc(u.display)}</h1><div class="phead__meta">${bits.join('')}</div></div>
     <div class="phead__side"><span id="pill">${pill(p)}</span>${source === 'lastfm' || source === 'listenbrainz' ? `<a class="btn btn--line btn--sm" href="#/compare/${source}/${encodeURIComponent(p.user.name)}">Compare</a>` : ''}${A ? '<div id="search"></div>' : ''}</div>
   </header>`;
 }
 const pill = (p) => (p.recent?.[0]?.nowPlaying ? `<span class="chip chip--good"><span class="dot dot--live"></span>Listening now</span>` : '');
 
 function banner({ p, source }) {
-  if (source === 'demo') return `<div class="banner"><span>This is a demo profile. Every number is example data.</span><a class="link" href="#/">See your own ${icon.arrow}</a></div>`;
+  if (source === 'demo') return `<div class="profile-demo-note"><span>Demo record · example listening history</span><a href="#/start">Make it yours ↗</a></div>`;
   if (p.simulated) return `<div class="banner banner--warn"><span>Last.fm is in simulated mode, so these numbers are made up. Add a free API key in Settings for ${esc(p.user.name)}'s real stats.</span><button type="button" class="link" data-settings>Open Settings</button></div>`;
   if (p.hidden) return `<div class="banner banner--warn"><span>This profile hides its recent listening, so live stats are off. Turn off "Hide recent listening" in <a href="https://www.last.fm/settings/privacy" target="_blank" rel="noopener">Last.fm privacy settings</a>.</span></div>`;
   return '';
@@ -156,7 +160,10 @@ export function overviewHTML(ctx) {
   const { p, A, pid, source } = ctx;
   const liveSource = source !== 'file';
   const parts = [];
-  if (liveSource) {
+  if (A && !ctx.preview) {
+    parts.push(overviewOpening(ctx));
+    parts.push(`<div class="overview-live c-12">${liveSource ? `<section class="panel" id="now">${nowHTML(p)}</section><section class="panel">${countsHTML(p,A)}</section>` : ''}</div>`);
+  } else if (liveSource) {
     parts.push(`<section class="panel c-7" id="now">${nowHTML(p)}</section>`);
     parts.push(`<section class="panel c-5">${countsHTML(p, A)}</section>`);
   }
@@ -164,30 +171,71 @@ export function overviewHTML(ctx) {
     parts.push(`<div class="c-12">${statStrip(A)}</div>`);
     if (!ctx.preview) parts.push(storyPanel(ctx));
     if (!ctx.preview) parts.push(notesPanel(A, source === 'demo'));
-    if (!ctx.preview) parts.push(listeningRead(ctx,2));
     parts.push(`<section class="panel c-12"><div class="panel__head"><h2>Month by month</h2><a class="link link--quiet" href="${hrefFor(pid, 'timeline')}">Open the timeline ${icon.arrow}</a></div>${timeline(A, { height: 140, fit: true })}</section>`);
   } else if (!ctx.preview) {
-    parts.push(source === 'lastfm' && !p.user.playcount ? firstPlayCTA() : importCTA(ctx));
+    parts.push(ctx.archive?.export?.rows?.length||ctx.archive?.live?.rows?.length ? `<section class="panel c-12"><h2>No plays match your counting settings</h2><p class="muted" style="margin-top:10px">Your original history is saved. Restore excluded listening or change the minimum play length to include it in your statistics.</p><a class="link" href="${hrefFor(pid,'data')}" style="margin-top:16px">Review counting settings ↗</a></section>` : source === 'lastfm' && !p.user.playcount ? firstPlayCTA() : importCTA(ctx));
   }
   const topLabel = source === 'file' ? 'All time' : source === 'spotify' ? 'Last 4 weeks' : 'Last 7 days';
   parts.push(`<section class="panel c-5"><div class="panel__head"><h2>Top 10 artists</h2><span class="label" id="top-label">${topLabel}</span></div><div id="top-artists">${ctx.topArtists ? rankList(ctx.topArtists.slice(0, 10), { link: ctx.L?.rank }) : loadingRows()}</div></section>`);
   if (liveSource) parts.push(`<section class="panel c-7"><div class="panel__head"><h2>Latest 10 songs</h2><span class="label">${source === 'listenbrainz' ? 'Updates every few minutes' : 'Live'}</span></div><div id="recent">${trackRows(p.recent, 10, ctx.L?.track)}</div></section>`);
-  else parts.push(`<section class="panel c-7"><div class="panel__head"><h2>Top songs</h2><span class="label">All time</span></div>${rankList(topIn(A, 'tracks', -Infinity, Infinity, 8), { kind: 'tracks', link: ctx.L?.rank })}</section>`);
+  else parts.push(`<section class="panel c-7"><div class="panel__head"><h2>Top songs</h2><span class="label">All time</span></div>${rankList(A?topIn(A, 'tracks', -Infinity, Infinity, 8):[], { kind: 'tracks', link: ctx.L?.rank })}</section>`);
   if (source === 'spotify') parts.push(`<section class="panel c-12" id="watch">${watchHTML()}</section>`);
   if (A && ctx.L?.song) parts.push(onThisDay(A, ctx.L));
   if (A?.insights.length) {
     parts.push(`<div class="c-12"><div class="subhead"><h2>Things we noticed</h2><a class="link link--quiet" href="${hrefFor(pid, 'insights')}">All ${A.insights.length} ${icon.arrow}</a></div>
       <div class="insights">${A.insights.slice(0, 3).map((x, i) => insightCard(x, i === 0)).join('')}</div></div>`);
   }
-  return `${ctx.preview ? '' : banner(ctx)}<div class="grid">${parts.join('')}</div>`;
+  return `${ctx.preview ? '' : banner(ctx)}<div class="grid overview-page">${parts.join('')}</div>`;
+}
+
+function rotationHTML(ctx) {
+  const {A,L}=ctx, end=A.to+1, from=Math.max(A.from,end-30*DAY);
+  const artists=topIn(A,'artists',from,end,4), albums=topIn(A,'albums',from,end,4);
+  const leader=artists[0], cover=albums.find(a=>a.artist===leader?.name)||albums[0];
+  const picks=albums.length?albums:artists.map(a=>({...a,artist:a.name,artistOnly:true}));
+  const artFor=(a,size)=>sleeve(a.name,a.artist,{size,kind:a.artistOnly?'artist':'album'});
+  return `<section class="rotation-record"><div class="opening-caption"><span>YOUR CURRENT ROTATION</span><a href="${hrefFor(ctx.pid,'top')}">All rankings ↗</a></div>
+    <div class="rotation-record__lead">${cover?`<a class="rotation-record__cover" href="${L.artist(cover.artist)}" aria-label="Explore ${esc(cover.artist)}">${artFor(cover,200)}</a>`:leader?`<a class="rotation-record__cover" href="${L.artist(leader.name)}">${sleeve(leader.name,leader.name,{size:200,kind:'artist'})}</a>`:''}
+      <div class="rotation-record__copy"><h2>${leader?`<a href="${L.artist(leader.name)}">${esc(leader.name)}</a>`:'Your latest listening'}</h2><p>${leader?`${num(leader.plays)} plays in your latest recorded 30 days.`:'Your listening record is still taking shape.'}</p>${cover?`<span>${esc(cover.name)}<small>${num(cover.plays)} recorded album plays</small></span>`:''}</div></div>
+    <div class="rotation-record__rest">${picks.filter(a=>a!==cover).slice(0,3).map(a=>`<a href="${L.artist(a.artist)}">${artFor(a,62)}<span><b>${esc(a.name)}</b><small>${esc(a.artist)} · ${num(a.plays)} plays</small></span></a>`).join('')}</div><small class="record-basis">${fullDate(from)}—${fullDate(A.to)} · recorded plays</small></section>`;
+}
+
+function shiftHTML(ctx) {
+  const E=evolution(ctx.A,ctx.A.to+1), rows=E.rising.slice(0,3);
+  const max=Math.max(.01,...rows.flatMap(r=>[r.share,r.priorShare]));
+  return `<section class="rotation-shift"><div class="opening-caption"><span>WHAT CHANGED</span><a href="${hrefFor(ctx.pid,'evolution')}">Explore ↗</a></div><h2>${rows.length?'Moving up in your rotation':'The next chapter is taking shape'}</h2>
+    ${rows.length?`<div class="shift-legend"><span><i></i>Previous 90 days</span><span><i></i>Latest 90 days</span></div><div class="shift-artists">${rows.map(r=>`<a class="shift-artist" href="${ctx.L.artist(r.name)}">${sleeve(r.name,r.name,{size:32,kind:'artist'})}<div><b>${esc(r.name)}</b><span><i style="width:${r.priorShare/max*100}%"></i><small>${(r.priorShare*100).toFixed(1)}%</small></span><span><i style="width:${r.share/max*100}%"></i><small>${(r.share*100).toFixed(1)}%</small></span></div></a>`).join('')}</div>`:'<p>Keep listening to build two comparable periods. Changes use observed plays, rather than guessed moods.</p>'}
+    <small class="record-basis">Share of ${num(E.previous)} then ${num(E.total)} plays · two equal periods ending ${monthYear(ctx.A.to)}</small></section>`;
+}
+
+function overviewOpening(ctx) {
+  const E=evolution(ctx.A,ctx.A.to+1);
+  const interesting=selectFindings(recordEvidence(ctx.A),{limit:1,excludeArtists:E.rising.slice(0,3).map(a=>a.name),excludeFamilies:['personal-change']})[0];
+  return `<div class="overview-opening c-12"><div class="overview-opening__top">${rotationHTML(ctx)}${shiftHTML(ctx)}</div><div class="overview-opening__bottom">${interesting?findingHTML(ctx,interesting,{compact:true}):`<section class="opening-unexpected"><span class="label">THE FIRST CHAPTER</span><h3>${num(ctx.A.artists.length)} artists in your record</h3><p>More listening will reveal which discoveries stay with you.</p></section>`}<section class="opening-pick" id="overview-pick"><div class="opening-caption"><span>WHAT TO PLAY NEXT</span></div><p class="faint">Preparing a listening starting point…</p><a href="${hrefFor(ctx.pid,'discover')}">Open Discover ↗</a></section></div></div>`;
+}
+
+async function bindStartingRecord(ctx) {
+  const root=$('#overview-pick');if(!root)return;
+  try {
+    const taste=await getTaste(ctx.pid),edition=Number(store.get(`liner.discover.edition:${ctx.pid}`)||0);
+    const starts=await savedStartingRecords(ctx.pid,ctx.A,taste,edition);
+    if(!root.isConnected||ctx.signal?.aborted)return;
+    const start=starts?.current||starts?.explore||starts?.revisit;
+    if(!start){root.innerHTML=`<div class="opening-caption"><span>WHAT TO PLAY NEXT</span></div><h3>${ctx.prepared?'Find your next record':'Your selection is being prepared'}</h3><p>Follow the music you have been returning to, or revisit an older favorite.</p><a href="${hrefFor(ctx.pid,'discover')}">Open Discover ↗</a>`;return;}
+    const record=start.album||start.track,name=record?.name||start.artist;
+    const query=`${start.artist} ${record?.name||''}`;
+    root.innerHTML=`<div class="opening-caption"><span>${start.recorded?'AN OLDER FAVORITE':'WHAT TO PLAY NEXT'}</span><a href="${hrefFor(ctx.pid,'discover')}">More picks ↗</a></div><div class="opening-pick__record">${sleeve(name,start.artist,{size:100,kind:start.album?'album':start.track?'track':'artist'})}<div><h3>${esc(name)}</h3><span>${esc(start.artist)}</span><a class="link" href="https://open.spotify.com/search/${encodeURIComponent(query)}" target="_blank" rel="noopener">Play ${start.album?'the record':start.track?'the track':'their music'} ↗</a></div></div><p>${esc(start.reason)}</p>${start.track&&start.album?`<small>Or try “${esc(start.track.name)}”</small>`:''}`;
+    hydrate(root);
+  }catch{if(root.isConnected)root.innerHTML=`<div class="opening-caption"><span>WHAT TO PLAY NEXT</span></div><h3>Choose your next record</h3><a href="${hrefFor(ctx.pid,'discover')}">Open Discover ↗</a>`;}
 }
 
 function overview(ctx) {
   const { A, source, name } = ctx;
   if (source === 'demo' || source === 'file') {
-    ctx.topArtists = source === 'demo' ? topIn(A, 'artists', Date.now() - 7 * DAY) : topIn(A, 'artists');
+    ctx.topArtists = A ? source === 'demo' ? topIn(A, 'artists', Date.now() - 7 * DAY) : topIn(A, 'artists') : [];
   }
   $('#tab').innerHTML = overviewHTML(ctx);
+  if(A)bindStartingRecord(ctx);
   bindCommon(ctx);
   if (A) bindTimeline($('#tab'), A, (i) => { overviewPick = i; go(hrefFor(ctx.pid, 'timeline')); });
   $$('[data-story-month]', $('#tab')).forEach((button) => button.addEventListener('click', () => { overviewPick = Number(button.dataset.storyMonth); go(hrefFor(ctx.pid, 'timeline')); }));
@@ -686,14 +734,15 @@ function insightsTab(ctx) {
   const firstYear = A.years[0]?.y, lastYear = A.years.at(-1)?.y;
   $('#tab').innerHTML = `${banner(ctx)}
     <div class="insights-page">
-      <header class="report-head"><div><span class="label">${firstYear}${firstYear !== lastYear ? `—${lastYear}` : ''} / ${num(A.plays)} PLAYS</span><h2>Listening notes</h2><p>${ctx.prepared?.dossier?.notes && store.get('liner.ai')!=='off' ? esc(ctx.prepared.dossier.notes) : 'The changes, habits and discoveries in your recorded listening.'}</p></div><nav class="report-nav" aria-label="Jump through this report"><button type="button" data-insights-jump="ask">Ask a question ↗</button><button type="button" data-insights-jump="mainstream">Audience reach ↗</button><button type="button" data-insights-jump="findings">All findings ↗</button></nav></header>
+      <header class="report-head report-head--compact"><div><h2>Inside your listening</h2><span class="label">${firstYear}${firstYear !== lastYear ? `—${lastYear}` : ''} / ${num(A.plays)} RECORDED PLAYS</span></div><nav class="report-nav" aria-label="Jump through this report"><button type="button" data-insights-jump="ask">Ask a question ↗</button><button type="button" data-insights-jump="mainstream">Audience reach ↗</button><button type="button" data-insights-jump="findings">All findings ↗</button></nav></header>
       ${listeningRead(ctx)}
-      <div class="insights-page__section"><span class="label">02 / AUDIENCE REACH</span><p>Where your most-played artists sit in Last.fm's global audience counts.</p></div>
+      ${ctx.prepared?.dossier?.notes && store.get('liner.ai')!=='off' ? `<details class="prepared-commentary"><summary>A reading of this record <span>↗</span></summary><p>${esc(ctx.prepared.dossier.notes)}</p><small>Written from the recorded evidence above. Raw listening history stays in this browser.</small></details>` : ''}
+      <div class="insights-page__section"><span class="label">AUDIENCE REACH</span><p>Where your most-played artists sit in Last.fm's global audience counts.</p></div>
       ${mainstreamPanel()}
       ${askPanel(A)}
-      <div class="insights-page__section" id="findings"><span class="label">03 / THE DETAILS</span><h2>${A.insights.length} things the plays reveal</h2><p>Counting ${A.minMs ? 'songs played for 30 seconds or more' : 'every recorded play, however short'}. <a href="${hrefFor(ctx.pid, 'data')}">Change this setting</a>.</p></div>
+      <div class="insights-page__section" id="findings"><span class="label">THE REST OF THE RECORD</span><h2>${A.insights.length} more details</h2><p>Counting ${A.minMs ? 'songs played for 30 seconds or more' : 'every recorded play, however short'}. <a href="${hrefFor(ctx.pid, 'data')}">Change this setting</a>.</p></div>
       ${milestonesPanel(A, ctx.L)}
-      <div class="insights insights-page__findings">${A.insights.map((x, i) => insightCard(x, i === 0)).join('')}</div>
+      <details class="record-details"><summary>Browse all ${A.insights.length} counted findings <span>＋</span></summary><div class="insights insights-page__findings">${A.insights.map((x) => insightCard(x, false)).join('')}</div></details>
     </div>`;
   bindAsk(ctx);
   bindMainstream(A, ctx.L);
@@ -764,6 +813,8 @@ function data(ctx) {
         <p class="muted" style="font-size:14.5px">Spotify counts a stream once you've listened for 30 seconds, and that's Sleeve's default. This only changes plays where the listening time is known, which means your Spotify export. Last.fm and ListenBrainz only log songs you mostly finished.</p>
         ${ctx.A?.short ? `<p class="faint" style="font-size:14px">${num(ctx.A.short)} plays are shorter than 30 seconds.</p>` : ''}
       </section>
+      ${exclusionPanelHTML(ctx)}
+      ${ctx.A ? audioPanelHTML(ctx) : ''}
       <section class="panel c-6">
         <div class="panel__head"><h2>Stored in this browser</h2></div>
         <p class="muted" style="font-size:14.5px">Your listening archive stays in this browser. Sleeve requests live data from ${source === 'spotify' ? 'Spotify' : src ? src.label : 'its music sources'} and artwork or artist tags from public music services. When AI writing is on, a short summary of your stats is sent to Sleeve's writer; raw plays are not sent. You can turn AI off in Settings.</p>
@@ -777,6 +828,8 @@ function data(ctx) {
     </div>`;
 
   bindDrops($('#tab'), handleFiles);
+  bindExclusions(ctx);
+  if (ctx.A) bindAudioPanel(ctx);
   $('[data-prepare]')?.addEventListener('click',()=>{startPreparation(ctx,{fresh:true});preparationSetup(ctx);});
   $$('[data-min]').forEach((b) => b.addEventListener('click', () => { setMinMs(Number(b.dataset.min)); toast(Number(b.dataset.min) ? 'Counting plays of 30 seconds or more.' : 'Counting every play.'); rerender(); }));
   $$('[data-remove]').forEach((b) => b.addEventListener('click', async () => {
@@ -799,6 +852,7 @@ function data(ctx) {
     await cancelAllSync();
     const { cancelAllPreparation } = await import('../preparation.js');
     await cancelAllPreparation();
+    await cancelAllAudioAudits();
     clearMetadata();
     await idb.clear();
     Object.keys(localStorage).filter((k) => k.startsWith('liner.')).forEach((k) => store.set(k, null));
@@ -830,6 +884,7 @@ function detail(ctx) {
   else if (tab === 'song') html = songPage(ctx, args[0] || '', args[1] || '');
   else html = yearPage(ctx, Number(args[0]) || A.years[A.years.length - 1].y);
   $('#tab').innerHTML = `${banner(ctx)}${html}`;
+  bindDetailExclusions(ctx);
   if (tab === 'year') {
     bindYear(ctx);
     if (ctx.source !== 'spotify') {
@@ -845,7 +900,6 @@ async function paintHeader({ A, p }) {
   if (!head) return;
   const lead = A?.artists[0]?.name || p.recent?.[0]?.artist;
   const albums = A ? A.albums.slice(0, 4) : [];
-  if (albums.length) $('#phead-covers').innerHTML = albums.map((al) => sleeve(al.album, al.artist, { size: 118, kind: 'album' })).join('');
   const firstAlbum = albums[0];
   const url = firstAlbum ? await art('album', firstAlbum.album, firstAlbum.artist) : lead ? await art('artist', lead) : '';
   const pal = await palette(url);

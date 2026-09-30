@@ -1,8 +1,8 @@
 import { $, $$, esc, sleeve, num, compact, toast, store } from '../ui.js';
 import { onLeave } from '../core.js';
 import { hydrate, critiqueCount } from '../meta.js';
-import { discoverySeeds, rankCandidates } from '../discovery.js';
-import { buildRecommendations } from '../recommendations.js';
+import { discoverySeeds, rankCandidates, connectionReason, usefulCuration } from '../discovery.js';
+import { buildRecommendations, startingRecords, recommendationOutcome } from '../recommendations.js';
 import { getTaste, setTasteItem, tasteKey, tasteExport, importTaste, normalize } from '../taste.js';
 import * as lastfm from '../sources/lastfm.js';
 
@@ -15,22 +15,23 @@ const lastfmAlbum = (name, artist) => `${lastfmArtist(artist)}/${encodeURICompon
 export function discoverView(ctx, banner) {
   const root = $('#tab');
   root.innerHTML = `${banner}
-    <header class="disc-head"><div><span class="label">BASED ON YOUR LISTENING</span><h2>Discover</h2><p id="disc-personal-copy">New artists and records, chosen from connections to your recent listening and older favorites.</p><button type="button" class="link" data-refresh>Prepare a different selection ↗</button></div><div class="disc-head__count"><span class="label">YOUR LISTENING GOES FIRST</span><p>You can save, pass, or listen. Ratings are there when you have an opinion.</p></div></header>
+    <header class="disc-head"><div><span class="label">DISCOVER</span><h2>What to play next</h2><p id="disc-personal-copy">Three ways into your next listen: follow your current rotation, try another direction, or return to a record you left behind.</p></div><button type="button" class="link" data-refresh>Another selection ↗</button></header>
+    <div id="disc-status" class="disc-status" role="status" aria-live="polite">Reading your listening record…</div><div class="ms-progress" role="progressbar" aria-label="Finding recommendations" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+    <div id="disc-starts" class="disc-starts" aria-live="polite"><div class="disc-start-placeholder"><span class="label">CHOOSING YOUR STARTING RECORDS</span><p>Checking artist catalogues and matching the albums. Your saved selection will appear here first.</p></div></div>
     <div class="disc-seeds" id="disc-seeds"></div>
-    <section class="disc-section"><div class="disc-section__head"><div><span class="label">A STARTING POINT</span><h2>Artists to try</h2></div><span class="label" id="disc-count"></span></div>
+    <details class="disc-section disc-artist-browser"><summary>Explore the artist connections <span class="label" id="disc-count"></span></summary>
       <div class="disc-toolbar"><div class="seg" role="group" aria-label="Discovery distance">${modes.map(([id, label]) => `<button type="button" data-disc-mode="${id}" aria-pressed="${id === 'for-you'}"${id === 'deep' ? ' disabled title="Checking artist audiences"' : ''}>${label}</button>`).join('')}</div><p id="disc-mode-copy" class="faint"></p></div>
-      <div id="disc-status" class="disc-status" role="status" aria-live="polite">Reading your listening record…</div><div class="ms-progress" role="progressbar" aria-label="Finding recommendations" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><i></i></div>
       <div id="disc-feature" class="disc-feature" aria-live="polite"></div>
       <div id="disc-artists" class="disc-artists"></div>
-    </section>
-    <section class="disc-section"><div class="disc-section__head"><div><span class="label">WHAT TO PLAY FIRST</span><h2>Start with a record</h2></div><span class="label">Album & artist matched</span></div>
-      <p class="muted">A starting record from each artist. Save one for later; a community score is only a side note when enough people have rated it.</p><div id="disc-album-status" class="disc-status" role="status" aria-live="polite">Finding artists first…</div><div id="disc-albums" class="disc-albums"></div>
+    </details>
+    <section class="disc-section"><div class="disc-section__head"><div><span class="label">FROM THE SAME CONNECTIONS</span><h2>More records to try</h2></div><span class="label">Album & artist matched</span></div>
+      <p class="muted">More matched records from the same selection. Your own saves and passes shape future picks; community scores stay secondary.</p><div id="disc-album-status" class="disc-status" role="status" aria-live="polite">Finding artists first…</div><div id="disc-albums" class="disc-albums"></div>
     </section>
     <div class="disc-lower"><section class="disc-section"><div class="disc-section__head"><div><span class="label">THE RECORD YOU KNOW</span><h2>What did you actually love?</h2></div></div><p class="muted">A play count cannot tell us that. Rate albums you already heard if you want your opinion to shape later picks.</p><label class="sr" for="disc-album-search">Find an album in your history</label><input id="disc-album-search" class="input" type="search" placeholder="Search your listened albums…" autocomplete="off"><div id="disc-listened"></div></section>
       <section class="disc-section"><div class="disc-section__head"><div><span class="label">KEPT FOR LATER</span><h2>Your shelf</h2></div><span class="label" id="disc-shelf-count"></span></div><div id="disc-shelf"></div><div class="disc-backup"><p>Saved artists and records influence the next recommendations. Your shelf stays in this browser; keep a copy for another device.</p><div><button class="btn btn--line btn--sm" type="button" data-disc-export>Export shelf</button><label class="btn btn--line btn--sm" for="disc-import">Import shelf</label><input id="disc-import" type="file" accept=".json,application/json" hidden></div></div></section></div>
     <p class="disc-method">Connections and artist tags: Last.fm. Album identities and community scores: MusicBrainz. The optional AI curator works from this candidate data and your listening summary; your raw plays stay here. Community scores stay separate from your own opinions.</p>`;
 
-  let alive = true, taste, pool = [], albums = [], curation = [], mode = 'for-you', selectedSeed = '', runCtrl;
+  let alive = true, taste, pool = [], albums = [], catalogue = [], starts = {}, curation = [], mode = 'for-you', selectedSeed = '', runCtrl;
   const editionKey = `liner.discover.edition:${ctx.pid}`;
   const lookup = new Map();
   const keepRated = new Set();
@@ -52,6 +53,28 @@ export function discoverView(ctx, banner) {
       <form data-disc-note="${key}"><label class="sr" for="note-${encodeURIComponent(key)}">Your note about ${esc(item.name)}</label><textarea id="note-${encodeURIComponent(key)}" name="note" maxlength="800" rows="3" placeholder="What stood out to you?">${esc(f.note || '')}</textarea><button type="submit" class="btn btn--line btn--sm">Save note</button></form></div></details></div>`;
   };
   const reason = (x) => x.sources.slice(0, 2).map((s) => s.name).join(' + ');
+  const explanation = (x) => usefulCuration(x.editorial,x) ? x.editorial : connectionReason(x);
+  const paintStarts = () => {
+    if (!alive || !taste) return;
+    starts=startingRecords(pool,albums,catalogue,taste,ctx.A,curation);
+    const labels={current:['01','FOLLOW YOUR ROTATION','A close connection'],explore:['02','TRY ANOTHER DIRECTION','A different starting point'],revisit:['03','FROM YOUR OWN ARCHIVE','Worth another listen']};
+    const rows=Object.values(starts).filter(Boolean);
+    $('#disc-starts',root).innerHTML=rows.length ? rows.map(x=>{
+      const label=labels[x.lane], album=x.album, track=x.track;
+      const item=remember(album?{kind:'album',name:album.name,artist:x.artist,mbid:album.group?.id || ''}:{kind:'artist',name:x.artist,artist:''});
+      const group=album?.group;
+      return `<article class="disc-start disc-start--${x.lane}"><div class="disc-start__mast"><span>${label[0]}</span><span class="label">${label[1]}</span></div>
+        <div class="disc-start__cover">${sleeve(album?.name || x.artist,x.artist,{size:260,kind:album?'album':'artist'})}</div>
+        <div class="disc-start__body"><span class="label">${album ? `${esc(group?.type || 'FROM YOUR HISTORY')}${group?.date?` · ${esc(group.date.slice(0,4))}`:''}` : 'START WITH A TRACK'}</span>
+        <h3>${esc(album?.name || track?.name || x.artist)}</h3><p class="disc-start__artist">${esc(x.artist)}</p>
+        <p class="disc-start__why">${esc(x.reason)}</p>
+        ${track ? `<div class="disc-start__track"><span class="label">${x.recorded?'YOUR MOST PLAYED TRACK':album?'OR TRY THIS TRACK':'START WITH THIS TRACK'}</span><a data-start-listen="${x.lane}" href="${spotifySearch(track.name,x.artist)}" target="_blank" rel="noopener"><b>${esc(track.name)}</b><span aria-hidden="true">↗</span></a><small>${x.recorded?`${num(track.plays)} plays in your record`:track.listeners?`${compact(track.listeners)} Last.fm track listeners · artist catalogue`:'From the artist’s Last.fm catalogue'}</small></div>`:''}
+        <div class="disc-start__actions"><a class="btn btn--sm" data-start-listen="${x.lane}" href="${spotifySearch(album?.name || track?.name || '',x.artist)}" target="_blank" rel="noopener">Find on Spotify ↗</a><div data-key="${esc(tasteKey(item.kind,item.name,item.artist))}"><button type="button" data-judge="saved" data-start-outcome="${x.lane}" aria-pressed="${feedback(item).status==='saved'}">${feedback(item).status==='saved'?'✓ Saved':'Save for later'}</button><button type="button" data-judge="hidden" data-start-outcome="${x.lane}">Pass</button></div></div>
+        ${group?.votes>=20?`<a class="disc-start__opinion" href="https://musicbrainz.org/release-group/${group.id}" target="_blank" rel="noopener">MusicBrainz ${group.rating?.toFixed(1)}/5 · ${num(group.votes)} ratings ↗</a>`:''}
+        ${album?`<details class="disc-start__opinions"><summary>Other opinions</summary><a href="https://www.albumoftheyear.org/search/?q=${encodeURIComponent(`${x.artist} ${album.name}`)}" target="_blank" rel="noopener">Find on Album of the Year ↗</a><a href="https://rateyourmusic.com/search?searchterm=${encodeURIComponent(`${x.artist} ${album.name}`)}&searchtype=l" target="_blank" rel="noopener">Find on Rate Your Music ↗</a></details>`:''}</div></article>`;
+    }).join('') : '<p class="empty">No starting record is ready yet. Your shelf and artist browser remain available.</p>';
+    hydrate($('#disc-starts',root));
+  };
   const status = (message, pct) => {
     if (!alive) return;
     $('#disc-status', root).textContent = message;
@@ -67,20 +90,23 @@ export function discoverView(ctx, banner) {
     const lead = picks[0];
     if (lead) {
       const item = remember({ kind: 'artist', name: lead.name, artist: '', mbid: lead.mbid });
-      $('#disc-feature', root).innerHTML = `<article class="disc-feature__inner"><div class="disc-feature__art">${sleeve(lead.name, lead.name, { size: 240, kind: 'artist' })}</div><div class="disc-feature__body"><span class="label">CHOSEN FROM YOUR CONNECTIONS</span><h3>${esc(lead.name)}</h3><p>${lead.editorial ? esc(lead.editorial) : `Last.fm connects this artist to <b>${esc(reason(lead))}</b>${lead.sources.length > 2 ? ` and ${lead.sources.length - 2} other artists in your record` : ''}.`}</p><div class="disc-feature__tags">${(lead.tags||[]).slice(0,3).map(t=>`<span>${esc(t)}</span>`).join('')}</div><div class="disc-feature__meta">${lead.audience ? `${compact(lead.audience)} Last.fm listeners` : 'Audience count unavailable'} <span>·</span> ${lead.sources.length} ${lead.sources.length === 1 ? 'connection' : 'connections'} <span>·</span> Not in your record</div><div class="disc-feature__links"><a class="link" href="${spotifyArtist(lead.name)}" target="_blank" rel="noopener">Listen on Spotify ↗</a><a class="link link--quiet" href="${lastfmArtist(lead.name)}" target="_blank" rel="noopener">Artist details ↗</a></div>${controls(item)}</div></article>`;
+      const track=catalogue.find(t=>normalize(t.artist)===normalize(lead.name));
+      $('#disc-feature', root).innerHTML = `<article class="disc-feature__inner"><div class="disc-feature__art">${sleeve(lead.name, lead.name, { size: 64, kind: 'artist' })}</div><div class="disc-feature__body"><h3>${esc(lead.name)}</h3><p>${esc(explanation(lead))}</p><div class="disc-feature__meta">${lead.audience ? `${compact(lead.audience)} Last.fm listeners` : 'Audience count unavailable'} <span>·</span> ${lead.sources.length} ${lead.sources.length === 1 ? 'connection' : 'connections'} <span>·</span> Not in your record</div><div class="disc-feature__links"><a class="link" href="${spotifySearch(track?.name||'',lead.name)}" target="_blank" rel="noopener">${track?`Start with ${esc(track.name)}`:'Find the artist'} ↗</a><a class="link link--quiet" href="${lastfmArtist(lead.name)}" target="_blank" rel="noopener">Artist details ↗</a></div>${controls(item)}</div></article>`;
     } else $('#disc-feature', root).innerHTML = '<p class="empty">No unheard artists matched this view. Change the distance or starting point.</p>';
     $('#disc-artists', root).innerHTML = picks.filter((x) => x !== lead).map((x, i) => {
       const item = remember({ kind: 'artist', name: x.name, artist: '', mbid: x.mbid });
-      return `<article class="disc-artist"><span class="disc-no">${String(i + 2).padStart(2, '0')}</span>${sleeve(x.name, x.name, { size: 54, kind: 'artist' })}<div class="disc-artist__body"><h3>${esc(x.name)}</h3><p>${x.editorial ? esc(x.editorial) : `From ${esc(reason(x))}${x.sources.length > 2 ? ` + ${x.sources.length - 2} more` : ''}`}</p></div><span class="disc-artist__audience">${x.audience ? `${compact(x.audience)} listeners` : 'New to you'}</span><a class="link link--quiet" href="${spotifyArtist(x.name)}" target="_blank" rel="noopener" aria-label="Find music by ${esc(x.name)}">Listen ↗</a>${controls(item)}</article>`;
+      const track=catalogue.find(t=>normalize(t.artist)===normalize(x.name));
+      return `<article class="disc-artist"><span class="disc-no">${String(i + 2).padStart(2, '0')}</span>${sleeve(x.name, x.name, { size: 54, kind: 'artist' })}<div class="disc-artist__body"><h3>${esc(x.name)}</h3><p>${esc(explanation(x))}</p>${track?`<a class="link" href="${spotifySearch(track.name,x.name)}" target="_blank" rel="noopener">Start with ${esc(track.name)} ↗</a>`:''}</div><span class="disc-artist__audience">${x.audience ? `${compact(x.audience)} listeners` : 'New to you'}</span><a class="link link--quiet" href="${spotifyArtist(x.name)}" target="_blank" rel="noopener" aria-label="Find music by ${esc(x.name)}">Listen ↗</a>${controls(item)}</article>`;
     }).join('');
     hydrate($('#disc-feature', root)); hydrate($('#disc-artists', root));
   };
   const paintAlbums = () => {
     if (!alive || !taste) return;
+    const opening=new Set(Object.values(starts).filter(x=>x?.album).map(x=>tasteKey('album',x.album.name,x.artist)));
     const visible = albums.filter((x) => {
       const own = feedback({ kind: 'album', name: x.name, artist: x.artist });
       const artistOwn = taste.items[tasteKey('artist', x.artist)];
-      return own.status !== 'hidden' && own.status !== 'known' && (!own.rating || keepRated.has(tasteKey('album', x.name, x.artist))) && artistOwn?.status !== 'hidden' && artistOwn?.status !== 'known' && !artistOwn?.rating;
+      return !opening.has(tasteKey('album',x.name,x.artist)) && own.status !== 'hidden' && own.status !== 'known' && (!own.rating || keepRated.has(tasteKey('album', x.name, x.artist))) && artistOwn?.status !== 'hidden' && artistOwn?.status !== 'known' && !artistOwn?.rating;
     });
     $('#disc-albums', root).innerHTML = visible.length ? visible.map((x, i) => {
       const item = remember({ kind: 'album', name: x.name, artist: x.artist, mbid: x.group.id });
@@ -110,9 +136,11 @@ export function discoverView(ctx, banner) {
     }).join('') : '<p class="empty">No album in this record matches that search.</p>';
     hydrate($('#disc-listened', root));
   };
-  const repaint = () => { paintArtists(); paintAlbums(); paintShelf(); paintListened(); };
+  const repaint = () => { paintStarts(); paintArtists(); paintAlbums(); paintShelf(); paintListened(); };
 
   root.addEventListener('click', async (event) => {
+    const listen=event.target.closest('[data-start-listen]');
+    if(listen) { recommendationOutcome(ctx.pid,starts[listen.dataset.startListen],'listen').catch(()=>{}); return; }
     const modeButton = event.target.closest('[data-disc-mode]');
     if (modeButton) { mode = modeButton.dataset.discMode; $$('[data-disc-mode]', root).forEach((b) => b.setAttribute('aria-pressed', String(b === modeButton))); paintArtists(); return; }
     const seedButton = event.target.closest('[data-disc-seed]');
@@ -143,7 +171,7 @@ export function discoverView(ctx, banner) {
     const old = taste.items[key] || {};
     const patch = control.dataset.judge ? { status: old.status === control.dataset.judge ? '' : control.dataset.judge }
       : { rating: old.rating === Number(control.dataset.rate) ? null : Number(control.dataset.rate) };
-    try { await setTasteItem(ctx.pid, item, patch); if (control.dataset.rate) keepRated.add(key); repaint(); }
+    try { await setTasteItem(ctx.pid, item, patch); if(control.dataset.startOutcome && patch.status) await recommendationOutcome(ctx.pid,starts[control.dataset.startOutcome],patch.status==='saved'?'save':patch.status==='hidden'?'pass':'known'); if (control.dataset.rate) keepRated.add(key); repaint(); }
     catch (e) { toast(e.message, 'bad'); control.disabled = false; }
   });
   root.addEventListener('submit', async (event) => {
@@ -177,20 +205,21 @@ export function discoverView(ctx, banner) {
     deepButton.innerHTML = 'Deep cuts <small>checking…</small>';
     const seeds = discoverySeeds(ctx.A, taste, Number(store.get(editionKey) || 0));
     $('#disc-seeds', root).innerHTML = `<span class="label">BASED ON</span><button type="button" data-disc-seed="" aria-pressed="true">All</button>${seeds.map((s) => `<button type="button" data-disc-seed="${esc(s.name)}" aria-pressed="false">${esc(s.name)}</button>`).join('')}`;
-    $('#disc-personal-copy',root).textContent=`Starting from ${seeds.slice(0,3).map(s=>s.name).join(', ')}${seeds.length>3?' and the rest of your rotation':''}. These artists have no plays in your saved record.`;
+    $('#disc-personal-copy',root).textContent=`Your latest rotation includes ${seeds.slice(0,3).map(s=>s.name).join(', ')}. Follow those connections, try another direction, or return to your own archive.`;
     if (!lastfm.isLive()) {
       status('Add a Last.fm API key in Settings to find new artists.', 0);
       $('#disc-feature',root).innerHTML='<p class="empty">Artist recommendations need a Last.fm API key. Your listening stats and saved shelf still work.</p>';
       $('#disc-album-status', root).innerHTML = '<a class="link" href="#/settings">Open Settings →</a>';
+      paintStarts();
       return;
     }
     const deadline=setTimeout(()=>controller.abort('timeout'),95000);
     try {
       const board=await buildRecommendations({...ctx,taste},{signal,edition:Number(store.get(editionKey)||0),onProgress:status});
       if(!alive||signal.aborted)return;
-      pool=board.pool;albums=board.albums;curation=board.curation||[];
-      if(board.warning){status(board.warning,100);paintArtists();paintAlbums();return;}
-      paintArtists();paintAlbums();
+      pool=board.pool;albums=board.albums;catalogue=board.catalogue||[];curation=board.curation||[];
+      if(board.warning){status(board.warning,100);paintStarts();paintArtists();paintAlbums();return;}
+      paintStarts();paintArtists();paintAlbums();
       $('#disc-album-status',root).textContent=`${albums.length} matched albums · ${curation.length?'recommendation notes prepared':'ranked from your artist connections'}`;
       status(`${pool.length} unheard candidates checked · saved ${new Date(board.at).toLocaleDateString('en',{month:'short',day:'numeric'})}`,100);
       Promise.all(albums.map((x) => critiqueCount(x.group.id))).then((counts) => {
@@ -203,6 +232,7 @@ export function discoverView(ctx, banner) {
     } catch (e) {
       if (!alive || (signal.aborted && signal.reason!=='timeout')) return;
       status(`Discovery paused: ${e.message}`, 0);
+      paintStarts();
       $('#disc-album-status', root).textContent = 'Your ratings and saved items still work. Rebuild picks to retry.';
       if(!pool.length)$('#disc-feature',root).innerHTML='<p class="empty">The recommendation checks could not finish. Your listening stats are ready; use “Prepare a different selection” to try again.</p>';
     } finally {

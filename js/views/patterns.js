@@ -3,6 +3,7 @@ import { onLeave } from '../core.js';
 import { topIn } from '../analysis.js';
 import { patterns, genreEvolution } from '../patterns.js';
 import { cachedArtist, artistInfo } from '../meta.js';
+import { audioPanelHTML, bindAudioPanel } from './audio.js';
 
 const METRICS = {
   plays: { label: 'Plays', unit: 'plays', explain: 'How much you listened each month.' },
@@ -20,7 +21,7 @@ export function patternsView(ctx, banner) {
   $('#tab').innerHTML = `${banner}
     <div class="subhead" style="margin-top:0"><div><span class="label">Your record, closer up</span><h2>The shape of your listening</h2><p class="muted">Track your activity, breadth, discovery and concentration month by month. Every bar comes from a recorded play.</p></div></div>
     <div class="pat-stats">
-      <div class="panel"><span class="label">Last 90 days</span><b>${num(data.recentPlays)}</b><small>recorded plays</small></div>
+      <div class="panel"><span class="label">Latest recorded 90 days</span><b>${num(data.recentPlays)}</b><small>recorded plays</small></div>
       <div class="panel"><span class="label">Your rotation</span><b>${num(data.recentArtists)}</b><small>artists in 90 days</small></div>
       <div class="panel"><span class="label">Discovery</span><b>${data.recentNewShare}%</b><small>recent plays from newly heard artists</small></div>
       <div class="panel"><span class="label">On days you listened</span><b>${data.playsPerActiveDay.toFixed(1)}</b><small>plays per active day, last 90 days</small></div>
@@ -39,7 +40,9 @@ export function patternsView(ctx, banner) {
         <p>Genres are based on artist tags, with coverage shown alongside the list. Happiness, energy, danceability, acousticness and key need track-level audio analysis; this listening log does not contain those measures.</p>
         <a class="link" href="${ctx.L.year(data.peak?.start ? new Date(data.peak.start).getFullYear() : new Date().getFullYear())}">Explore your biggest year →</a>
       </section>
-    </div>`;
+    </div><div class="pat-sound">${audioPanelHTML(ctx)}</div>`;
+
+  bindAudioPanel(ctx);
 
   const paint = () => {
     const metric = METRICS[selectedMetric];

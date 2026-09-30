@@ -4,11 +4,11 @@ import { ready, art, artistInfo, listeners } from './meta.js';
 import { write, AI_VERSION } from './ai.js';
 import { getTaste } from './taste.js';
 import { recordSignature, recordEvidence, dossierFacts, validateDossier } from './dossier.js';
-import { buildRecommendations, mapLimited } from './recommendations.js';
+import { buildRecommendations, mapLimited, RECOMMENDATION_VERSION } from './recommendations.js';
 import { isLive } from './sources/lastfm.js';
 
 const jobs = new Map(), packets = new Map(), subscribers = new Map();
-const signature = (A) => `${recordSignature(A)}:ai-${AI_VERSION}-${store.get('liner.ai') !== 'off'}:lfm-${isLive()}`;
+const signature = (A) => `${recordSignature(A)}:ai-${AI_VERSION}-${store.get('liner.ai') !== 'off'}:lfm-${isLive()}:${RECOMMENDATION_VERSION}`;
 export const preparationStatus = (pid) => jobs.get(pid) || null;
 const publish = (pid) => subscribers.get(pid)?.forEach(fn=>fn(jobs.get(pid)));
 export function watchPreparation(pid, fn) {
@@ -21,39 +21,53 @@ export async function preparedProfile(pid,A) {
   if(value?.signature!==signature(A)||Date.now()-value.at>(value.errors?.length?15*60e3:7*864e5))return null;
   packets.set(pid,value); return value;
 }
-export function startPreparation(ctx,{fresh=false}={}) {
+export function startPreparation(ctx,{fresh=false,services={}}={}) {
   const {pid,A}=ctx;
+  const io={ready,art,artistInfo,listeners,write,getTaste,buildRecommendations,...services};
   const existing=jobs.get(pid);
   if(existing?.state==='running'){
     if(existing.signature===signature(A))return existing;
     existing.cancelled=true;existing.controller.abort();
   }
   const controller=new AbortController();
-  const job={state:'running',signature:signature(A),started:Date.now(),progress:0,detail:'Reading the saved listening record',stages:{metadata:'waiting',notes:'waiting',recommendations:'waiting'},controller,errors:[]};
+  const job={state:'running',signature:signature(A),started:Date.now(),progress:0,detail:'Reading the saved listening record',stages:{metadata:'waiting',notes:'waiting',recommendations:'waiting'},controller,errors:[],saveTail:Promise.resolve()};
   jobs.set(pid,job); publish(pid);
-  const update=(stage,status,detail)=>{job.stages[stage]=status;if(detail)job.detail=detail;const complete=Object.values(job.stages).filter(x=>['done','unavailable','skipped'].includes(x)).length;job.progress=Math.max(job.progress,Math.round(complete/3*100));publish(pid);};
+  let packet;
+  const journalKey=`prep-work:v3:${pid}`;
+  const checkpoint=()=>{
+    if(!packet||job.cancelled||jobs.get(pid)!==job)return Promise.resolve();
+    const snapshot=JSON.parse(JSON.stringify({signature:job.signature,at:Date.now(),stages:job.stages,packet}));
+    job.saveTail=job.saveTail.then(()=>job.cancelled?null:idb.set(journalKey,snapshot)).catch(()=>{});return job.saveTail;
+  };
+  const update=(stage,status,detail)=>{job.stages[stage]=status;if(detail)job.detail=detail;const complete=Object.values(job.stages).filter(x=>['done','unavailable','skipped'].includes(x)).length;job.progress=Math.max(job.progress,Math.round(complete/3*100));publish(pid);if(['done','skipped'].includes(status))checkpoint();};
   const signal=controller.signal;
   // Optional remote services have a real deadline. Exact stats are already saved.
-  const deadline=setTimeout(()=>controller.abort(),100000);
+  const deadline=setTimeout(()=>controller.abort(),120000);
   job.promise=(async()=>{
     const saved=!fresh&&await preparedProfile(pid,A);
     if(saved){Object.keys(job.stages).forEach(s=>job.stages[s]='done');return saved;}
-    await ready();
+    await io.ready();
     const evidence=recordEvidence(A);
-    const packet={signature:signature(A),at:Date.now(),evidence,dossier:null,errors:[]};
+    const previous=!fresh&&await idb.get(journalKey);
+    const resumed=previous?.signature===job.signature&&Date.now()-previous.at<864e5;
+    packet={signature:signature(A),at:Date.now(),evidence,dossier:resumed?previous.packet?.dossier||null:null,errors:[]};
+    if(resumed)job.detail='Continuing your saved preparation';
     update('metadata','running','Preparing the artists, artwork and audience counts');
-    const tasks=[...A.artists.slice(0,30).map(a=>()=>listeners(a.name)),...A.artists.slice(0,16).map(a=>()=>artistInfo(a.name,true)),
-      ...A.albums.slice(0,10).map(a=>()=>art('album',a.album,a.artist)),...A.artists.slice(0,10).map(a=>()=>art('artist',a.name,a.name))];
+    const findingArtists=[...new Set(evidence.slice(0,6).flatMap(entry=>entry.artists||[entry.target?.name]).filter(Boolean))];
+    const tasks=[...A.artists.slice(0,30).map(a=>()=>io.listeners(a.name)),...A.artists.slice(0,24).map(a=>()=>io.artistInfo(a.name,true)),
+      ...A.albums.slice(0,10).map(a=>()=>io.art('album',a.album,a.artist)),...A.artists.slice(0,10).map(a=>()=>io.art('artist',a.name,a.name))];
+    tasks.push(...findingArtists.filter(name=>!A.artists.slice(0,10).some(a=>a.name===name)).map(name=>()=>io.art('artist',name,name)));
     let done=0;
-    await mapLimited(tasks,6,async(fn)=>{await fn();if(signal.aborted)return;done++;job.progress=Math.round(done/tasks.length*25);job.detail=`Artwork and artist checks · ${done}/${tasks.length}`;publish(pid);},signal);
+    if(!resumed||previous.stages?.metadata!=='done')await mapLimited(tasks,6,async(fn)=>{await fn();if(signal.aborted)return;done++;job.progress=Math.round(done/tasks.length*25);job.detail=`Artwork and artist checks · ${done}/${tasks.length}`;publish(pid);},signal);
     update('metadata','done');
-    const taste=await getTaste(pid);
+    const taste=await io.getTaste(pid);
     const notes=(async()=>{
       if(store.get('liner.ai')==='off'){update('notes','skipped');return;}
+      if(packet.dossier){update('notes','done','Your saved listening notes are ready');return;}
       update('notes','running','Reading changes across your history');
       try{
         const input=dossierFacts(A,evidence);
-        const raw=await write('profile',input,{signal,fresh});
+        const raw=await io.write('profile',input,{signal,fresh});
         packet.dossier=validateDossier(raw,A,evidence,input);
         if(!packet.dossier)throw new Error('The profile writing did not match its evidence.');
         update('notes','done');
@@ -62,22 +76,23 @@ export function startPreparation(ctx,{fresh=false}={}) {
     const recommendations=(async()=>{
       update('recommendations','running');
       try{
-        const board=await buildRecommendations({...ctx,taste},{signal,fresh,edition:Number(store.get(`liner.discover.edition:${pid}`)||0),onProgress:(detail,pct)=>{job.detail=detail;job.progress=Math.max(job.progress,25+Math.round(pct*.65));publish(pid);}});
+        const board=await io.buildRecommendations({...ctx,taste},{signal,fresh,edition:Number(store.get(`liner.discover.edition:${pid}`)||0),onProgress:(detail,pct)=>{job.detail=detail;job.progress=Math.max(job.progress,25+Math.round(pct*.65));publish(pid);}});
         if(board.warning){packet.errors.push(board.warning);update('recommendations','unavailable');}
         else {if(board.aiError)packet.errors.push('Recommendations are ready; the extra curator writing is unavailable.');update('recommendations','done');}
       }catch(e){packet.errors.push('Recommendations could not finish. They can be rebuilt in Discover.');update('recommendations','unavailable');}
     })();
     await Promise.allSettled([notes,recommendations]);
-    if(jobs.get(pid)===job){packets.set(pid,packet); await idb.set(`prepared:v2:${pid}`,packet);}
+    if(jobs.get(pid)===job&&!job.cancelled){packet.at=Date.now();packets.set(pid,packet); await idb.set(`prepared:v2:${pid}`,packet);}
     return packet;
   })().catch(async(error)=>{
-    const packet={signature:signature(A),at:Date.now(),evidence:recordEvidence(A),dossier:null,errors:[error.name==='AbortError'?'Preparation reached its time limit. Your exact listening stats are ready.':error.message]};
+    packet??={signature:signature(A),at:Date.now(),evidence:recordEvidence(A),dossier:null,errors:[]};
+    packet.errors.push(error.name==='AbortError'?'Preparation reached its time limit. Your exact listening stats are ready.':error.message);
     Object.keys(job.stages).forEach(s=>{if(!['done','skipped','unavailable'].includes(job.stages[s]))job.stages[s]='unavailable';});
-    if(jobs.get(pid)===job){packets.set(pid,packet);await idb.set(`prepared:v2:${pid}`,packet);}return packet;
+    if(jobs.get(pid)===job&&!job.cancelled){packet.at=Date.now();packets.set(pid,packet);await idb.set(`prepared:v2:${pid}`,packet);}return packet;
   }).then(packet=>{
     job.state='done';job.progress=100;job.packet=packet;job.errors=packet.errors;job.detail='Your profile is ready';publish(pid);
     if(!job.cancelled){store.set(`liner.prepared.once:${pid}`,'1');if(state.pid===pid)rerender();}return packet;
-  }).finally(()=>clearTimeout(deadline));
+  }).finally(async()=>{clearTimeout(deadline);await job.saveTail;if(!job.cancelled&&jobs.get(pid)===job)await idb.del(journalKey);});
   return job;
 }
 
@@ -90,4 +105,5 @@ export async function forgetPreparation(pid) {
   jobs.delete(pid); packets.delete(pid);
   for(const suffix of ['prepared.once','setup.preview'])store.set(`liner.${suffix}:${pid}`,null);
   await idb.del(`prepared:v2:${pid}`);
+  await idb.del(`prep-work:v3:${pid}`);
 }

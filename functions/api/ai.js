@@ -3,10 +3,11 @@
 // Keys live in Cloudflare secrets (NVIDIA_API_KEY, OPENROUTER_API_KEY) and never reach
 // the browser. Prompts are fixed here, so this can't be used as a general chatbot.
 // Answers are cached, so the same request is only paid for once.
+import { validStructuredWriting } from '../lib/writing-quality.js';
 
 // Fixed OpenRouter models keep the voice testable. NVIDIA's hosted developer
 // endpoint is for local evaluation only; public traffic must never use it.
-const CACHE_VERSION = 'v14';
+const CACHE_VERSION = 'v17';
 // Thinking models spend part of max_tokens on their private reasoning. Leave enough
 // room for the short visible answer, otherwise it returns an empty message.
 const EDITOR = { via: 'openrouter', model: 'qwen/qwen3.8-27b:free', timeout: 12000, maxTokens: 850 };
@@ -30,7 +31,7 @@ Avoid praise, corporate wording, and stock phrases: "eclectic", "sonic journey",
 const TASKS = {
   profile: {
     max: 1200, json: true,
-    prompt: (f) => `Prepare this listener's profile before they open it. Read the evidence for changes, repeated habits, and discoveries. Return JSON only with this shape: {"notes":"one specific paragraph under 75 words connecting two supplied facts","observations":[{"id":"an evidence ID","text":"one useful sentence grounded ONLY in that ID's facts"}],"years":[{"year":"exact supplied year","text":"one short sentence from that year's supplied summary"}],"eras":[{"artist":"exact supplied era artist","title":"short title","line":"one factual sentence"}]}. Use at most four observations, the supplied year summaries, and at most four supplied eras. For an observation, add a relationship or implication supported by the extra facts. Do not merely shorten or repeat the original answer. If there is nothing to add, omit that observation. Do not produce generic praise or restate a heading. Omit an item if the evidence is thin. No invented artists, dates, counts, genres, or audio properties. Every numeral must appear in the relevant supplied facts.\n\nEvidence:\n${f}`,
+    prompt: (f) => `Prepare this listener's profile before they open it. The findings are already calculated and ranked; write only the useful relationship between them. Return JSON only with this shape: {"notes":"one paragraph under 55 words connecting two DISTINCT supplied findings about DIFFERENT artists or habits","observations":[{"id":"an evidence ID","text":"one useful sentence grounded ONLY in that ID's facts"}],"years":[{"year":"exact supplied year","text":"one short observation connecting that year's supplied monthly leaders, repeat discoveries or activity pattern"}],"eras":[{"artist":"exact supplied era artist","title":"short title","line":"one factual sentence"}]}. The note must explain a supported relationship between enduring habits, returning favorites, discoveries or unusual changes. Lead with what that relationship reveals about the recorded listening, in a sentence without numbers; then give the supporting facts. Merely joining two statistics with while is insufficient. Do not make a list of rising artist counts. Mention at most two artists and at most two numeric facts in the note. Use at most four observations and at most four supplied eras. For an observation, add context supplied under that ID; if it would only repeat the visible heading or counts, omit it. Privately check each sentence for unsupported names, numbers or musical descriptions, remove repetition, and return the checked result. Every numeral must appear in the relevant supplied facts. Do not infer personality, feelings, sound or reasons why listening changed. For year writing, use the supplied month-to-month or discovery context instead of repeating the total and leading artist. First and last monthly leaders do not prove continuous leadership; use the supplied list of monthly leaders. Coverage may be partial; never compare a partial year total with a full year as a decline. Omit thin evidence.\n\nEvidence:\n${f}`,
   },
   curate: {
     max: 750, json: true,
@@ -188,8 +189,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
           if (task.json) {
             let structured;
             try { structured = JSON.parse(result.text); } catch { throw new Error(`${step.model} invalid structured response`); }
-            if (body.task === 'profile' && (typeof structured?.notes !== 'string' || !Array.isArray(structured.observations))) throw new Error(`${step.model} incomplete profile`);
-            if (body.task === 'curate' && !Array.isArray(structured?.picks)) throw new Error(`${step.model} incomplete curation`);
+            if (!validStructuredWriting(body.task,structured,facts)) throw new Error(`${step.model} unsupported structured writing`);
           }
           console.log('ai: served', body.task, step.model, `${Date.now() - started}ms`);
           const out = JSON.stringify(result);

@@ -6,6 +6,7 @@ import * as lastfm from '../sources/lastfm.js';
 import * as spotify from '../sources/spotify.js';
 import { cancelSync, cancelAllSync } from '../sync.js';
 import { cancelAllPreparation } from '../preparation.js';
+import { cancelAllAudioAudits } from './audio.js';
 import { clearMetadata } from '../meta.js';
 
 const SOURCE = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export' };
@@ -130,6 +131,7 @@ export function renderSettings() {
     if (!armed) { armed = true; e.target.textContent = 'Tap again to clear everything'; e.target.style.color = 'var(--bad)'; return; }
     await cancelAllSync();
     await cancelAllPreparation();
+    await cancelAllAudioAudits();
     clearMetadata();
     await idb.clear();
     Object.keys(localStorage).filter((k) => k.startsWith('liner.')).forEach((k) => store.set(k, null));

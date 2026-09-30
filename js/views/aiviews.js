@@ -1,12 +1,12 @@
 // AI panels: liner notes and roast, "ask your stats", era names, year write-ups.
-import { $, $$, esc, monthYear, num } from '../ui.js';
+import { $, $$, esc, monthYear, num, sleeve } from '../ui.js';
 import { onLeave } from '../core.js';
 import { topIn } from '../analysis.js';
 import { write, facts, reveal, loadingLines, paragraphs } from '../ai.js';
 import { store } from '../ui.js';
 import { DEMO_NOTES, DEMO_ROAST } from '../sources/demo.js';
 import { answerQuestion } from '../questions.js';
-import { recordEvidence } from '../dossier.js';
+import { recordEvidence, selectFindings } from '../dossier.js';
 const aiOff = () => store.get('liner.ai') === 'off';
 
 const TITLES = { notes: 'Your liner notes', roast: 'Your taste, roasted' };
@@ -84,15 +84,34 @@ export function bindNotes(ctx) {
   run();
 }
 
+function findingDestination(ctx,entry) {
+  return entry.target?.kind==='artist'?ctx.L.artist(entry.target.name):entry.target?.kind==='album'?ctx.L.artist(entry.target.artist):entry.target?.kind==='year'?ctx.L.year(entry.target.year):entry.target?.kind==='song'?ctx.L.song(entry.target.name,entry.target.artist):'';
+}
+
+function findingVisual(entry) {
+  const v=entry.visual;
+  if(v?.kind==='baseline'){const max=Math.max(1,v.recent,v.previousMax||0),format=n=>`${Number(n||0).toFixed(1)}pp`;return `<div class="finding-baseline"><div><span>Earlier rise</span><i><b style="width:${(v.previousMax||0)/max*100}%"></b></i><strong>${format(v.previousMax)}</strong></div><div><span>Latest rise</span><i><b style="width:${v.recent/max*100}%"></b></i><strong>${format(v.recent)}</strong></div></div><small class="record-basis">Change in listening share · ${num(v.comparisons)} earlier comparisons</small>`;}
+  if(entry.comparison){const rows=v?.leaders?.slice(0,3)||[{name:entry.target?.name||'Artist',before:entry.comparison.before,plays:entry.comparison.now}];const count=r=>r.now??r.plays??0,max=Math.max(1,...rows.flatMap(r=>[r.before||0,count(r)]));return `<div class="finding-bars" aria-label="Plays in two equal 90-day periods"><div class="finding-bars__key"><span>Previous 90 days</span><span>Latest 90 days</span></div>${rows.map(r=>`<div class="finding-bars__row"><b>${esc(r.name)}</b><span><i style="width:${(r.before||0)/max*100}%"></i><em>${num(r.before)}</em></span><span><i style="width:${count(r)/max*100}%"></i><em>${num(count(r))}</em></span></div>`).join('')}</div>`;}
+  if(v?.episodes?.length){const episodes=v.episodes.slice(-4);return `<ol class="finding-returns" aria-label="Recorded returns">${episodes.map(r=>`<li><span>${monthYear(r.at)}</span><b>${num(r.gapDays)} days away</b><small>${num(r.plays)} plays on return</small></li>`).join('')}</ol>`;}
+  if(v?.kept!=null&&v?.total){return `<div class="finding-cohort"><b>${num(v.kept)}<small> / ${num(v.total)}</small></b><span>new artists became repeat listening</span><div class="finding-cohort__scale"><i style="width:${Math.min(100,v.kept/v.total*100)}%"></i></div>${v.artists?.length?`<div class="finding-cohort__artists">${v.artists.slice(0,3).map(a=>`${sleeve(a.name,a.name,{size:34,kind:'artist'})}<span>${esc(a.name)}</span>`).join('')}</div>`:''}</div>`;}
+  if(v?.points?.length){const points=v.points,max=Math.max(1,...points.map(p=>p.value));return `<div class="finding-series" aria-label="${esc(v.unit||'plays')} over time">${points.map(p=>`<span title="${esc(p.label||monthYear(p.at))}: ${num(p.value)} ${esc(v.unit||'plays')}"><i style="height:${p.value/max*100}%"></i></span>`).join('')}</div><div class="finding-series__dates"><span>${points[0].label||monthYear(points[0].at)}</span><span>${points.at(-1).label||monthYear(points.at(-1).at)}</span></div>`;}
+  if(v?.recent!=null){const max=Math.max(1,v.recent,v.previousMax||0);return `<div class="finding-baseline"><div><span>Previous peak</span><i><b style="width:${(v.previousMax||0)/max*100}%"></b></i><strong>${num(v.previousMax)}</strong></div><div><span>Latest period</span><i><b style="width:${v.recent/max*100}%"></b></i><strong>${num(v.recent)}</strong></div></div>`;}
+  if(v?.tracks?.length){const max=Math.max(1,...v.tracks.map(t=>t.value));return `<ol class="finding-tracks">${v.tracks.slice(0,4).map(t=>`<li><b>${esc(t.name)}</b><i><span style="width:${t.value/max*100}%"></span></i><strong>${num(t.value)}</strong></li>`).join('')}</ol>`;}
+  if(entry.stats?.length)return `<dl class="finding-numbers">${entry.stats.slice(0,3).map(([label,value])=>`<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>`;
+  return '';
+}
+
+export function findingHTML(ctx,entry,{compact=false,index=0}={}) {
+  const dest=findingDestination(ctx,entry),artist=entry.target?.kind==='artist'?entry.target.name:entry.target?.artist||entry.artists?.[0];
+  const text=aiOff()?'':ctx.prepared?.dossier?.observations?.[entry.id];
+  const words=s=>new Set(String(s||'').toLowerCase().match(/[a-zÀ-ÿ]{4,}/g)||[]),base=words(`${entry.title} ${entry.detail} ${entry.basis}`),written=words(text),extra=[...written].filter(w=>!base.has(w));
+  const note=text&&extra.length>=3&&extra.length/Math.max(1,written.size)>=.25;
+  return `<article class="listening-finding${compact?' listening-finding--compact':''} listening-finding--${esc(entry.family||entry.id)}" data-finding="${esc(entry.id)}"><div class="listening-finding__caption"><span>${esc(entry.label)}</span>${compact?'':`<span>${String(index+1).padStart(2,'0')}</span>`}</div><div class="listening-finding__opening">${artist?`<a class="listening-finding__art" href="${ctx.L.artist(artist)}" aria-label="Explore ${esc(artist)}">${sleeve(entry.target?.kind==='album'?entry.target.name:artist,artist,{size:compact?64:108,kind:entry.target?.kind==='album'?'album':'artist'})}</a>`:''}<h3>${dest?`<a href="${dest}">${esc(entry.title)} <span>↗</span></a>`:esc(entry.title)}</h3></div><p>${esc(entry.detail)}</p>${findingVisual(entry)}${note?`<details class="finding-context"><summary>A closer read</summary><p>${esc(text)}</p></details>`:''}<small class="record-basis">${esc(entry.basis)}</small></article>`;
+}
+
 export function listeningRead(ctx,limit=6) {
-  const evidence=(ctx.prepared?.evidence||recordEvidence(ctx.A)).slice(0,limit);
-  const observations=store.get('liner.ai')==='off'?{}:ctx.prepared?.dossier?.observations||{};
-  // Keep a writer's shorter restatement from repeating the counts just above it.
-  const words=text=>new Set(String(text||'').toLowerCase().match(/[a-zÀ-ÿ]{4,}/g)||[]);
-  const addsContext=(text,entry)=>{const base=words(`${entry.title} ${entry.detail} ${entry.basis}`),written=words(text);const extra=[...written].filter(w=>!base.has(w));return extra.length>=2&&extra.length/Math.max(1,written.size)>=.2;};
-  const visibleObservations=Object.fromEntries(evidence.filter(entry=>observations[entry.id]&&addsContext(observations[entry.id],entry)).map(entry=>[entry.id,observations[entry.id]]));
-  const destination=(entry)=>entry.target?.kind==='artist'?ctx.L.artist(entry.target.name):entry.target?.kind==='year'?ctx.L.year(entry.target.year):entry.target?.kind==='song'?ctx.L.song(entry.target.name,entry.target.artist):'';
-  return `<section class="record-read c-12"><div class="record-read__head"><span class="label">ALREADY IN YOUR RECORD</span><h2>${limit<=2?'Worth a closer look':'A few things worth opening'}</h2><p>Prepared from your listening, with the evidence one click away.</p></div><div class="record-read__entries">${evidence.map(entry=>`<article><span class="label">${esc(entry.label)}</span><h3>${destination(entry)?`<a href="${destination(entry)}">${esc(entry.title)} ↗</a>`:esc(entry.title)}</h3><p>${esc(entry.detail)}</p>${entry.comparison?`<div class="record-read__comparison" aria-label="Artist plays across two recorded 90-day periods">${[['Before',entry.comparison.before],['Latest',entry.comparison.now]].map(([label,n])=>`<div><span>${label}</span><i><b style="width:${Math.max(n?2:0,n/Math.max(1,entry.comparison.before,entry.comparison.now)*100)}%"></b></i><strong>${num(n)}</strong></div>`).join('')}</div>`:''}${visibleObservations[entry.id]?`<p class="record-read__note">${esc(visibleObservations[entry.id])}<small>Written from this evidence</small></p>`:''}<small>${esc(entry.basis)}</small></article>`).join('')}</div></section>`;
+  const evidence=selectFindings(recordEvidence(ctx.A),{limit});
+  return `<section class="listening-report c-12" aria-label="Findings from your listening"><div class="listening-report__entries">${evidence.map((entry,index)=>findingHTML(ctx,entry,{index})).join('')}</div></section>`;
 }
 
 /* ---------- Ask ---------- */

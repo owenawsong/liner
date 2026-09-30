@@ -14,12 +14,13 @@ New-Item -ItemType Directory -Path $stage -Force | Out-Null
 $siteName = 'site-' + [guid]::NewGuid().ToString('N')
 $site = Join-Path $stage $siteName
 New-Item -ItemType Directory -Path $site | Out-Null
-foreach ($name in @('index.html', 'styles.css', 'sleeve.css', 'config.js', 'manifest.webmanifest', 'sw.js')) {
+foreach ($name in @('index.html', 'styles.css', 'sleeve.css', 'profile.css', 'discover.css', 'analysis.css', 'audio.css', 'config.js', 'manifest.webmanifest', 'sw.js')) {
   Copy-Item -LiteralPath (Join-Path $project $name) -Destination (Join-Path $site $name)
 }
 foreach ($name in @('assets', 'js')) {
   Copy-Item -LiteralPath (Join-Path $project $name) -Destination (Join-Path $site $name) -Recurse
 }
+Copy-Item -LiteralPath (Join-Path $project 'docs\audio-pilot.json') -Destination (Join-Path $site 'audio-pilot.json')
 $functionSource = Join-Path $project 'functions'
 foreach ($file in Get-ChildItem -LiteralPath $functionSource -Recurse -File) {
   $relative = $file.FullName.Substring($functionSource.Length).TrimStart('\', '/')

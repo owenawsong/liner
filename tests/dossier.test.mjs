@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 globalThis.location = { protocol:'http:', hostname:'localhost' };
 globalThis.window = {};
 const { analyze } = await import('../js/analysis.js');
-const { recordEvidence, dossierFacts, validateDossier, validateCuration, recordSignature } = await import('../js/dossier.js');
+const { recordEvidence, dossierFacts, validateDossier, validateCuration, recordSignature,yearWritingFacts,addsFindingContext } = await import('../js/dossier.js');
 const { mapLimited, boardSignature } = await import('../js/recommendations.js');
 const { rankCandidates, discoverySeeds } = await import('../js/discovery.js');
 const { tasteKey } = await import('../js/taste.js');
@@ -24,6 +24,27 @@ test('prepared writing rejects invented totals and isolates each observation to 
     {id:'shift',text:'Recent gained 9999 plays.'},
     {id:'invented',text:'A made-up observation.'}],years:[],eras:[]},A,evidence,facts);
   assert.deepEqual(result.observations,{shift:'Recent took over the rotation.'});
+});
+test('year writing receives actual monthly rotation and partial archive coverage',()=>{
+  const facts=yearWritingFacts(A,A.years[0]);
+  assert.match(facts,/First active month Jan, led by Earlier; last active month Jun, led by Recent/);
+  assert.match(facts,/partial year/);
+  assert.match(facts,/2 artists across 180 recorded days/);
+  const evidence=recordEvidence(A),input=dossierFacts(A,evidence);
+  const result=validateDossier({notes:'Recent moved into the lead.',observations:[],years:[{year:2025,text:'Your rotation moved from Earlier in Jan to Recent in Jun.'}]},A,evidence,input);
+  assert.match(result.years[2025],/Earlier.*Recent/);
+});
+test('repeating visible totals adds no generated finding commentary',()=>{
+  const entry={title:'Frank Ocean, across 10 recorded years',detail:'5,639 recorded plays overall, with at least ten plays in each of those years.',basis:'Measured years may be incomplete.'};
+  assert.equal(addsFindingContext('Frank Ocean appears in 10 recorded years with 5,639 plays overall.',entry),false);
+  assert.equal(addsFindingContext('This persistence is supported across separate years, rather than a single concentrated run.',entry),true);
+});
+test('matching endpoint leaders cannot support an invented claim of continuous year leadership',()=>{
+  const rows=[0,1,2].flatMap(month=>Array.from({length:20},(_,i)=>({t:new Date(2025,month,i+1).getTime(),artist:month===1?'Other':'Anchor',track:'Track',album:'Album'})));
+  const history=analyze(rows,{minMs:0}),evidence=recordEvidence(history),facts=dossierFacts(history,evidence);
+  const result=validateDossier({notes:'Anchor led the first and last active months.',observations:[],years:[{year:2025,text:'Anchor led the year from Jan through Mar.'}]},history,evidence,facts);
+  assert.deepEqual(result.years,{});
+  assert.match(yearWritingFacts(history,history.years[0]),/Monthly leaders included Anchor, Other/);
 });
 test('curation accepts only unique candidates with numbers supplied for that artist',()=>{
   const candidates=['A','B','C'].map((name,i)=>({id:`artist_${name}`,name,evidence:`${name} linked to Earlier. Audience ${i+10}. Tags: rock.`}));

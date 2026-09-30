@@ -3,7 +3,7 @@ import { lowerBound } from './analysis.js';
 
 const DAY = 864e5;
 
-export function patterns(A, now = Date.now()) {
+export function patterns(A, now = A.to + 1) {
   const first = new Map(A.artists.map((a) => [a.name, a.first]));
   const months = A.months.slice(-24).map((m) => ({
     start: m.start, year: m.y, month: m.m, plays: 0, artists: new Map(), newPlays: 0, newArtists: new Set(),

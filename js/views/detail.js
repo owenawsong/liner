@@ -4,6 +4,7 @@ import { hrefFor, onLeave } from '../core.js';
 import { topIn, lowerBound } from '../analysis.js';
 import { rankList, insightCard } from '../components.js';
 import { artistInfo, cachedArtist } from '../meta.js';
+import { exclusionButton } from './filters.js';
 
 const DAY = 864e5;
 const enc = encodeURIComponent;
@@ -73,6 +74,7 @@ export function artistPage(ctx, name) {
         <span class="label">Artist · No. ${idx + 1} of ${num(A.artists.length)}</span>
         <h1>${esc(a.name)}</h1>
         <div class="dhead__meta" id="artist-meta">${metaChips(info)}</div>
+        ${exclusionButton('artist',a.name)}
       </div>
     </header>
     <div class="stats">
@@ -151,6 +153,7 @@ export function songPage(ctx, artist, track) {
         <span class="label">Song · No. ${idx + 1} of ${num(A.tracks.length)}</span>
         <h1>${esc(t.track)}</h1>
         <div class="dhead__meta"><a href="${L.artist(t.artist)}">${esc(t.artist)}</a>${t.album ? `<span>${esc(t.album)}</span>` : ''}</div>
+        ${exclusionButton('track',t.track,t.artist)}
       </div>
     </header>
     <div class="stats">
@@ -314,7 +317,7 @@ export function onThisDay(A, L) {
 /* ---------- Search ---------- */
 export function mountSearch(root, A, L) {
   if (!root || !A) return;
-  root.innerHTML = `<div class="search"><label class="sr" for="q">Search your history</label><input id="q" class="search__input" type="search" placeholder="Search this record" autocomplete="off"><div class="search__out" hidden></div></div>`;
+  root.innerHTML = `<div class="search"><label class="sr" for="q">Search your history</label><input id="q" class="search__input" type="search" placeholder="Search" autocomplete="off"><div class="search__out" hidden></div></div>`;
   const input = $('#q', root), out = $('.search__out', root);
   const run = () => {
     const q = input.value.trim().toLowerCase();

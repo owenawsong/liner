@@ -174,8 +174,13 @@ export async function artistContext(artist, signal) {
   const d = await call('artist.getinfo', { artist, autocorrect: 0 }, signal);
   const a = d.artist;
   if (!a || String(a.name).toLowerCase() !== artist.toLowerCase()) return { tags: [] };
-  return { tags: list(a.tags?.tag).map((x) => x.name).filter((x) => !/^seen live|favorite|^\d/i.test(x)).slice(0, 5),
+  return { tags: musicalTags(list(a.tags?.tag).map((x) => x.name)),
     mbid: a.mbid || '', url: a.url || '' };
+}
+
+export function musicalTags(tags) {
+  return tags.filter(x=>typeof x==='string' && !/^(seen live|favorites?|favourites?|female vocalists?|male vocalists?|awesome|beautiful|cool|my |under |american|british|canadian|all$|albums? |artists? |\d{4}$)/i.test(x))
+    .slice(0,5);
 }
 
 // Last.fm ranks these by global plays. Its album MBID is often a MusicBrainz
@@ -186,6 +191,20 @@ export async function topAlbums(artist, signal, limit = 8) {
   return list(d.topalbums?.album).map((a) => ({ name: a.name, artist: a.artist?.name || artist,
     mbid: a.mbid || '', plays: Number(a.playcount || 0), url: a.url || '' }))
     .filter((a) => a.name && a.artist.toLowerCase() === artist.toLowerCase());
+}
+
+// A starting track must be returned for the requested artist. Never substitute
+// a text-generated title or a result from Last.fm autocorrection.
+export function catalogueTracks(data, artist) {
+  return list(data?.toptracks?.track).map((t) => ({name:t.name, artist:t.artist?.name || '',
+    mbid:t.mbid || '', plays:Number(t.playcount || 0), listeners:Number(t.listeners || 0), url:t.url || ''}))
+    .filter((t) => t.name && t.artist.toLowerCase() === artist.toLowerCase()
+      && Number.isFinite(t.plays) && Number.isFinite(t.listeners) && t.plays>=0 && t.listeners>=0)
+    .map((t) => ({...t,url:/^https:\/\/www\.last\.fm\//i.test(t.url) ? t.url : ''}));
+}
+export async function topTracks(artist, signal, limit = 5) {
+  if (!isLive()) return [];
+  return catalogueTracks(await call('artist.gettoptracks',{artist,autocorrect:0,limit},signal),artist);
 }
 
 function simTop(name, period, kind) {

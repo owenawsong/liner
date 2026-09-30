@@ -40,6 +40,10 @@ export function discoverySeeds(A, taste, edition = 0) {
     x.rating >= 4 ? .8 + .1 * (x.rating - 4) : .8,
     x.rating >= 4 ? 'rated highly by you' : 'saved by you'));
   const pool = [...map.values()].sort((a, b) => b.weight - a.weight);
+  pool.forEach((seed) => {
+    seed.recentPlays = recent.find((a) => normalize(a.name) === normalize(seed.name))?.plays || 0;
+    seed.lifetimePlays = A.artists.find((a) => normalize(a.name) === normalize(seed.name))?.n || 0;
+  });
   const pinned = [...new Set(favorites.map((x) => normalize(x.kind === 'album' ? x.artist : x.name)))]
     .map((key) => map.get(key)).filter(Boolean).slice(0, 5);
   const rest = pool.filter((x) => !pinned.includes(x));
@@ -74,7 +78,8 @@ export async function candidatePool(A, seeds, signal, onProgress = () => {}) {
       item.score += seed.weight * Math.pow(match.match, 1.25);
       item.match = Math.max(item.match, match.match);
       if (!item.mbid) item.mbid = match.mbid;
-      item.sources.push({ name: seed.name, match: match.match, why: [...seed.why], weight: seed.weight });
+      item.sources.push({ name: seed.name, match: match.match, why: [...seed.why], weight: seed.weight,
+        recentPlays:seed.recentPlays || 0,lifetimePlays:seed.lifetimePlays || 0 });
       map.set(key, item);
     }
   }
@@ -111,13 +116,55 @@ export function rankCandidates(pool, taste, mode = 'for-you', keepRated = new Se
   }).sort((a, b) => b.score - a.score);
   const picked = [], used = new Map();
   for (const x of scored) {
-    const lead = [...x.sources].sort((a, b) => b.match - a.match)[0]?.name;
+    const lead = connectionFor(x)?.name;
     if ((used.get(lead) || 0) >= 3) continue;
     picked.push(x); used.set(lead, (used.get(lead) || 0) + 1);
     if (picked.length === 12) break;
   }
-  if (picked.length < 12) picked.push(...scored.filter((x) => !picked.includes(x)).slice(0, 12 - picked.length));
   return picked;
+}
+
+export const connectionFor = (x) => [...(x.sources || [])].sort((a,b) =>
+  ((b.weight || 1)*b.match)-((a.weight || 1)*a.match))[0];
+
+export function connectionReason(x) {
+  const lead = connectionFor(x);
+  if (!lead) return 'A new artist from the checked Last.fm catalogue.';
+  const history = lead.recentPlays ? `${lead.name} has ${lead.recentPlays.toLocaleString('en')} plays in your latest 90 days.`
+    : lead.lifetimePlays ? `${lead.name} has ${lead.lifetimePlays.toLocaleString('en')} plays in your history.`
+    : `${lead.name} is ${lead.why?.includes('saved by you') ? 'on your saved shelf' : 'one of your rated favorites'}.`;
+  const other = [...(x.sources || [])].filter(s=>s.name!==lead.name).sort((a,b)=>b.weight*b.match-a.weight*a.match)[0];
+  return `${history} Last.fm listeners also connect ${x.name} to ${lead.name}${other ? ` and ${other.name}` : ''}.`;
+}
+
+export function usefulCuration(reason, candidate) {
+  if (typeof reason !== 'string' || reason.trim().length < 30) return false;
+  const text = normalize(reason), tags=(candidate.tags || []).filter(t=>normalize(t).length>2);
+  const tagCount=tags.filter(t=>text.includes(normalize(t))).length;
+  const ties=(candidate.sources || []).some(s=>text.includes(normalize(s.name)));
+  // Genre lists are metadata, not an explanation of why this is worth trying.
+  const opening=normalize(reason.slice(0,100));
+  const openingTags=tags.filter(t=>opening.includes(normalize(t))).length;
+  return tagCount < 3 && !(tagCount >= 2 && !ties) && openingTags < 2 && !/^(genres?|tags?)\s*:/i.test(reason)
+    && !/\b(offers?|provides?|boasts?|blends? a|unique blend|perfect for|fans of these genres)\b/i.test(reason);
+}
+
+export function revisitRecord(A, taste) {
+  const boundary = A.to - 90 * DAY, recent = new Set((A.rows || []).filter(r=>r.t>=boundary)
+    .map(r=>tasteKey('album',r.album,r.artist)));
+  const album = A.albums.find(a=>a.n>=15 && !recent.has(tasteKey('album',a.album,a.artist))
+    && !['hidden'].includes(taste.items[tasteKey('album',a.album,a.artist)]?.status)
+    && !(taste.items[tasteKey('album',a.album,a.artist)]?.rating && taste.items[tasteKey('album',a.album,a.artist)]?.rating <= 2)
+    && taste.items[tasteKey('artist',a.artist)]?.status!=='hidden'
+    && !(taste.items[tasteKey('artist',a.artist)]?.rating && taste.items[tasteKey('artist',a.artist)]?.rating <= 2));
+  if (!album) return null;
+  const rows=A.rows.filter(r=>r.album===album.album&&r.artist===album.artist);
+  const last=rows.at(-1)?.t;
+  const tracks=new Map();rows.forEach(r=>tracks.set(r.track,(tracks.get(r.track)||0)+1));
+  const track=[...tracks].sort((a,b)=>b[1]-a[1])[0];
+  return {lane:'revisit',artist:album.artist,recorded:true,album:{name:album.album,artist:album.artist,plays:album.n,group:null},
+    track:track?{name:track[0],artist:album.artist,recorded:true,plays:track[1],url:''}:null,
+    reason:`You played this record ${album.n.toLocaleString('en')} times, but not in your latest 90 days.${last ? ` Last heard ${new Date(last).toLocaleDateString('en',{month:'short',year:'numeric'})}.` : ''}`};
 }
 
 export async function albumsFor(artists, A, taste, signal, onProgress = () => {}) {

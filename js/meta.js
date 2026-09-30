@@ -41,6 +41,25 @@ const itunesQ = queue(3200);
 const mbQ = queue(1100);
 const inflight = new Map();
 
+// Sound audits share the existing MusicBrainz queue instead of starting a second
+// stream against its one-request-per-second limit. Only verified results cache.
+export async function recordingForTrack(track,signal) {
+  const {audioTrackKey,recordingSearchURL,selectRecording,audioJSON}=await import('./audio-coverage.js');
+  await loading;
+  const key=`recording:v1:${audioTrackKey(track)}`,cached=mem.get(key);
+  if(cached&&Date.now()-cached.at<(cached.status==='matched'?30:7)*864e5)return cached;
+  const pending=mbQ(async()=>{
+    if(signal?.aborted)return null;
+    try{const data=await audioJSON(recordingSearchURL(track),{signal});const result={...selectRecording(track,data),at:Date.now()};if(caching){mem.set(key,result);save();}return result;}
+    catch(e){return {status:'error',error:e.message,at:Date.now()};}
+  });
+  if(!signal)return await pending||{status:'error',error:'Lookup did not complete'};
+  let stop;
+  const canceled=new Promise((_,reject)=>{stop=()=>reject(new DOMException('Audit paused','AbortError'));signal.addEventListener('abort',stop,{once:true});if(signal.aborted)stop();});
+  try{return await Promise.race([pending,canceled])||{status:'error',error:'Lookup did not complete'};}
+  finally{signal.removeEventListener('abort',stop);}
+}
+
 async function getJSON(url) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 9000);
