@@ -174,6 +174,16 @@ export function monthDetail(A, idx) {
   return { month: mo, artists: topIn(A, 'artists', mo.start, to, 5), tracks: topIn(A, 'tracks', mo.start, to, 5) };
 }
 
+export function monthStory(A, idx) {
+  const month = A.months[idx], to = new Date(month.y, month.m + 1, 1).getTime();
+  const fromIndex = lowerBound(A.rows, month.start), toIndex = lowerBound(A.rows, to);
+  const activeDays = new Set(A.rows.slice(fromIndex, toIndex).map((r) => new Date(r.t).toDateString())).size;
+  const newArtists = A.artists.filter((a) => a.first >= month.start && a.first < to).length;
+  const now = new Date();
+  return { month, activeDays, newArtists, previous: A.months[idx - 1] || null, yearAgo: A.months[idx - 12] || null,
+    current: month.y === now.getFullYear() && month.m === now.getMonth() };
+}
+
 /* ---------- Insights ---------- */
 function weekly(times, center, span_ = 13) {
   const wk = 7 * DAY;

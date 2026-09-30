@@ -18,12 +18,29 @@ function request(facts, { local = false, seed = '' } = {}) {
     body: JSON.stringify({ task: 'notes', facts, seed }),
   });
 }
-function context(input, env = { OPENROUTER_API_KEY: 'test-or', NVIDIA_API_KEY: 'test-nv' }) {
+const openBudget = { idFromName: (name) => name, get: () => ({ fetch: async () => new Response('', { status: 200 }) }) };
+function context(input, env = { OPENROUTER_API_KEY: 'test-or', NVIDIA_API_KEY: 'test-nv', AI_BUDGET: openBudget }) {
   return { request: input, env, waitUntil() {} };
 }
 function success(model) {
-  return Response.json({ model, choices: [{ message: { content: 'Radiohead fell from 90 plays to 10, while SZA rose from 4 to 44.' } }] });
+  return Response.json({ model, choices: [{ message: { content: 'Radiohead fell in the supplied record while SZA rose in the same period.' } }] });
 }
+
+test('rejects an invented number and tries the next writer', async () => {
+  const models = [];
+  globalThis.fetch = async (_url, options) => {
+    const model = JSON.parse(options.body).model;
+    models.push(model);
+    const content = model.includes('gemma-4')
+      ? 'The artist gained 999 plays during the recorded period.'
+      : 'The artist gained 23 plays during the recorded period.';
+    return Response.json({ model, choices: [{ message: { content } }] });
+  };
+  const response = await onRequestPost(context(request('Grounding test: the artist gained 23 plays.')));
+  assert.equal(response.status, 200);
+  assert.equal(models.length, 2);
+  assert.match((await response.json()).text, /23 plays/);
+});
 
 test('public traffic uses OpenRouter and reuses a cached answer', async () => {
   const urls = [], payloads = [];
@@ -52,6 +69,15 @@ test('a shared budget denial prevents public provider calls', async () => {
   const response = await onRequestPost(context(request('Budget denial test: 95 plays logged.'),
     { OPENROUTER_API_KEY: 'test-or', AI_BUDGET: budget, AI_BUDGET_REQUIRED: '1' }));
   assert.equal(response.status, 429);
+  assert.equal(calls, 0);
+});
+
+test('public AI writing fails closed without a shared budget binding', async () => {
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return success('unused'); };
+  const response = await onRequestPost(context(request('Missing public budget: 57 plays logged.'),
+    { OPENROUTER_API_KEY: 'test-or' }));
+  assert.equal(response.status, 503);
   assert.equal(calls, 0);
 });
 

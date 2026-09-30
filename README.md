@@ -30,13 +30,14 @@ The public data access decision is in [docs/DATA_ACCESS_DECISION.md](docs/DATA_A
 
 ## Explore
 
-- Overview, Discover, Top 100 with plays or minutes and date filters, Timeline, Evolution, Deep dive charts, Insights, Clock, and Data tabs
+- Overview, Discover, Top 100 with plays or minutes and date filters, Timeline, Evolution, Deep dive charts, Insights, Clock, and Data tabs. Timeline month details now include active days, first-heard artists, a prior-month and year-ago comparison, and previous/next controls.
 - Discover combines Last.fm artist similarities and album popularity with your listening history. It lets you follow any seed artist, rotate through longer-tail seeds, and find deeper cuts using listener counts checked against spelling variants. It filters artists and albums you already heard, checks album identities against MusicBrainz, and treats the sparse MusicBrainz community scores as secondary context, showing a score only when at least 20 people rated it. Saves and optional high ratings influence later picks; hiding or marking an item as known removes it. Export or import your personal shelf as JSON. Recommendations and ratings stay in this browser.
 - Evolution compares equal 30-, 90-, or 365-day periods, showing rising artists, new discoveries, older favorites and a taste-shift index. On demand, Last.fm similarity suggests artists missing from your record.
-- Deep dive charts show 24 months of activity, artist breadth, discovery share, top-artist concentration, and genre/style tags with coverage. Last.fm imports save page checkpoints and resume after an interrupted setup.
-- Automatic eras, year pages with a shareable image, and detailed artist and song pages
+- Deep dive charts show 24 months of activity, artist breadth, discovery share, top-artist concentration, and artist-tag style trends by year with visible coverage. Last.fm imports save page checkpoints and resume after an interrupted setup.
+- Automatic eras, year pages with a shareable image, and detailed artist and song pages. Artist pages trace first play, first repeat month, peak month, and recent listening.
 - Search, genres, listening anniversaries, and compare
-- Optional AI liner notes, evolution explanations, era names, year writing, roasts, and questions. Writing appears automatically where relevant and uses cached results; turning AI off in Settings leaves the listening analysis available.
+- The mainstream score waits for a fixed set of leading-artist audience checks and requires at least five matches covering 70% of their plays. The score stays still while deeper artists are checked separately.
+- Optional AI liner notes, evolution explanations, era names, year writing, roasts, and question commentary. Common questions about artists, dates, years, skips, and late nights are calculated directly from the saved history, then AI can add a short note from the same evidence. Exact answers continue to work with AI off or unavailable. Writing appears automatically where relevant and uses cached results.
 - Themes, local profile management, play-count rules, and an installable PWA with an offline app shell
 - Local profile-picture overrides; Last.fm photos and authorized Spotify photos appear when available. Mood and musical key are not inferred from listening logs, which do not contain reliable audio features.
 

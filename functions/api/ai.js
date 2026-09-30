@@ -6,7 +6,7 @@
 
 // Fixed OpenRouter models keep the voice testable. NVIDIA's hosted developer
 // endpoint is for local evaluation only; public traffic must never use it.
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v10';
 // Thinking models spend part of max_tokens on their private reasoning. Leave enough
 // room for the short visible answer, otherwise it returns an empty message.
 const EDITOR = { via: 'openrouter', model: 'qwen/qwen3.8-27b:free', timeout: 12000, maxTokens: 850 };
@@ -28,7 +28,7 @@ Avoid praise, corporate wording, and stock phrases: "eclectic", "sonic journey",
 const TASKS = {
   notes: {
     max: 320,
-    prompt: (f) => `Write one or two short liner-note paragraphs (at most 95 words total). Lead with a specific artist-level change or contrast, not total plays or "Your listening". Name the relevant artists and a number or year. Add a second paragraph only if there is a different specific observation. Do not restate the overall play count or add a filler conclusion. Never guess how the songs sound or how the listener felt.\n\nFacts:\n${f}`,
+    prompt: (f) => `Write one compact liner-note paragraph (at most 85 words). Find a connection between an older pattern and a recent change, or a clear reversal within the record. Open with that change. Support it with two distinct facts from different parts of the record. Explain the relationship instead of listing unrelated statistics. If the facts are thin, write one precise sentence. Do not restate total plays, conclude with filler, or guess how songs sound or how the listener felt.\n\nFacts:\n${f}`,
   },
   year: {
     max: 260,
@@ -43,19 +43,19 @@ const TASKS = {
     prompt: (f) => `For each era below, give it a short evocative title (2 to 5 words, not just the artist's name) and one sentence (under 20 words). Reply as JSON only: [{"artist":"...","title":"...","line":"..."}].\n\nEras and context:\n${f}`,
   },
   ask: {
-    max: 220,
-    prompt: (f, q) => `Answer the listener's question using only these facts. If the facts don't contain the answer, say so plainly and suggest where in Sleeve they could look (Timeline, Top, Insights, Clock, or an artist page). Two or three sentences.\n\nFacts:\n${f}\n\nQuestion: ${q}`,
+    max: 160,
+    prompt: (f, q) => `Sleeve already calculated the answer shown below. Add one short, useful observation about its evidence. Do not repeat the headline, invent a number or name, infer emotion, or contradict the calculation. If the evidence offers no further observation, say what the coverage limits. At most two sentences.\n\nVerified answer and evidence:\n${f}\n\nListener's question: ${q}`,
   },
 };
 
-// Best-effort local protection. A public deployment also needs an account-level
-// Cloudflare rate rule or durable quota; isolate memory is not a global budget.
+// Per-visitor isolate protection supplements the required public shared budget.
+// An account-level Cloudflare rate rule should reject abuse before this route.
 const hits = new Map();
 const inflight = new Map();
 const cooldowns = new Map();
-async function reserveOpenRouter(env) {
+async function reserveOpenRouter(env, localPreview) {
   if (!env.AI_BUDGET) {
-    if (env.AI_BUDGET_REQUIRED !== '1') return;
+    if (localPreview && env.AI_BUDGET_REQUIRED !== '1') return;
     const error = new Error('AI budget is not configured');
     error.budget = true;
     throw error;
@@ -88,10 +88,16 @@ function clean(text) {
     .trim();
 }
 
-async function call(step, env, messages, max) {
+function groundedNumbers(text, facts) {
+  const numbers = (value) => [...String(value).matchAll(/\b\d[\d,]*(?:\.\d+)?\b/g)].map((match) => match[0].replaceAll(',', ''));
+  const allowed = new Set(numbers(facts));
+  return numbers(text).every((value) => allowed.has(value));
+}
+
+async function call(step, env, messages, max, localPreview) {
   const key = step.via === 'nvidia' ? env.NVIDIA_API_KEY : env.OPENROUTER_API_KEY;
   if (!key) throw new Error(`no key for ${step.via}`);
-  if (step.via === 'openrouter') await reserveOpenRouter(env);
+  if (step.via === 'openrouter') await reserveOpenRouter(env, localPreview);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), step.timeout);
   try {
@@ -166,7 +172,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
         if ((cooldowns.get(step.model) || 0) > Date.now()) continue;
         const started = Date.now();
         try {
-          const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max);
+          const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max, localPreview);
+          if (!groundedNumbers(result.text, facts)) throw new Error(`${step.model} unsupported number`);
           console.log('ai: served', body.task, step.model, `${Date.now() - started}ms`);
           const out = JSON.stringify(result);
           waitUntil?.(cache.put(cacheKey, new Response(out, { headers: { 'Cache-Control': 'public, max-age=604800' } })).catch(() => {}));

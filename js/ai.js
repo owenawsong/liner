@@ -14,7 +14,7 @@ async function key(s) {
 }
 
 export async function write(task, facts, { question = '', fresh = false, signal } = {}) {
-  const k = `ai:v7:${task}:${await key(`${facts}|${question}`)}`;
+  const k = `ai:v10:${task}:${await key(`${facts}|${question}`)}`;
   if (!fresh) {
     if (local.has(k)) return local.get(k);
     const saved = await idb.get(k);

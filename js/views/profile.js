@@ -1,6 +1,6 @@
 import { $, $$, esc, avatar, sleeve, trackSleeve, num, monthYear, longMonth, fullDate, ago, icon, eq, toast, store, idb } from '../ui.js';
 import { SOURCES, state, view, onLeave, go, rerender, hrefFor, profiles, getArchive, setArchive, clearArchive, analysisFor, setMinMs } from '../core.js';
-import { topIn, monthDetail, lowerBound } from '../analysis.js';
+import { topIn, monthDetail, monthStory, lowerBound } from '../analysis.js';
 import { health, healthLine, trackRows, rankList, statStrip, timeline, bindTimeline, heatmap, heatLegend, hoursChart, daysChart, insightCard, dropzone, bindDrops, sourceBadge } from '../components.js';
 import { handleFiles, keepSpotifyPlays } from '../actions.js';
 import { autoSync, startSync, cancelSync, cancelAllSync, watchSync, syncStatus } from '../sync.js';
@@ -578,7 +578,7 @@ function timelineTab(ctx) {
   while (sel > 0 && !A.months[sel].n) sel--;
   $('#tab').innerHTML = `${banner(ctx)}
     <section class="panel">
-      <div class="panel__head"><h2>Month by month</h2><span class="label">${monthYear(A.from)} to ${monthYear(A.to)} · pick a month</span></div>
+      <div class="panel__head"><h2>Month by month</h2><span class="label">${monthYear(A.from)} to ${monthYear(A.to)} · pick a bar or use the month controls</span></div>
       <div id="tl">${timeline(A, { height: 240, selected: sel })}</div>
       <div id="month"></div>
     </section>
@@ -601,6 +601,13 @@ function timelineTab(ctx) {
     sel = i;
     $$('.tl__bar').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.i) === i)));
     $('#month').innerHTML = monthHTML(A, i, ctx.L);
+    $$('[data-month-step]', $('#month')).forEach((button) => button.addEventListener('click', () => {
+      const next = sel + Number(button.dataset.monthStep);
+      if (next < 0 || next >= A.months.length) return;
+      pick(next);
+      $(`.tl__bar[data-i="${next}"]`, $('#tl'))?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      $('#month h3')?.focus();
+    }));
     hydrate($('#month'));
   };
   bindTimeline($('#tl'), A, pick);
@@ -625,11 +632,16 @@ function patternsTab(ctx) {
 
 function monthHTML(A, i, L = {}) {
   const d = monthDetail(A, i);
-  if (!d.month.n) return `<p class="empty">No plays in ${longMonth(d.month.start)}.</p>`;
-  return `<div class="month" style="border-top:1px solid var(--line);padding-top:20px">
-    <div><div class="panel__head" style="margin-bottom:10px"><h3 style="font:500 22px/1.1 var(--f-display);letter-spacing:-.03em">${longMonth(d.month.start)}</h3><span class="label">${num(d.month.n)} plays</span></div>${rankList(d.artists, { size: 32, link: L.rank })}</div>
-    <div><div class="panel__head" style="margin-bottom:10px"><span class="label" style="margin-top:8px">Top songs that month</span></div>${rankList(d.tracks, { kind: 'tracks', size: 32, link: L.rank })}</div>
-  </div>`;
+  const s = monthStory(A, i), m = d.month;
+  const comparisons = [s.previous && { label: 'Previous month', value: s.previous.n, name: longMonth(s.previous.start) }, { label: 'Selected month', value: m.n, name: longMonth(m.start) }, s.yearAgo && { label: 'A year earlier', value: s.yearAgo.n, name: longMonth(s.yearAgo.start) }].filter(Boolean);
+  const max = Math.max(1, ...comparisons.map((c) => c.value));
+  const headline = m.n ? `${m.topArtist} led with ${num(m.topN)} of ${num(m.n)} plays.` : 'No plays were recorded in this month.';
+  return `<section class="month-record" aria-label="${longMonth(m.start)} listening detail">
+    <div class="month-record__head"><div><span class="label">MONTH ${i + 1} / ${A.months.length}${s.current ? ' · STILL IN PROGRESS' : ''}</span><h3 tabindex="-1">${longMonth(m.start)}</h3><p>${esc(headline)}${m.n && s.newArtists ? ` You first heard ${num(s.newArtists)} ${s.newArtists === 1 ? 'artist' : 'artists'} in this record that month.` : ''}</p></div><div class="month-record__nav"><button type="button" class="btn btn--line btn--sm" data-month-step="-1" aria-label="Previous month"${i === 0 ? ' disabled' : ''}>← Previous</button><button type="button" class="btn btn--line btn--sm" data-month-step="1" aria-label="Next month"${i === A.months.length - 1 ? ' disabled' : ''}>Next →</button></div></div>
+    <div class="month-record__facts"><div><b>${num(m.n)}</b><span>plays</span></div><div><b>${num(s.activeDays)}</b><span>days with music</span></div><div><b>${num(s.newArtists)}</b><span>artists first heard</span></div><div><b>${m.n ? Math.round(m.topN / m.n * 100) : 0}%</b><span>led by the top artist</span></div></div>
+    <div class="month-record__compare"><div><span class="label">PUT IT IN CONTEXT</span><p>${s.current ? 'This month is still in progress. Compare its totals with that in mind.' : 'Full calendar months, compared using recorded plays.'}</p></div><div class="month-record__bars">${comparisons.map((c) => `<div class="month-record__bar"><span>${c.label}<small>${c.name}</small></span><i aria-hidden="true"><b style="width:${Math.max(c.value ? 3 : 0, Math.round(c.value / max * 100))}%"></b></i><strong>${num(c.value)}</strong></div>`).join('')}</div></div>
+    ${m.n ? `<div class="month-record__lists"><div><span class="label">ARTISTS THAT MONTH</span>${rankList(d.artists, { size: 32, link: L.rank })}</div><div><span class="label">SONGS THAT MONTH</span>${rankList(d.tracks, { kind: 'tracks', size: 32, link: L.rank })}</div></div>` : ''}
+  </section>`;
 }
 
 /* ---------- Insights ---------- */

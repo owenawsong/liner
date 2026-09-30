@@ -5,9 +5,16 @@ import { topIn } from '../analysis.js';
 import { write, facts, reveal, loadingLines, paragraphs } from '../ai.js';
 import { store } from '../ui.js';
 import { DEMO_NOTES, DEMO_ROAST } from '../sources/demo.js';
+import { answerQuestion } from '../questions.js';
 const aiOff = () => store.get('liner.ai') === 'off';
 
 const TITLES = { notes: 'Your liner notes', roast: 'Your taste, roasted' };
+const fallbackNote = (A) => {
+  const first = A.years[0], latest = A.years.at(-1);
+  if (!first || !latest) return `Your record contains ${num(A.plays)} plays. More listening will reveal its changes over time.`;
+  if (first.y === latest.y) return `${first.topArtist} leads your ${first.y} record with ${num(first.topArtistN)} plays. Your timeline shows how that year unfolded month by month.`;
+  return `${first.topArtist} led your ${first.y} listening with ${num(first.topArtistN)} plays. ${latest.topArtist} leads ${latest.y} with ${num(latest.topArtistN)}. Explore the years below to see what changed between them.`;
+};
 
 export function notesPanel(A, isDemo = false) {
   if (aiOff()) return '';
@@ -58,7 +65,7 @@ export function bindNotes(ctx) {
       $('[data-again]', root).hidden = false;
     } catch (e) {
       if (!alive || mine !== request || e.name === 'AbortError') return;
-      body.innerHTML = `<p class="ai__error">${esc(e.message)} <button type="button" class="link" data-retry>Try again</button></p>`;
+      body.innerHTML = `<p class="ai__text">${esc(fallbackNote(ctx.A))}</p><p class="faint" style="font-size:13px;margin-top:12px">Calculated from your record. Extra writing is unavailable right now. <button type="button" class="link" data-retry>Try again</button></p>`;
       $('[data-retry]', body).addEventListener('click', () => run(true));
     }
   };
@@ -73,7 +80,6 @@ export function bindNotes(ctx) {
 
 /* ---------- Ask ---------- */
 export function askPanel(A) {
-  if (aiOff()) return '';
   const y = A.years.length > 1 ? A.years[A.years.length - 2].y : A.years[0].y;
   const who = A.artists[Math.min(3, A.artists.length - 1)]?.name;
   const chips = [
@@ -82,10 +88,10 @@ export function askPanel(A) {
     'How has my taste changed over the years?',
     A.skipRate != null ? 'Which artist do I skip the most?' : 'What do I listen to late at night?',
   ].filter(Boolean);
-  return `<section class="panel ask" id="ask">
+  return `<section class="panel ask" id="ask"><div class="panel__head"><div><span class="label">Answers from your plays</span><h2>Ask your record</h2></div></div><p class="muted">Sleeve calculates the answer from your saved history. When writing is on, it can add a short note from the same evidence.</p>
     <form class="ask__form" novalidate>
       <label class="sr" for="ask-q">Ask about your listening</label>
-      <input id="ask-q" class="ask__input" placeholder="Ask anything about your listening…" maxlength="200" autocomplete="off">
+      <input id="ask-q" class="ask__input" placeholder="Try an artist, month, year, skips or late nights…" maxlength="200" autocomplete="off">
       <button class="btn btn--ink" type="submit">Ask</button>
     </form>
     <div class="ask__chips">${chips.map((c) => `<button type="button" class="chip chip--line" data-q="${esc(c)}">${esc(c)}</button>`).join('')}</div>
@@ -97,24 +103,38 @@ export function bindAsk(ctx) {
   const root = $('#ask');
   if (!root) return;
   const input = $('#ask-q', root), out = $('.ask__out', root);
-  const f = facts(ctx.A, ctx.p, { detailed: true });
   let request = 0, pending;
   onLeave(() => pending?.abort());
+  const extraIsGrounded = (text, evidence) => {
+    const numbers = (s) => s.match(/\b\d[\d,]*(?:\.\d+)?%?/g) || [];
+    const allowed = new Set(numbers(evidence));
+    return numbers(text).every((value) => allowed.has(value));
+  };
   const ask = async (q) => {
     if (!q.trim()) return;
     pending?.abort();
     pending = new AbortController();
     const mine = ++request;
     input.value = q;
-    out.innerHTML = `<div class="ask__q">${esc(q)}</div>${loadingLines}`;
+    const answer = answerQuestion(ctx.A, q);
+    if (!answer) {
+      out.innerHTML = `<div class="ask__q">${esc(q)}</div><p class="ask__help">I can calculate artist and song histories, months and years, discoveries, skips from Spotify history, and listening hours. Try one of the examples above.</p>`;
+      return;
+    }
+    const href = answer.target?.kind === 'artist' ? ctx.L.artist(answer.target.name) : answer.target?.kind === 'year' ? ctx.L.year(answer.target.year) : answer.target?.kind === 'song' ? ctx.L.song(answer.target.name, answer.target.artist) : '';
+    out.innerHTML = `<div class="ask__q">${esc(q)}</div><div class="ask__answer"><span class="label">FROM YOUR RECORD</span><h3>${esc(answer.title)}</h3><p>${esc(answer.detail)}</p>${answer.stats.length ? `<dl>${answer.stats.map(([label, value]) => `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>` : ''}${href ? `<a class="link" href="${href}">Explore the evidence ↗</a>` : ''}<small>${esc(answer.basis)}</small></div>${!aiOff() && ctx.source !== 'demo' ? '<div class="ask__aside" aria-live="polite"><span class="label">A little more context</span><span class="faint">Writing from the evidence above…</span></div>' : ''}`;
+    if (aiOff() || ctx.source === 'demo' || !$('.ask__aside', out)) return;
     try {
-      const text = await write('ask', f, { question: q, signal: pending.signal });
+      const text = await write('ask', answer.facts, { question: q, signal: pending.signal });
       if (mine !== request || !root.isConnected) return;
-      out.innerHTML = `<div class="ask__q">${esc(q)}</div><p class="ai__text"></p>`;
-      reveal($('.ai__text', out), text);
+      const aside = $('.ask__aside', out);
+      if (!aside) return;
+      if (!extraIsGrounded(text, answer.facts)) { aside.remove(); return; }
+      aside.innerHTML = '<span class="label">A little more context</span><p class="ai__text"></p>';
+      reveal($('.ai__text', aside), text);
     } catch (e) {
-      if (mine !== request || e.name === 'AbortError' || !root.isConnected) return;
-      out.innerHTML = `<div class="ask__q">${esc(q)}</div><p class="ai__error">${esc(e.message)}</p>`;
+      if (mine !== request || !root.isConnected) return;
+      $('.ask__aside', out)?.remove();
     }
   };
   $('form', root).addEventListener('submit', (e) => { e.preventDefault(); ask(input.value); });

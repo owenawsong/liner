@@ -1,7 +1,7 @@
 import { $, $$, esc, num, monthYear, pct } from '../ui.js';
 import { onLeave } from '../core.js';
 import { topIn } from '../analysis.js';
-import { patterns } from '../patterns.js';
+import { patterns, genreEvolution } from '../patterns.js';
 import { cachedArtist, artistInfo } from '../meta.js';
 
 const METRICS = {
@@ -86,7 +86,10 @@ export function patternsView(ctx, banner) {
       tags.set(tag, (tags.get(tag) || 0) + artist.plays);
     }
     const genres = [...tags].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const tagByArtist = new Map(topArtists.map((artist) => [artist.name, cachedArtist(artist.name)?.tags?.[0]]).filter(([, tag]) => tag));
+    const trend = genreEvolution(ctx.A, tagByArtist);
+    const trendHTML = trend.genres.length && trend.years.length > 1 ? `<div class="genre-history"><div class="genre-history__head"><span class="label">HOW THOSE STYLES MOVED</span><p>Each row is one year. Pale space includes untagged artists and styles outside these four.</p></div><div class="genre-history__legend">${trend.genres.map((genre, i) => `<span><i style="background:var(--c${i})"></i>${esc(genre.name)}</span>`).join('')}</div><div class="genre-history__rows">${trend.years.map((year) => `<div class="genre-history__row"><b>${year.year}</b><div role="img" aria-label="${esc(`${year.year}: ${year.segments.map((part) => `${num(part.plays)} plays tagged ${part.name}`).join(', ')}; ${num(year.matched)} of ${num(year.plays)} plays matched artist tags`)}">${year.segments.map((part, i) => `<i style="width:${year.plays ? part.plays / year.plays * 100 : 0}%;background:var(--c${i})"></i>`).join('')}</div><small>${year.plays ? Math.round(year.matched / year.plays * 100) : 0}% tagged</small></div>`).join('')}</div></div>` : '';
     root.innerHTML = `<p class="faint">Tagged artists account for ${ctx.A.plays ? (covered / ctx.A.plays * 100).toFixed(1) : '0.0'}% of your recorded plays. Checked ${topArtists.length} leading artists (${num(topPlays)} plays).</p>
-      ${genres.length ? `<ol class="pat-genres">${genres.map(([name, plays]) => `<li><span><b>${esc(name)}</b><small>${num(plays)} plays</small></span><i style="width:${Math.round(plays / genres[0][1] * 100)}%"></i></li>`).join('')}</ol>` : '<p class="empty">No genre tags were available for these artists.</p>'}`;
+      ${genres.length ? `<ol class="pat-genres">${genres.map(([name, plays]) => `<li><span><b>${esc(name)}</b><small>${num(plays)} plays</small></span><i style="width:${Math.round(plays / genres[0][1] * 100)}%"></i></li>`).join('')}</ol>${trendHTML}` : '<p class="empty">No genre tags were available for these artists.</p>'}`;
   })();
 }

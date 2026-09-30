@@ -53,6 +53,8 @@ export function artistPage(ctx, name) {
   const a = A.artists[idx];
   const counts = perMonth(A, a.times);
   const peakI = counts.indexOf(Math.max(...counts));
+  const repeatI = counts.findIndex((count) => count >= 3);
+  const recent90 = a.times.filter((t) => t >= A.to - 90 * DAY).length;
   let ms = 0, known = 0;
   for (const r of A.rows) if (r.artist === a.name && r.ms != null) { ms += r.ms; known++; }
   const hours = (ms + (a.n - known) * 3.4 * 60000) / 3.6e6;
@@ -79,8 +81,15 @@ export function artistPage(ctx, name) {
       <div><b>${A.hasMs && known === a.n ? '' : '≈'}${num(hours)}</b><span>hours</span></div>
       <div><b>${plural(activeYears, 'year')}</b><span>you've played them in</span></div>
     </div>
-    <section class="panel" style="margin-top:16px">
-      <div class="panel__head"><h2>Your plays over time</h2><span class="label">Peak: ${longMonth(A.months[peakI].start)}, ${num(counts[peakI])} plays</span></div>
+    <section class="panel artist-journey" style="margin-top:16px">
+      <div class="panel__head"><div><span class="label">FROM FIRST PLAY TO NOW</span><h2>Your history with ${esc(a.name)}</h2></div><span class="label">${num(a.n)} recorded plays</span></div>
+      <div class="artist-journey__steps">
+        <div><span>01 / FIRST HEARD</span><b>${monthYear(a.first)}</b><small>${esc(a.firstTrack)} on ${fullDate(a.first)}</small></div>
+        <div><span>02 / IN ROTATION</span><b>${repeatI >= 0 ? monthYear(A.months[repeatI].start) : 'Still unfolding'}</b><small>${repeatI >= 0 ? `${num(counts[repeatI])} plays that month` : 'No month has three plays yet'}</small></div>
+        <div><span>03 / BIGGEST MONTH</span><b>${monthYear(A.months[peakI].start)}</b><small>${num(counts[peakI])} plays</small></div>
+        <div><span>04 / LAST 90 DAYS</span><b>${num(recent90)} plays</b><small>${recent90 ? `Most recent: ${fullDate(a.last)}` : 'Not in your recent rotation'}</small></div>
+      </div>
+      <p class="artist-journey__caption">Each bar is a calendar month. The first and most recent months may be incomplete.</p>
       ${monthBars(A, counts)}
     </section>
     <div class="grid" style="margin-top:16px">
@@ -305,7 +314,7 @@ export function onThisDay(A, L) {
 /* ---------- Search ---------- */
 export function mountSearch(root, A, L) {
   if (!root || !A) return;
-  root.innerHTML = `<div class="search"><label class="sr" for="q">Search your history</label><input id="q" class="search__input" type="search" placeholder="Search ${num(A.artists.length)} artists and ${num(A.tracks.length)} songs" autocomplete="off"><div class="search__out" hidden></div></div>`;
+  root.innerHTML = `<div class="search"><label class="sr" for="q">Search your history</label><input id="q" class="search__input" type="search" placeholder="Search this record" autocomplete="off"><div class="search__out" hidden></div></div>`;
   const input = $('#q', root), out = $('.search__out', root);
   const run = () => {
     const q = input.value.trim().toLowerCase();

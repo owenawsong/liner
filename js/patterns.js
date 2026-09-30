@@ -39,3 +39,22 @@ export function patterns(A, now = Date.now()) {
     playsPerActiveDay: activeDays.size ? recentPlays / activeDays.size : 0,
     recentNewShare: recentPlays ? Math.round(recentNewPlays / recentPlays * 100) : 0 };
 }
+
+// Artist tags are a proxy for styles, not a measurement of each recording.
+// Keep the unmatched share visible so thin metadata cannot look like a trend.
+export function genreEvolution(A, tagByArtist, limit = 4) {
+  const totals = new Map();
+  const years = new Map(A.years.map((y) => [y.y, { year: y.y, plays: y.n, matched: 0, tags: new Map() }]));
+  for (const row of A.rows) {
+    const tag = tagByArtist.get(row.artist);
+    if (!tag) continue;
+    const year = years.get(new Date(row.t).getFullYear());
+    if (!year) continue;
+    year.matched++;
+    year.tags.set(tag, (year.tags.get(tag) || 0) + 1);
+    totals.set(tag, (totals.get(tag) || 0) + 1);
+  }
+  const genres = [...totals].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([name, plays]) => ({ name, plays }));
+  return { genres, years: [...years.values()].map((y) => ({ year: y.year, plays: y.plays, matched: y.matched,
+    segments: genres.map((g) => ({ name: g.name, plays: y.tags.get(g.name) || 0 })) })) };
+}

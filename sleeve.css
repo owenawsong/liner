@@ -287,6 +287,73 @@
 @media (max-width: 860px) { .phead__covers { display: none; } }
 @media (max-width: 700px) { .phead__side { flex: 0 0 100%; } .phead__side #search { flex: 0 0 100%; min-width: 100%; } .phead__side .search { width: 100%; max-width: none; } }
 
+/* A selected month reads like a page in the record, with comparison in view. */
+.month-record { margin-top: 24px; border-top: 2px solid var(--ink); padding-top: clamp(22px, 3vw, 36px); }
+.month-record__head { display: flex; justify-content: space-between; align-items: end; gap: 20px; }
+.month-record__head h3 { margin: 8px 0 12px; font: 800 clamp(35px, 4.5vw, 62px)/.94 var(--f-poster); font-stretch: 76%; text-transform: uppercase; }
+.month-record__head h3:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.month-record__head p { max-width: 58ch; color: var(--ink-2); font-size: 15px; }
+.month-record__nav { display: flex; gap: 8px; flex: none; }
+.month-record__nav button:disabled { opacity: .35; cursor: default; }
+.month-record__facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 28px; border-block: 1px solid var(--line-2); }
+.month-record__facts > div { display: grid; align-content: center; gap: 3px; min-height: 98px; padding: 12px 18px; border-right: 1px solid var(--line-2); }
+.month-record__facts > div:first-child { padding-left: 0; }
+.month-record__facts > div:last-child { border-right: 0; }
+.month-record__facts b { font: 600 clamp(26px, 3vw, 40px)/1 var(--f-display); letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.month-record__facts span { font-size: 12px; color: var(--ink-3); }
+.month-record__compare { display: grid; grid-template-columns: minmax(175px, .7fr) minmax(0, 1.3fr); gap: 22px 40px; padding: 26px 0; border-bottom: 1px solid var(--line); }
+.month-record__compare p { margin-top: 8px; color: var(--ink-3); font-size: 13px; max-width: 26ch; }
+.month-record__bars { display: grid; gap: 11px; }
+.month-record__bar { display: grid; grid-template-columns: minmax(112px, 160px) minmax(0, 1fr) 55px; gap: 12px; align-items: center; font-size: 13px; }
+.month-record__bar span { font-weight: 500; }
+.month-record__bar small { display: block; color: var(--ink-3); font: 11px var(--f-mono); }
+.month-record__bar > i { height: 10px; background: var(--bg-2); display: block; }
+.month-record__bar > i b { display: block; height: 100%; background: var(--ink-3); }
+.month-record__bar:nth-child(2) > i b { background: var(--accent); }
+.month-record__bar strong { font: 600 13px var(--f-mono); text-align: right; }
+.month-record__lists { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 36px; padding-top: 28px; }
+.month-record__lists > div > .label { display: block; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+@media (max-width: 760px) { .month-record__head { align-items: start; flex-direction: column; } .month-record__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .month-record__facts > div:nth-child(2) { border-right: 0; } .month-record__facts > div:nth-child(n+3) { border-top: 1px solid var(--line-2); } .month-record__compare, .month-record__lists { grid-template-columns: 1fr; } .month-record__compare p { max-width: none; } }
+@media (max-width: 430px) { .month-record__bar { grid-template-columns: 102px minmax(0, 1fr) 43px; gap: 8px; } .month-record__facts > div { padding-inline: 12px; } }
+
+/* The artist page follows an actual listening relationship through time. */
+.artist-journey .panel__head h2 { margin-top: 7px; font: 700 clamp(24px, 3vw, 38px)/1.05 var(--f-display); letter-spacing: -.035em; }
+.artist-journey__steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 22px 0 24px; border-block: 1px solid var(--line-2); }
+.artist-journey__steps > div { display: grid; align-content: start; gap: 7px; min-height: 116px; padding: 17px 18px; border-right: 1px solid var(--line-2); }
+.artist-journey__steps > div:first-child { padding-left: 0; }
+.artist-journey__steps > div:last-child { border-right: 0; }
+.artist-journey__steps span { color: var(--ink-3); font: 10px var(--f-mono); letter-spacing: .04em; }
+.artist-journey__steps b { font: 650 clamp(17px, 2vw, 24px)/1.05 var(--f-display); letter-spacing: -.025em; }
+.artist-journey__steps small { color: var(--ink-3); font-size: 12px; line-height: 1.35; }
+.artist-journey__caption { color: var(--ink-3); font-size: 12px; margin-bottom: 10px; }
+@media (max-width: 760px) { .artist-journey__steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } .artist-journey__steps > div:nth-child(2) { border-right: 0; } .artist-journey__steps > div:nth-child(n+3) { border-top: 1px solid var(--line-2); } }
+@media (max-width: 430px) { .artist-journey__steps > div { padding-inline: 12px; } }
+
+/* Artist-tag trends always leave unmatched listening visible. */
+.genre-history { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line-2); }
+.genre-history__head p { margin-top: 6px; color: var(--ink-3); font-size: 13px; max-width: 52ch; }
+.genre-history__legend { display: flex; gap: 8px 16px; flex-wrap: wrap; margin: 18px 0; }
+.genre-history__legend span { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; }
+.genre-history__legend i { width: 10px; height: 10px; }
+.genre-history__rows { display: grid; gap: 10px; }
+.genre-history__row { display: grid; grid-template-columns: 48px minmax(0, 1fr) 76px; gap: 10px; align-items: center; }
+.genre-history__row > b { font: 600 12px var(--f-mono); }
+.genre-history__row > div { display: flex; height: 17px; overflow: hidden; background: var(--bg-2); }
+.genre-history__row > div > i { display: block; height: 100%; flex: none; }
+.genre-history__row > small { color: var(--ink-3); font: 11px var(--f-mono); text-align: right; }
+.pat-bottom { align-items: start; }
+
 /* Headings across the app pick up the poster face */
 .flow h1, .dhead h1, .cmp-head h1, .recap h1, .lead h2 { font-family: var(--f-poster); font-stretch: 74%; font-weight: 800; text-transform: uppercase; letter-spacing: -.005em; line-height: .9; }
 .subhead h2 { font-family: var(--f-poster); font-stretch: 78%; font-weight: 800; text-transform: uppercase; }
+.ask__answer { border-left: 3px solid var(--accent); padding: 5px 0 5px 20px; display: grid; gap: 11px; }
+.ask__answer h3 { font: 700 clamp(25px, 3vw, 38px)/1.05 var(--f-display); letter-spacing: -.035em; }
+.ask__answer > p { max-width: 68ch; color: var(--ink-2); }
+.ask__answer dl { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 7px 0; }
+.ask__answer dl > div { display: grid; gap: 2px; }
+.ask__answer dt { color: var(--ink-3); font: 11px var(--f-mono); text-transform: uppercase; }
+.ask__answer dd { margin: 0; font-weight: 650; }
+.ask__answer small { color: var(--ink-3); font-size: 12px; }
+.ask__aside { padding: 15px 18px; background: var(--bg-2); display: grid; gap: 6px; }
+.ask__aside .ai__text { font-size: 14px; color: var(--ink-2); }
+.ask__help { padding: 6px 0 14px; color: var(--ink-2); max-width: 62ch; }
