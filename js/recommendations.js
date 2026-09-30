@@ -10,7 +10,7 @@ const memory = new Map();
 const inflight = new Map();
 const outcomeWrites = new Map();
 export const feedbackVersion = (taste) => Math.max(0, ...Object.values(taste.items).map((x) => x.updated || 0));
-export const RECOMMENDATION_VERSION = 'records-v3';
+export const RECOMMENDATION_VERSION = 'records-v4';
 export const boardSignature = (A, taste, edition = 0) => `${RECOMMENDATION_VERSION}:${recordSignature(A)}:${feedbackVersion(taste)}:${edition}:${AI_VERSION}:${store.get('liner.ai') !== 'off'}:${lastfm.isLive()}`;
 const check = (signal) => { if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError'); };
 

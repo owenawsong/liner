@@ -89,3 +89,31 @@
   #tab .disc-feature__inner { grid-template-columns: 46px minmax(0,1fr); gap: 12px; }
   #tab .disc-feature__art { width: 46px; height: 46px; }
 }
+
+/* Opinions are available when wanted, without competing with the next listen. */
+.disc-ratings { width:100%; margin-top:16px; font-size:12px; color:var(--ink-2); }
+.disc-ratings > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; list-style:none; padding:8px 0; border-top:1px solid var(--line-2); }
+.disc-ratings > summary::-webkit-details-marker { display:none; }
+.disc-ratings > summary span { transition:transform .15s; }
+.disc-ratings[open] > summary span { transform:rotate(45deg); }
+.disc-ratings > div { padding:6px 0 10px; }
+.disc-ratings a { display:block; color:var(--ink-2); text-underline-offset:3px; margin:9px 0; line-height:1.5; }
+.disc-ratings small { display:block; color:var(--ink-3); font-size:11px; line-height:1.5; max-width:42ch; }
+#tab .disc-community { align-self:start; padding:0; }
+#tab .disc-community .disc-ratings { margin-top:0; }
+#tab .disc-collection { border-top:1px solid var(--line); padding-top:0; min-width:0; }
+.disc-collection > summary { display:flex; justify-content:space-between; align-items:baseline; gap:18px; padding:20px 0; cursor:pointer; list-style:none; }
+.disc-collection > summary::-webkit-details-marker { display:none; }
+.disc-collection > summary > b { font:600 24px/1.2 var(--f-display); letter-spacing:-.03em; }
+.disc-collection > summary > span { font-size:12px; color:var(--ink-3); text-align:right; }
+.disc-collection > summary i { font-style:normal; display:inline-block; margin-left:8px; transition:transform .15s; }
+.disc-collection[open] > summary i { transform:rotate(45deg); }
+.disc-collection__body > p { margin:0 0 18px; font-size:13px; line-height:1.6; }
+.disc-show-shelf { margin:18px 0; }
+#disc-import-preview { padding:16px 0; margin-top:14px; border-top:1px solid var(--line); }
+#disc-import-preview h3 { font-size:16px; overflow-wrap:anywhere; margin-bottom:8px; }
+#disc-import-preview p { font-size:13px; line-height:1.6; color:var(--ink-2); }
+#disc-import-preview > div { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+@media(max-width:760px){.disc-collection > summary{gap:12px}.disc-collection > summary > b{font-size:22px}.disc-collection > summary > span{font-size:11px;max-width:48%}}
+@media(prefers-reduced-motion:reduce){.disc-ratings > summary span,.disc-collection > summary i{transition:none}}
+@media(max-width:700px){.disc-stars button{min-width:40px;min-height:44px}.disc-start__actions button,.disc-ratings>summary{min-height:44px}}

@@ -22,6 +22,7 @@ import { getTaste } from '../taste.js';
 import { savedStartingRecords } from '../recommendations.js';
 import { exclusionPanelHTML, bindExclusions, bindDetailExclusions } from './filters.js';
 import { audioPanelHTML, bindAudioPanel, cancelAllAudioAudits } from './audio.js';
+import { profileNavHTML, bindProfileNav } from '../profile-nav.js';
 
 const TABS = [['overview', 'Overview'], ['discover', 'Discover'], ['top', 'Top'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['patterns', 'Deep dive'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
 const LABEL = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export', demo: 'Demo' };
@@ -86,14 +87,12 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
     }
   }
   const current = DETAIL[tab] || tab;
-  const tabLink = ([t, label]) => `<a href="${hrefFor(pid, t === 'overview' ? '' : t)}"${t === current ? ' aria-current="page"' : ''}>${label}${t === 'insights' && A ? `<small>${A.insights.length}</small>` : ''}</a>`;
   view().innerHTML = `
     <div class="wrap">${header(ctx)}</div>
-    <nav class="tabs" aria-label="Profile sections"><div class="wrap tabs__inner">${TABS.map(tabLink).join('')}</div></nav>
+    ${profileNavHTML(pid,current)}
     <div class="wrap" id="sync-banner" aria-live="polite"></div>
     <div class="wrap fade-in" id="tab"></div>`;
-  const rail=$('.tabs__inner'),active=$('.tabs a[aria-current="page"]');
-  if(rail&&active){const r=rail.getBoundingClientRect(),a=active.getBoundingClientRect();if(a.right>r.right)rail.scrollLeft+=a.right-r.right+16;else if(a.left<r.left)rail.scrollLeft-=r.left-a.left+16;}
+  bindProfileNav(onLeave);
   ({ overview, discover: discoverTab, top, timeline: timelineTab, evolution: evolutionTab, patterns: patternsTab, insights: insightsTab, clock, data, artist: detail, song: detail, year: detail })[tab](ctx);
   bindSyncBanner(ctx);
   autoSync(ctx);
@@ -169,8 +168,6 @@ export function overviewHTML(ctx) {
   }
   if (A) {
     parts.push(`<div class="c-12">${statStrip(A)}</div>`);
-    if (!ctx.preview) parts.push(storyPanel(ctx));
-    if (!ctx.preview) parts.push(notesPanel(A, source === 'demo'));
     parts.push(`<section class="panel c-12"><div class="panel__head"><h2>Month by month</h2><a class="link link--quiet" href="${hrefFor(pid, 'timeline')}">Open the timeline ${icon.arrow}</a></div>${timeline(A, { height: 140, fit: true })}</section>`);
   } else if (!ctx.preview) {
     parts.push(ctx.archive?.export?.rows?.length||ctx.archive?.live?.rows?.length ? `<section class="panel c-12"><h2>No plays match your counting settings</h2><p class="muted" style="margin-top:10px">Your original history is saved. Restore excluded listening or change the minimum play length to include it in your statistics.</p><a class="link" href="${hrefFor(pid,'data')}" style="margin-top:16px">Review counting settings ↗</a></section>` : source === 'lastfm' && !p.user.playcount ? firstPlayCTA() : importCTA(ctx));
@@ -181,37 +178,46 @@ export function overviewHTML(ctx) {
   else parts.push(`<section class="panel c-7"><div class="panel__head"><h2>Top songs</h2><span class="label">All time</span></div>${rankList(A?topIn(A, 'tracks', -Infinity, Infinity, 8):[], { kind: 'tracks', link: ctx.L?.rank })}</section>`);
   if (source === 'spotify') parts.push(`<section class="panel c-12" id="watch">${watchHTML()}</section>`);
   if (A && ctx.L?.song) parts.push(onThisDay(A, ctx.L));
+  if(A&&!ctx.preview)parts.push(`<details class="overview-deeper c-12"><summary>The story behind your listening <span>＋</span></summary><div class="grid">${storyPanel(ctx)}${notesPanel(A,source==='demo')}</div></details>`);
   if (A?.insights.length) {
-    parts.push(`<div class="c-12"><div class="subhead"><h2>Things we noticed</h2><a class="link link--quiet" href="${hrefFor(pid, 'insights')}">All ${A.insights.length} ${icon.arrow}</a></div>
-      <div class="insights">${A.insights.slice(0, 3).map((x, i) => insightCard(x, i === 0)).join('')}</div></div>`);
+    parts.push(`<details class="overview-deeper c-12"><summary>More details from your listening <span>＋</span></summary><a class="link link--quiet" href="${hrefFor(pid, 'insights')}">Explore all ${A.insights.length} findings ${icon.arrow}</a>
+      <div class="insights">${A.insights.slice(0, 3).map((x) => insightCard(x, false)).join('')}</div></details>`);
   }
   return `${ctx.preview ? '' : banner(ctx)}<div class="grid overview-page">${parts.join('')}</div>`;
 }
 
 function rotationHTML(ctx) {
   const {A,L}=ctx, end=A.to+1, from=Math.max(A.from,end-30*DAY);
-  const artists=topIn(A,'artists',from,end,4), albums=topIn(A,'albums',from,end,4);
-  const leader=artists[0], cover=albums.find(a=>a.artist===leader?.name)||albums[0];
-  const picks=albums.length?albums:artists.map(a=>({...a,artist:a.name,artistOnly:true}));
-  const artFor=(a,size)=>sleeve(a.name,a.artist,{size,kind:a.artistOnly?'artist':'album'});
-  return `<section class="rotation-record"><div class="opening-caption"><span>YOUR CURRENT ROTATION</span><a href="${hrefFor(ctx.pid,'top')}">All rankings ↗</a></div>
-    <div class="rotation-record__lead">${cover?`<a class="rotation-record__cover" href="${L.artist(cover.artist)}" aria-label="Explore ${esc(cover.artist)}">${artFor(cover,200)}</a>`:leader?`<a class="rotation-record__cover" href="${L.artist(leader.name)}">${sleeve(leader.name,leader.name,{size:200,kind:'artist'})}</a>`:''}
-      <div class="rotation-record__copy"><h2>${leader?`<a href="${L.artist(leader.name)}">${esc(leader.name)}</a>`:'Your latest listening'}</h2><p>${leader?`${num(leader.plays)} plays in your latest recorded 30 days.`:'Your listening record is still taking shape.'}</p>${cover?`<span>${esc(cover.name)}<small>${num(cover.plays)} recorded album plays</small></span>`:''}</div></div>
-    <div class="rotation-record__rest">${picks.filter(a=>a!==cover).slice(0,3).map(a=>`<a href="${L.artist(a.artist)}">${artFor(a,62)}<span><b>${esc(a.name)}</b><small>${esc(a.artist)} · ${num(a.plays)} plays</small></span></a>`).join('')}</div><small class="record-basis">${fullDate(from)}—${fullDate(A.to)} · recorded plays</small></section>`;
+  const artists=topIn(A,'artists',from,end,3), albums=topIn(A,'albums',from,end,3),total=A.rows.length-lowerBound(A.rows,from);
+  const leader=artists[0],picks=albums.length?albums:artists.map(a=>({...a,artist:a.name,artistOnly:true}));
+  const shortHistory=end-A.from<30*DAY;
+  const hasChange=recordEvidence(A).some(entry=>entry.id==='shift');
+  return `<section class="guide-hero" aria-labelledby="guide-title"><div class="guide-hero__copy"><span class="guide-eyebrow">${shortHistory?'Your first chapter':'Your listening, lately'}</span>
+    <h2 id="guide-title">${leader?`${leader.plays>1?'You keep coming back to':'In your mix:'}<br><a href="${L.artist(leader.name)}">${esc(leader.name)}.</a>`:'Your music starts here.'}</h2>
+    <p>${leader?`<b>${num(leader.plays)} of your ${num(total)} plays</b> ${shortHistory?'in this saved history':'in the latest 30 days of your saved history'} were ${esc(leader.name)}${leader.name.endsWith('s')?'’':'’s'}. ${artists[1]?`${esc(artists[1].name)}${artists[2]?` and ${esc(artists[2].name)}`:''} also ${artists[2]?'feature':'features'} in your top three.`:''}`:'As your listening grows, this page will show what you return to and what is changing.'}</p>
+    <div class="guide-hero__actions"><button class="btn btn--ink btn--sm" type="button" data-guide-jump="overview-change">${hasChange?'See what changed':'Explore your listening'} <span>↓</span></button><a class="link" href="${hrefFor(ctx.pid,'discover')}">Find your next record ↗</a></div>
+    <details class="guide-method"><summary>${monthYear(from)} listening · how this is counted</summary><p>${fullDate(from)} through ${fullDate(A.to)}. Every counted play has equal weight. These are your latest saved days, which may end before today; earlier history can be missing.</p><a href="${hrefFor(ctx.pid,'data')}">Manage your listening data ↗</a></details></div>
+    <div class="guide-records"><div class="guide-records__head"><span>${albums.length?'Records in your rotation':'In your rotation'}</span><a href="${hrefFor(ctx.pid,'top')}">See your top music ↗</a></div><div class="guide-records__rail">${picks.map(a=>`<a class="guide-record" href="${L.artist(a.artist)}">${sleeve(a.name,a.artist,{size:170,kind:a.artistOnly?'artist':'album',round:!!a.artistOnly})}<span><b>${esc(a.name)}</b><small>${a.artistOnly?`${num(a.plays)} plays`:`${esc(a.artist)} · ${num(a.plays)} plays`}</small></span></a>`).join('')}</div></div></section>`;
 }
 
-function shiftHTML(ctx) {
-  const E=evolution(ctx.A,ctx.A.to+1), rows=E.rising.slice(0,3);
+export function shiftHTML(ctx) {
+  const E=evolution(ctx.A,ctx.A.to+1),supported=E.total>=30&&E.previous>=30&&ctx.A.to-ctx.A.from>=178*DAY;
+  if(!supported){
+    const recent=topIn(ctx.A,'artists',E.from,E.now+1,3);
+    return `<section class="guide-change" id="overview-change"><div class="opening-caption"><span>Your listening is taking shape</span><a href="${hrefFor(ctx.pid,'top')}">Your top music ↗</a></div><h2 tabindex="-1">Getting to know your music.</h2><p>These are the artists you have played most in your latest saved listening. A longer history will show what is changing.</p><ol class="guide-recent-artists">${recent.map(a=>`<li><a href="${ctx.L.artist(a.name)}">${sleeve(a.name,a.name,{size:32,kind:'artist',round:true})}<b>${esc(a.name)}</b><span>${num(a.plays)} plays</span></a></li>`).join('')}</ol><details class="guide-method"><summary>When does a comparison become available?</summary><p>We need history covering two 90-day periods, with at least 30 counted plays in each. A missing earlier period is not counted as zero listening.</p></details></section>`;
+  }
+  const rows=E.rising.slice(0,3),lead=rows[0];
+  if(!lead)return `<section class="guide-change" id="overview-change"><div class="opening-caption"><span>Your listening over time</span><a href="${hrefFor(ctx.pid,'evolution')}">Compare the periods ↗</a></div><h2 tabindex="-1">No clear rise stands out.</h2><p>No artist with at least five plays increased their listening share across these two 90-day periods.</p><span class="change-snapshot__basis">${num(E.previous)} total plays before, ${num(E.total)} lately · ending ${fullDate(ctx.A.to)}</span></section>`;
   const max=Math.max(.01,...rows.flatMap(r=>[r.share,r.priorShare]));
-  return `<section class="rotation-shift"><div class="opening-caption"><span>WHAT CHANGED</span><a href="${hrefFor(ctx.pid,'evolution')}">Explore ↗</a></div><h2>${rows.length?'Moving up in your rotation':'The next chapter is taking shape'}</h2>
-    ${rows.length?`<div class="shift-legend"><span><i></i>Previous 90 days</span><span><i></i>Latest 90 days</span></div><div class="shift-artists">${rows.map(r=>`<a class="shift-artist" href="${ctx.L.artist(r.name)}">${sleeve(r.name,r.name,{size:32,kind:'artist'})}<div><b>${esc(r.name)}</b><span><i style="width:${r.priorShare/max*100}%"></i><small>${(r.priorShare*100).toFixed(1)}%</small></span><span><i style="width:${r.share/max*100}%"></i><small>${(r.share*100).toFixed(1)}%</small></span></div></a>`).join('')}</div>`:'<p>Keep listening to build two comparable periods. Changes use observed plays, rather than guessed moods.</p>'}
-    <small class="record-basis">Share of ${num(E.previous)} then ${num(E.total)} plays · two equal periods ending ${monthYear(ctx.A.to)}</small></section>`;
+  return `<section class="guide-change" id="overview-change"><div class="opening-caption"><span>One thing that changed</span><a href="${hrefFor(ctx.pid,'evolution')}">Your taste over time ↗</a></div><div class="guide-change__title">${lead?sleeve(lead.name,lead.name,{size:44,kind:'artist',round:true}):''}<h2 tabindex="-1">${lead?`${esc(lead.name)} moved into focus.`:'Your next chapter is taking shape.'}</h2></div>
+    ${lead?`<p>You gave them a bigger place in your listening.</p><div class="change-snapshot" aria-label="${esc(lead.name)} share and plays across two equal 90-day periods"><div><span>Previous 90 days</span><b>${(lead.priorShare*100).toFixed(1)}<small>%</small></b><i><em style="width:${lead.priorShare*100}%"></em></i><strong>${num(lead.before)} plays</strong></div><span class="change-snapshot__arrow" aria-hidden="true">→</span><div><span>Latest 90 days</span><b>${(lead.share*100).toFixed(1)}<small>%</small></b><i><em style="width:${lead.share*100}%"></em></i><strong>${num(lead.plays)} plays</strong></div></div><span class="change-snapshot__basis">Share of all your listening in each period</span>
+      <details class="guide-change__more"><summary>The comparison & other rising artists <span>＋</span></summary><p>Two equal 90-day periods ending ${fullDate(ctx.A.to)}: ${num(E.previous)} total plays before, ${num(E.total)} lately. Percentages account for how much you listened in each period.</p><div class="shift-legend"><span><i></i>Previous 90 days</span><span><i></i>Latest 90 days</span></div><div class="shift-artists">${rows.map(r=>`<a class="shift-artist" href="${ctx.L.artist(r.name)}">${sleeve(r.name,r.name,{size:32,kind:'artist',round:true})}<div><b>${esc(r.name)}</b><span><i style="width:${r.priorShare/max*100}%"></i><small>${(r.priorShare*100).toFixed(1)}%</small></span><span><i style="width:${r.share/max*100}%"></i><small>${(r.share*100).toFixed(1)}%</small></span></div></a>`).join('')}</div></details>`:'<p>Keep listening to build two comparable periods. Changes use the plays you have saved, rather than guessed moods.</p>'}</section>`;
 }
 
 function overviewOpening(ctx) {
   const E=evolution(ctx.A,ctx.A.to+1);
   const interesting=selectFindings(recordEvidence(ctx.A),{limit:1,excludeArtists:E.rising.slice(0,3).map(a=>a.name),excludeFamilies:['personal-change']})[0];
-  return `<div class="overview-opening c-12"><div class="overview-opening__top">${rotationHTML(ctx)}${shiftHTML(ctx)}</div><div class="overview-opening__bottom">${interesting?findingHTML(ctx,interesting,{compact:true}):`<section class="opening-unexpected"><span class="label">THE FIRST CHAPTER</span><h3>${num(ctx.A.artists.length)} artists in your record</h3><p>More listening will reveal which discoveries stay with you.</p></section>`}<section class="opening-pick" id="overview-pick"><div class="opening-caption"><span>WHAT TO PLAY NEXT</span></div><p class="faint">Preparing a listening starting point…</p><a href="${hrefFor(ctx.pid,'discover')}">Open Discover ↗</a></section></div></div>`;
+  return `<div class="overview-guide c-12">${rotationHTML(ctx)}<div class="guide-next">${shiftHTML(ctx)}<section class="opening-pick" id="overview-pick"><div class="opening-caption"><span>Your next listen</span></div><p class="faint">Your listening selection is being prepared.</p><a href="${hrefFor(ctx.pid,'discover')}">Browse Discover ↗</a></section></div>${interesting?`<details class="guide-closer"><summary><span>Elsewhere in your listening</span><b>${esc(interesting.title.replace('supported years','years of listening'))}</b><i>＋</i></summary>${findingHTML(ctx,interesting,{compact:true})}</details>`:''}</div>`;
 }
 
 async function bindStartingRecord(ctx) {
@@ -224,7 +230,7 @@ async function bindStartingRecord(ctx) {
     if(!start){root.innerHTML=`<div class="opening-caption"><span>WHAT TO PLAY NEXT</span></div><h3>${ctx.prepared?'Find your next record':'Your selection is being prepared'}</h3><p>Follow the music you have been returning to, or revisit an older favorite.</p><a href="${hrefFor(ctx.pid,'discover')}">Open Discover ↗</a>`;return;}
     const record=start.album||start.track,name=record?.name||start.artist;
     const query=`${start.artist} ${record?.name||''}`;
-    root.innerHTML=`<div class="opening-caption"><span>${start.recorded?'AN OLDER FAVORITE':'WHAT TO PLAY NEXT'}</span><a href="${hrefFor(ctx.pid,'discover')}">More picks ↗</a></div><div class="opening-pick__record">${sleeve(name,start.artist,{size:100,kind:start.album?'album':start.track?'track':'artist'})}<div><h3>${esc(name)}</h3><span>${esc(start.artist)}</span><a class="link" href="https://open.spotify.com/search/${encodeURIComponent(query)}" target="_blank" rel="noopener">Play ${start.album?'the record':start.track?'the track':'their music'} ↗</a></div></div><p>${esc(start.reason)}</p>${start.track&&start.album?`<small>Or try “${esc(start.track.name)}”</small>`:''}`;
+    root.innerHTML=`<div class="opening-caption"><span>${start.recorded?'AN OLDER FAVORITE':'WHAT TO PLAY NEXT'}</span><a href="${hrefFor(ctx.pid,'discover')}">More picks ↗</a></div><div class="opening-pick__record">${sleeve(name,start.artist,{size:100,kind:start.album?'album':start.track?'track':'artist'})}<div><h3>${esc(name)}</h3><span>${esc(start.artist)}</span><a class="link" href="https://open.spotify.com/search/${encodeURIComponent(query)}" target="_blank" rel="noopener">Find on Spotify ↗</a></div></div><p>${esc(start.reason)}</p>${start.track&&start.album?`<small>Or try “${esc(start.track.name)}”</small>`:''}`;
     hydrate(root);
   }catch{if(root.isConnected)root.innerHTML=`<div class="opening-caption"><span>WHAT TO PLAY NEXT</span></div><h3>Choose your next record</h3><a href="${hrefFor(ctx.pid,'discover')}">Open Discover ↗</a>`;}
 }
@@ -236,6 +242,7 @@ function overview(ctx) {
   }
   $('#tab').innerHTML = overviewHTML(ctx);
   if(A)bindStartingRecord(ctx);
+  $$('[data-guide-jump]',$('#tab')).forEach(button=>button.addEventListener('click',()=>{const target=$(`#${button.dataset.guideJump}`);target?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});$('h2',target)?.focus({preventScroll:true});}));
   bindCommon(ctx);
   if (A) bindTimeline($('#tab'), A, (i) => { overviewPick = i; go(hrefFor(ctx.pid, 'timeline')); });
   $$('[data-story-month]', $('#tab')).forEach((button) => button.addEventListener('click', () => { overviewPick = Number(button.dataset.storyMonth); go(hrefFor(ctx.pid, 'timeline')); }));

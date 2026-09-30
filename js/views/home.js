@@ -1,281 +1,76 @@
 import { $, $$, esc, avatar, num, icon, sleeve } from '../ui.js';
-import { view, hrefFor, profiles, getArchive, analysisFor, go, pidFor, onLeave } from '../core.js';
-import { timeline, bindTimeline, heatmap, rankList } from '../components.js';
-import { topIn } from '../analysis.js';
-import { mountLookup } from './connect.js';
-import { art, hydrate } from '../meta.js';
-import { palette } from '../color.js';
-import { DEMO_NOTES, DEMO_ROAST } from '../sources/demo.js';
+import { view, hrefFor, profiles, getArchive, prepareAnalysis, onLeave } from '../core.js';
+import { hydrate } from '../meta.js';
 import { evolution } from '../evolution.js';
+import { revisitRecord } from '../discovery.js';
 
-const HERO_ALBUMS = [
-  ['Blonde', 'Frank Ocean'], ['Melodrama', 'Lorde'], ['SOS', 'SZA'], ['Punisher', 'Phoebe Bridgers'], ['brat', 'Charli xcx'],
-  ['GNX', 'Kendrick Lamar'], ["Short n' Sweet", 'Sabrina Carpenter'], ['Charm', 'Clairo'], ['The Rise and Fall of a Midwest Princess', 'Chappell Roan'],
-];
+const month = t => new Date(t).toLocaleDateString('en',{month:'short',year:'numeric'});
+const journey = `<ol class="welcome-journey"><li><span>01</span><div><b>Bring your listening</b><p>A Last.fm username is enough. Your Spotify history file is an optional alternative.</p></div></li><li><span>02</span><div><b>Let Sleeve prepare it</b><p>History, artwork and personal findings come together. You can follow the progress.</p></div></li><li><span>03</span><div><b>Follow what interests you</b><p>Open your record, explore a change, or choose something to play next.</p></div></li></ol>`;
 
 export async function renderHome() {
-  const routeAtStart = location.hash;
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  const archive = await getArchive('demo');
-  const A = analysisFor('demo', archive);
-  if (location.hash !== routeAtStart) return;
-  const returning = profiles.list();
-  const topArtist = A.artists[0];
-  const year = A.years[A.years.length - 2] || A.years[0];
-  const yArtists = topIn(A, 'artists', new Date(year.y, 0, 1).getTime(), new Date(year.y + 1, 0, 1).getTime(), 3);
-  const insight = (id) => A.insights.find((x) => x.id === id);
-  const E=evolution(A,A.to+1);
-  const recent=topIn(A,'artists',A.to-90*864e5,A.to+1,3);
-  const monthBars=A.months.slice(-12),peak=Math.max(1,...monthBars.map(m=>m.n));
-
-  const TRACKS = [
-    { side: 'A', title: 'Find your next favorite', desc: 'Discover artists and albums connected to your listening, then rate and save what you find.', vis: `<div class="pv-record"><span class="label">STARTING FROM MIRA'S RECENT ROTATION</span>${recent.map(a=>`<div>${sleeve(a.name,a.name,{size:52,kind:'artist'})}<span><b>${esc(a.name)}</b><small>${num(a.plays)} plays in the latest recorded 90 days</small></span></div>`).join('')}<a class="link" href="#/demo/discover">Open the recommendations ↗</a></div>` },
-    { side: 'A', title: 'Timeline and eras', desc: 'Every month you have ever listened, on one line, with your eras found for you.', vis: `<div id="pv-timeline">${timeline(A, { height: 170, fit: true })}</div>` },
-    { side: 'A', title: 'How your taste changes', desc: 'See the artists rising, the old favorites fading, and who you discovered this season.', vis: `<div class="pv-record"><span class="label">GAINING SHARE / MIRA'S RECORD</span>${E.rising.slice(0,3).map(a=>`<div>${sleeve(a.name,a.name,{size:52,kind:'artist'})}<span><b>${esc(a.name)}</b><small>${num(a.before)} → ${num(a.plays)} plays across equal 90-day periods</small></span></div>`).join('')}<a class="link" href="#/demo/evolution">See the comparison ↗</a></div>` },
-    { side: 'A', title: 'Your listening, four ways', desc: 'Explore 24 months of plays, artist breadth, discoveries and how much one favorite dominated.', vis: `<div class="pv-months"><span class="label">MIRA / LAST 12 RECORDED MONTHS</span><div>${monthBars.map(m=>`<i style="height:${Math.max(2,m.n/peak*100)}%" title="${m.y}-${m.m+1}: ${num(m.n)} plays"></i>`).join('')}</div><p>Peak ${num(peak)} plays in a month.</p><a class="link" href="#/demo/patterns">Open the deeper charts ↗</a></div>` },
-    { side: 'A', title: 'Year in review, any year', desc: 'Wrapped for every year you have been listening, with a card you can share.', vis: `<div class="minicard"><span class="mono">SLEEVE · ${year.y}</span><b>${year.y}</b><ol>${yArtists.map((a) => `<li>${esc(a.name)}</li>`).join('')}</ol><span class="mono">${num(year.n)} plays</span></div>` },
-    { side: 'A', title: 'Every artist, every song', desc: 'First play, biggest month, longest break and your favourite songs, for everything you have played.', vis: `<a class="miniartist" href="#/demo/artist/${encodeURIComponent(topArtist.name)}">${sleeve(topArtist.name, topArtist.name, { size: 72, round: true, kind: 'artist' })}<span><b>${esc(topArtist.name)}</b><span>${num(topArtist.n)} plays · since ${new Date(topArtist.first).getFullYear()}</span></span></a>` },
-    { side: 'A', title: 'The listening clock', desc: 'When the music actually happens, hour by hour across your week.', vis: heatmap(A) },
-    { side: 'A', title: 'Top 100, any dates', desc: 'Artists, songs, albums and genres. By plays or by minutes, for any stretch of time.', vis: rankList(topIn(A, 'albums', -Infinity, Infinity, 5), { kind: 'albums', size: 40 }) },
-    { side: 'A', title: 'Things you never noticed', desc: 'Obsessions, comebacks, streaks, late nights. Sleeve goes looking so you don\'t have to.', vis: `<div class="bento__stack">${['comeback', 'loop', 'streak'].map(insight).filter(Boolean).slice(0, 2).map((x) => `<div class="minisight"><span class="label">${esc(x.kicker)}</span><p>${x.title}</p></div>`).join('')}</div>` },
-    { side: 'B', title: 'Liner notes, written for you', desc: 'A short write-up of your taste, by AI, from a summary of your stats.', vis: `<div class="pv-quote"><p>${esc(DEMO_NOTES)}</p></div>` },
-    { side: 'B', title: 'Roast my taste', desc: 'The same, but mean. Affectionately.', vis: `<div class="pv-quote pv-quote--ink"><p>${esc(DEMO_ROAST)}</p></div>` },
-    { side: 'B', title: 'Answers already waiting', desc: 'Artist origins, recent changes, late nights and past summers, prepared from your own record. Ask another question whenever you want.', vis: `<div class="minicard"><span class="mono">FROM MIRA'S RECORD</span><b>${year.y}</b><ol>${yArtists.map(a=>`<li>${esc(a.name)} · ${num(a.plays)} plays</li>`).join('')}</ol><span class="mono">Counts from recorded plays</span></div>` },
-    { side: 'B', title: 'Compare with a friend', desc: 'A match score, what you share, and what you would each get from the other.', vis: '<div class="miniring"><div class="cmp-ring" style="--p:73"><div><b>73</b><span>% match</span></div></div></div>' },
-    { side: 'B', title: 'How mainstream are you?', desc: 'Scored from how many people listen to your favourite artists.', vis: '<div class="minims"><div class="ms__score"><b>34</b><span>out of 100 obscurity</span><p>A healthy mix</p></div><div class="ms__track" style="margin-top:18px"><i style="left:34%"></i></div><div class="ms__ends"><span>Everyone knows them</span><span>Nobody does</span></div></div>' },
+  const route=location.hash,ctrl=new AbortController();
+  onLeave(()=>ctrl.abort());
+  view().innerHTML=`<div class="wrap welcome-loading"><span class="label">SLEEVE</span><h1>Your music, over time.</h1><p>Opening a preview of the listening record…</p><a class="btn btn--ink" href="#/start">Get started ${icon.arrow}</a></div>`;
+  const archive=await getArchive('demo');
+  const A=await prepareAnalysis('demo',archive,ctrl.signal);
+  if(ctrl.signal.aborted || location.hash!==route)return;
+  if(!A){view().innerHTML=`<div class="wrap welcome-loading"><h1>Start with your own listening.</h1><p>The demo is empty under this device's current counting settings. Your own record can still be connected.</p><a class="btn btn--ink" href="#/start">Get started ${icon.arrow}</a><a class="link" href="#/settings">Review counting settings ↗</a></div>`;return;}
+  const E=evolution(A,A.to+1),rise=E.rising[0];
+  const heroArtist=rise?.name || A.artists[0].name;
+  const heroAlbum=A.albums.find(x=>x.artist===heroArtist) || A.albums[0];
+  const returned=revisitRecord(A,{items:{}});
+  const enduring=A.artists.map(a=>{
+    const years=new Map();a.times.forEach(t=>{const y=new Date(t).getFullYear();years.set(y,(years.get(y)||0)+1);});
+    return {...a,supported:[...years].filter(([,n])=>n>=10).map(([y])=>y)};
+  }).find(a=>a.supported.length>=3 && a.last>=A.to-180*864e5) || {...A.artists[0],supported:[]};
+  const returning=profiles.list().filter(p=>p.pid!=='demo');
+  const years=A.years.slice(-6),peak=Math.max(1,...years.map(y=>y.n));
+  const chapters=[
+    {id:'change',title:'What changed',body:`<div class="welcome-proof__art">${sleeve(heroAlbum.album,heroAlbum.artist,{size:216,kind:'album'})}</div><div class="welcome-proof__copy"><span class="label">A CHANGE IN THE ROTATION</span><h3>${esc(heroArtist)} moved into the foreground.</h3><p>Compare equal periods so a busier month cannot explain the whole change.</p>${rise?`<div class="welcome-comparison"><div><span>Previous 90 days</span><b>${num(rise.before)}</b><small>${(rise.priorShare*100).toFixed(1)}% of plays</small></div><span aria-hidden="true">→</span><div><span>Latest 90 days</span><b>${num(rise.plays)}</b><small>${(rise.share*100).toFixed(1)}% of plays</small></div></div>`:''}<a class="link" href="#/demo/evolution">Explore the change ${icon.arrow}</a></div>`},
+    {id:'stayed',title:'What stayed',body:`<div class="welcome-proof__art">${sleeve(enduring.name,enduring.name,{size:216,kind:'artist'})}</div><div class="welcome-proof__copy"><span class="label">AN ENDURING FAVORITE</span><h3>${esc(enduring.name)}, across ${enduring.supported.length} recorded years.</h3><p>At least ten plays in each of those years, and still heard in the latest 180 days.</p><div class="welcome-yearmarks">${enduring.supported.map(y=>`<span>${y}</span>`).join('')}</div><div class="welcome-proof__total"><b>${num(enduring.n)}</b><span>recorded plays overall</span></div><a class="link" href="#/demo/artist/${encodeURIComponent(enduring.name)}">Open the artist's history ${icon.arrow}</a></div>`},
+    {id:'revisit',title:'What to revisit',body:returned?`<div class="welcome-proof__art">${sleeve(returned.album.name,returned.artist,{size:216,kind:'album'})}</div><div class="welcome-proof__copy"><span class="label">LEFT OUT OF THE LATEST ROTATION</span><h3>${esc(returned.album.name)}<small>${esc(returned.artist)}</small></h3><p>${esc(returned.reason)}</p><div class="welcome-proof__total"><b>${num(returned.album.plays)}</b><span>plays from this record</span></div><a class="link" href="#/demo/discover">See what to play next ${icon.arrow}</a></div>`:`<div class="welcome-proof__copy"><span class="label">WHAT TO PLAY NEXT</span><h3>Follow a connection from your current rotation.</h3><p>Discover checks real artist catalogues, matches albums, and offers a concrete starting track.</p><a class="link" href="#/demo/discover">Open Discover ${icon.arrow}</a></div>`},
   ];
-  let n = { A: 0, B: 0 };
-  TRACKS.forEach((t) => { n[t.side] += 1; t.no = `${t.side}${n[t.side]}`; });
 
-  view().innerHTML = `
-  <section class="sl-hero" id="sl-hero">
-    <div class="wrap sl-hero__inner">
-      <div class="sl-hero__meta"><span>YOUR MUSIC, IN FULL</span><span>Every feature free · No Sleeve account · Files stay on your device</span><span>EVERY LISTEN COUNTS</span></div>
-      <div class="sl-hero__grid">
-        <div class="sl-hero__copy">
-          <h1 class="sl-hero__title" data-reveal>${'Your whole record.'.split(' ').map((w, i) => `<span style="--i:${i}">${w}</span>`).join(' ')}</h1>
-          <p class="sl-hero__lede" data-reveal>Bring your Last.fm history or a Spotify file. Sleeve prepares your listening patterns, personal notes and new records to try before you open the full profile. Every feature is free.</p>
-          <div class="sl-hero__proof"><span>IN THE DEMO / ${year.y}</span><b>${num(year.n)} plays</b><span>Led by ${esc(year.topArtist)}</span><a href="#/demo/year/${year.y}">Open that year ↗</a></div>
-          <div class="sl-connect" data-reveal>
-            ${returning.length ? `<div class="returning"><span>Welcome back</span>${returning.map((r) => `<a href="${hrefFor(r.pid)}">${avatar(r.display, r.image, 26)}${esc(r.display)}</a>`).join('')}</div>` : ''}
-            <div class="sl-hero__actions"><a class="btn btn--ink sl-hero__cta" href="#/start">Get started ${icon.arrow}</a><a class="btn btn--line sl-hero__cta" href="#/demo">Explore the demo</a></div>
-            <p class="sl-hero__none">Already use Last.fm? <a href="#/start/lastfm">Open your listening record</a></p>
-          </div>
-        </div>
-        <div class="deck" aria-hidden="true">
-          <div class="deck__disc" id="deck-disc"><span class="deck__label" id="deck-label"></span></div>
-          <div class="deck__sleeve" id="deck-sleeve">${HERO_ALBUMS.map(([al, ar], i) => `<div class="deck__cover${i === 0 ? ' is-on' : ''}" data-i="${i}">${sleeve(al, ar, { size: 460, kind: 'album' })}</div>`).join('')}</div>
-          <div class="deck__sticker"><span>Now pressing</span><b id="deck-title">${esc(HERO_ALBUMS[0][0])}</b><span id="deck-artist">${esc(HERO_ALBUMS[0][1])}</span></div>
-        </div>
-      </div>
-    </div>
-  </section>
+  view().innerHTML=`<div class="welcome">
+    <section class="welcome-hero"><div class="wrap"><div class="welcome-hero__mast"><span>YOUR LISTENING HAS A HISTORY</span><span>NO SLEEVE ACCOUNT · FREE TO TRY</span></div>
+      <div class="welcome-hero__grid"><div class="welcome-hero__copy"><h1>Your music,<br><em>over time.</em></h1><p>See what took over, what stayed, and what to play next—from your actual listening history.</p><div class="welcome-hero__actions"><a class="btn" href="#/start">Get started ${icon.arrow}</a><a href="#/demo">Try the demo ↗</a></div><span class="welcome-hero__note">Last.fm history or a Spotify file. No Sleeve sign-up.</span>
+      ${returning.length?`<div class="welcome-return"><span>YOUR SAVED RECORDS</span>${returning.map(p=>`<a href="${hrefFor(p.pid)}">${avatar(p.display,p.image,24)}${esc(p.display)} ${icon.arrow}</a>`).join('')}</div>`:''}</div>
+      <a class="welcome-record" href="#/demo/evolution" aria-label="Explore ${esc(heroArtist)}'s rise in the synthetic demo history"><div class="welcome-record__label"><span>DEMO RECORD</span><span>MIRA / SYNTHETIC HISTORY</span></div><div class="welcome-record__cover">${sleeve(heroAlbum.album,heroAlbum.artist,{size:360,kind:'album'})}</div><div class="welcome-record__caption"><div><b>${esc(heroArtist)}</b><span>${esc(heroAlbum.album)}</span></div>${rise?`<div><b>${num(rise.before)} → ${num(rise.plays)}</b><span>plays / equal 90-day periods</span></div>`:''}</div></a></div>
+      <div class="welcome-hero__footer"><span>YOUR PAST IS WORTH A CLOSER LOOK.</span><a href="#/" data-scroll="features">See what opens up ↓</a></div>
+    </div></section>
 
-    <div class="marquee" aria-hidden="true"><div class="marquee__row">${Array.from({ length: 2 }, () => ['Every feature free', 'Your eras, found for you', 'Taste evolution', 'Year in review for every year', 'AI liner notes', 'Compare with friends', 'Files stay on your device', 'No Sleeve account', 'Top 100, any dates', 'Listening clock', 'Your whole history'].map((s) => `<span>${s}</span><i>●</i>`).join('')).join('')}</div></div>
+    <section class="wrap welcome-product" id="features"><header class="welcome-section-head"><span class="label">A LOOK INSIDE</span><h2>Start with a finding.<br>Follow it into your music.</h2><p>This is Mira's synthetic listening history. The artists and records are real; the plays are generated for the demo.</p></header><div class="welcome-chapters" role="tablist" aria-label="Explore the demo findings">${chapters.map((c,i)=>`<button id="welcome-tab-${c.id}" role="tab" aria-selected="${i===0}" aria-controls="welcome-proof" tabindex="${i===0?'0':'-1'}" data-chapter="${i}"><span>0${i+1}</span>${c.title}</button>`).join('')}</div><div id="welcome-proof" class="welcome-proof" role="tabpanel" aria-labelledby="welcome-tab-change">${chapters[0].body}</div>
+      <div class="welcome-recordline"><div><b>${num(A.plays)}</b><span>counted demo plays</span><small>${month(A.from)} — ${month(A.to)}</small></div><div class="welcome-recordline__years" aria-label="Annual demo play counts">${years.map(y=>`<a href="#/demo/year/${y.y}" title="${y.y}: ${num(y.n)} plays"><i style="height:${Math.max(8,y.n/peak*100)}%"></i><span>${y.y}</span></a>`).join('')}</div><a class="link" href="#/demo">Open the full demo ${icon.arrow}</a></div>
+    </section>
 
-  <section class="sl-tracks" id="features">
-    <div class="wrap">
-      <div class="sl-tracks__head" data-reveal>
-        <span class="catno">TRACKLIST</span>
-        <h2>What's on the record</h2>
-        <p>More ways to understand your music. Every one of them free.</p>
-      </div>
-      <div class="sl-tracks__grid">
-        <ol class="tracklist" id="tracklist">
-          ${TRACKS.map((t, i) => `${i === 0 || TRACKS[i - 1].side !== t.side ? `<li class="tracklist__side">Side ${t.side} · ${t.side === 'A' ? 'Your music' : 'Your story'}</li>` : ''}
-          <li><button type="button" class="track" data-t="${i}" aria-pressed="${i === 0}">
-            <span class="track__no">${t.no}</span>
-            <span class="track__main"><span class="track__title">${t.title}</span><span class="track__desc"><span>${t.desc}</span></span></span>
-            <span class="track__len">Free</span>
-            <span class="track__bar"><i></i></span>
-          </button></li>`).join('')}
-        </ol>
-        <div class="sl-preview" id="sl-preview"><div class="sl-preview__inner" id="sl-preview-inner"></div></div>
-      </div>
-    </div>
-  </section>
+    <section class="welcome-setup" id="sources"><div class="wrap"><header class="welcome-section-head"><span class="label">FROM FIRST VISIT TO YOUR RECORD</span><h2>One username.<br>A record to explore.</h2><p>With an existing Last.fm history, Sleeve handles the import and preparation automatically. Larger histories take longer; progress stays visible.</p></header>${journey}<div class="welcome-setup__actions"><a class="btn btn--ink" href="#/start">Get started ${icon.arrow}</a><a class="link" href="#/start/none">New to Last.fm? Start tracking future plays ↗</a></div></div></section>
 
-  <section class="sl-demo">
-    <div class="wrap sl-demo__inner" data-reveal>
-      <div>
-        <span class="catno">EXAMPLE PRESSING</span>
-        <h2>Mira's record</h2>
-        <p>A made-up listener with a very real-looking history. Everything you can do with your own music, you can try here first.</p>
-        <a class="btn sl-btn" href="#/demo">Open Mira's profile ${icon.arrow}</a>
-      </div>
-      <dl class="sl-demo__stats">
-        <div><dt>Plays</dt><dd>${num(A.plays)}</dd></div>
-        <div><dt>Hours</dt><dd>${num(A.hours)}</dd></div>
-        <div><dt>Eras</dt><dd>${A.eras.length}</dd></div>
-        <div><dt>Insights</dt><dd>${A.insights.length}</dd></div>
-      </dl>
-      <div class="sl-demo__covers">${A.albums.slice(0, 8).map((al) => sleeve(al.album, al.artist, { size: 140, kind: 'album' })).join('')}</div>
-    </div>
-  </section>
+    <section class="wrap welcome-depth"><div><span class="label">THERE'S MORE IN YOUR RECORD</span><h2>Keep following<br>the details.</h2><p>A finding is a way in. The full history is there whenever you want to dig deeper.</p></div><nav aria-label="Try Sleeve features"><a href="#/demo/top"><span>01</span><b>Artists, tracks & albums</b><small>Your rankings, with your dates.</small>↗</a><a href="#/demo/timeline"><span>02</span><b>Timeline & listening eras</b><small>The long view, month by month.</small>↗</a><a href="#/demo/patterns"><span>03</span><b>Listening patterns</b><small>Habits, concentration and repeat listening.</small>↗</a><a href="#/demo/clock"><span>04</span><b>The listening clock</b><small>When music happens in your week.</small>↗</a><a href="#/demo/insights"><span>05</span><b>Personal findings & notes</b><small>Prepared from measured listening.</small>↗</a><a href="#/compare"><span>06</span><b>Compare with a friend</b><small>Shared favorites and different directions.</small>↗</a></nav></section>
 
-  <section class="sl-price">
-    <div class="wrap sl-price__inner">
-      <div class="sticker" data-reveal><span>Price</span><b>$0</b><span>every feature</span></div>
-      <div data-reveal>
-        <span class="catno">EVERY FEATURE, EVERYONE</span>
-        <h2>The good parts shouldn't cost money.</h2>
-        <p>Your full listening record belongs to you. Every way to explore it is free here.</p>
-        <ul class="sl-price__list">
-          <li><b>Import your whole history</b><span>Included</span></li>
-          <li><b>Play counts for everything</b><span>Included</span></li>
-          <li><b>Listening clock</b><span>Included</span></li>
-          <li><b>Custom date ranges</b><span>Included</span></li>
-          <li><b>Top albums</b><span>Included</span></li>
-          <li><b>Top 100</b><span>Included</span></li>
-          <li><b>No ads</b><span>Included</span></li>
-        </ul>
-      </div>
-    </div>
-  </section>
+    <section class="wrap welcome-faq" id="faq"><header><span class="label">BEFORE YOU START</span><h2>A few useful details.</h2></header><div>
+      <details><summary>Where does my listening history come from?</summary><p>An existing Last.fm account provides the songs it has recorded. A new account starts tracking future plays after you connect Spotify; it cannot retrieve your earlier Spotify history. An optional Spotify history ZIP can add those earlier plays. <a href="#/start">Choose your starting point ↗</a></p></details>
+      <details><summary>What gets prepared before my profile opens?</summary><p>Sleeve reads your saved plays, checks artist data and artwork, and prepares personal findings and recommendations. Optional AI writing adds explanations from a short summary. You can open the record early; unavailable writing never prevents the measured statistics from working.</p></details>
+      <details><summary>Does my Spotify file leave my device?</summary><p>No. The file is opened in your browser and raw history stays there. When optional AI writing is on, a short summary of listening statistics goes to the writing provider. Artwork and music metadata require catalogue lookups. Turn AI off or clear saved data in <a href="#/settings">Settings</a>.</p></details>
+      <details><summary>Can I connect Spotify directly?</summary><p>The advanced connection requires your own Spotify developer app. Public access limits mean Sleeve uses Last.fm history or your Spotify export for the main experience. Spotify login also cannot supply a lifetime history. <a href="#/connect/spotify">Open the advanced connection ↗</a></p></details>
+      <details><summary>I have my original stats.fm import file. Can I use it?</summary><p>Yes, if it is the original Spotify history ZIP. Sleeve can open that same export; it does not connect to your stats.fm account. <a href="#/start/file">Open your file ↗</a></p></details>
+      <details><summary>Can Sleeve show tempo and musical key?</summary><p>The optional sound check in Deep dive looks for existing audio analysis of verified recordings. Tempo and key appear only where that source has usable data, with coverage shown. A listening log alone cannot supply those values, and missing songs are never filled with guesses. <a href="#/demo/patterns">See the sound check in the demo ↗</a></p></details>
+      <details><summary>Is the AI always available?</summary><p>Writing providers have usage limits and may time out. Sleeve keeps exact statistics and supported fallback explanations available. A larger public launch still needs dependable writing capacity.</p></details>
+    </div></section>
 
-  <section class="sl-ways" id="sources">
-    <div class="wrap">
-      <div class="sl-tracks__head" data-reveal><span class="catno">GET YOUR MUSIC IN</span><h2>Start with Last.fm. Add your past whenever you want.</h2><p>Last.fm records new Spotify plays. A Spotify data file can fill in your earlier listening.</p></div>
-      <div class="ways">
-        <a class="way way--vermilion" href="#/connect/lastfm" data-reveal><span class="way__no">01</span><b>Last.fm</b><span>Open your existing log or start tracking new Spotify plays.</span><em>Free Last.fm account needed</em></a>
-        <a class="way way--moss" href="#/connect/file" data-reveal><span class="way__no">02 · OPTIONAL</span><b>Spotify export</b><span>Add past plays, listening time and skips whenever you want.</span><em>Spotify prepares the file by email</em></a>
-      </div>
-    </div>
-  </section>
-
-  <section class="sl-back" id="faq">
-    <div class="wrap">
-      <div class="sl-back__head"><span class="catno">LINER NOTES</span><span class="catno">YOUR MUSIC, IN FULL</span></div>
-      <div class="sl-back__cols" data-reveal>
-        <div>
-          <h3>Privacy</h3>
-          <p>Your Spotify file is opened in your browser and never uploaded. There are no Sleeve accounts and no analytics. What you connect is saved on this device only. When AI writing is on, Sleeve sends a short summary of totals, top artists and songs, eras, and listening patterns to its writing provider. It never sends your raw play history. Turn AI off or clear everything in <a href="#/settings">Settings</a>.</p>
-          <h3>How is this free?</h3>
-          <p>Sleeve runs mostly in your browser. The writing provider has usage limits, so AI writing may pause when demand is high; your listening analysis still works. We will publish a sustainable funding plan before a wider launch.</p>
-        </div>
-        <div class="faq faq--small">
-          <details><summary>Why no one-click Spotify login?</summary><p>Spotify limits new developer apps to five authorized users. A Spotify login also cannot provide your lifetime play history. For now, <a href="#/start/none">start a listening log</a> for future plays or add your Spotify data file for the past. If you have your own developer app, you can <a href="#/connect/spotify">connect it as an advanced option</a>.</p></details>
-          <details><summary>How do I get my Spotify export?</summary><p>Tick "Extended streaming history" on Spotify's privacy page. It includes your lifetime plays, but Spotify can take up to 30 days to prepare it. <a href="#/connect/file">Step-by-step guide</a>.</p></details>
-          <details><summary>Why don't my numbers match Wrapped?</summary><p>Spotify counts a stream at 30 seconds, Last.fm at half a song, and Wrapped only covers part of the year. Sleeve shows its rule and lets you change it.</p></details>
-          <details><summary>What happens when I first connect Last.fm?</summary><p>A new Last.fm account begins recording future Spotify plays. Once a song appears, Sleeve can show it. Longer patterns and eras need more listening history; the optional Spotify file can add your past.</p></details>
-          <details><summary>Can I use my stats.fm history?</summary><p>If you kept the original Spotify history ZIP that you uploaded to stats.fm, you can use that same file in Sleeve. Sleeve does not connect to your stats.fm account.</p></details>
-          <details><summary>Why no happiness or danceability score?</summary><p>Those need analysis of each recording, which a listening history does not contain. Sleeve shows measured play patterns and artist-tag genres, with coverage, rather than guessing audio properties from names.</p></details>
-          <details><summary>Does it count my phone?</summary><p>Yes. Plays come from Spotify itself, so every device counts.</p></details>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="sl-final">
-    <div class="wrap sl-final__inner" data-reveal>
-      <div class="sl-final__disc" aria-hidden="true"></div>
-      <h2>Drop the needle.</h2>
-      <p>Already track with Last.fm? Enter your username to open your record.</p>
-      <div id="final-lookup"></div>
-      <a class="sl-final__alt" href="#/start/none">Only use Spotify? Start here ${icon.arrow}</a>
-    </div>
-  </section>`;
-
-  mountLookup($('#final-lookup'), { source: 'lastfm', id: 'final-lastfm', cta: 'Drop it', onConfirm: (res) => go(hrefFor(pidFor('lastfm', res.user.name))) });
-  bindTracks(TRACKS, A);
-  runDeck();
-  navOverHero();
-  revealOnScroll();
-}
-
-/* ---------- Hero: the record deck ---------- */
-function runDeck() {
-  const root = document.documentElement;
-  const hero = $('#sl-hero');
-  const sticker = $('.deck__sticker');
-  const covers = $$('.deck__cover');
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  let i = 0, alive = true, timer = 0, labelTimer = 0, generation = 0;
-  const show = (k, initial = false) => {
-    const current = ++generation;
-    covers.forEach((c) => c.classList.toggle('is-on', Number(c.dataset.i) === k));
-    hydrate(covers[k]);
-    clearTimeout(labelTimer);
-    if (!initial) sticker.classList.add('is-changing');
-    labelTimer = setTimeout(() => {
-      if (!alive || current !== generation) return;
-      $('#deck-title').textContent = HERO_ALBUMS[k][0];
-      $('#deck-artist').textContent = HERO_ALBUMS[k][1];
-      sticker.classList.remove('is-changing');
-    }, initial || reduced.matches ? 0 : 350);
-    art('album', ...HERO_ALBUMS[k], true).then((url) => palette(url)).then((pal) => {
-      if (!alive || current !== generation || !pal) return;
-      root.style.setProperty('--hero-bg', pal.bg);
-      root.style.setProperty('--hero-ink', pal.ink);
-      root.style.setProperty('--hero-soft', pal.soft);
-      hero.classList.toggle('is-dark-ink', pal.dark);
-    }).catch(() => {});
+    <section class="welcome-end"><div class="wrap"><div><span class="label">YOUR RECORD IS NEXT</span><h2>Bring the music.<br>We'll put it in context.</h2></div><div><a class="btn btn--ink" href="#/start">Get started ${icon.arrow}</a><a class="link" href="#/demo">Try the demo first ↗</a></div></div></section>
+  </div>`;
+  hydrate(view());
+  const tablist=$('.welcome-chapters'),proof=$('#welcome-proof');
+  const select=i=>{
+    const chapter=chapters[i];
+    $$('[data-chapter]',tablist).forEach((button,index)=>{button.setAttribute('aria-selected',String(index===i));button.tabIndex=index===i?0:-1;});
+    proof.setAttribute('aria-labelledby',`welcome-tab-${chapter.id}`);proof.innerHTML=chapter.body;hydrate(proof);
   };
-  const schedule = () => {
-    clearTimeout(timer);
-    if (!alive || document.hidden || reduced.matches) return;
-    timer = setTimeout(() => { i = (i + 1) % HERO_ALBUMS.length; show(i); schedule(); }, 6500);
-  };
-  const visibility = () => schedule();
-  document.addEventListener('visibilitychange', visibility);
-  show(0, true);
-  schedule();
-  onLeave(() => {
-    alive = false;
-    clearTimeout(timer); clearTimeout(labelTimer);
-    document.removeEventListener('visibilitychange', visibility);
-    ['--hero-bg', '--hero-ink', '--hero-soft'].forEach((p) => root.style.removeProperty(p));
+  tablist.addEventListener('click',event=>{const button=event.target.closest('[data-chapter]');if(button)select(Number(button.dataset.chapter));});
+  tablist.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    const current=Number(event.target.closest('[data-chapter]')?.dataset.chapter || 0);
+    const next=event.key==='Home'?0:event.key==='End'?chapters.length-1:(current+(event.key==='ArrowRight'?1:-1)+chapters.length)%chapters.length;
+    event.preventDefault();select(next);$(`[data-chapter="${next}"]`,tablist).focus();
   });
-}
-
-// The nav takes the hero's colour until you scroll past it.
-function navOverHero() {
-  const nav = $('#nav'), hero = $('#sl-hero');
-  nav.classList.add('nav--hero');
-  const io = new IntersectionObserver(([e]) => nav.classList.toggle('nav--hero', e.isIntersecting), { rootMargin: '-64px 0px 0px 0px' });
-  io.observe(hero);
-  onLeave(() => { io.disconnect(); nav.classList.remove('nav--hero'); });
-}
-
-/* ---------- Tracklist with a live preview ---------- */
-function bindTracks(TRACKS, A) {
-  const list = $('#tracklist'), pv = $('#sl-preview'), inner = $('#sl-preview-inner');
-  const narrow = matchMedia('(max-width: 900px)');
-  let cur = -1, auto = true, timer = 0;
-  const select = (i, fromUser = false) => {
-    if (fromUser) auto = false;
-    if (i === cur) return;
-    cur = i;
-    $$('.track', list).forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.t) === i)));
-    inner.classList.remove('is-in'); void inner.offsetWidth;
-    inner.innerHTML = `<span class="sl-preview__no">${TRACKS[i].no}</span>${TRACKS[i].vis}`;
-    inner.classList.add('is-in');
-    if (narrow.matches) $(`.track[data-t="${i}"]`, list).closest('li').after(pv);
-    else if (pv.parentElement !== $('.sl-tracks__grid')) $('.sl-tracks__grid').append(pv);
-    if ($('#pv-timeline', inner)) bindTimeline($('#pv-timeline', inner), A);
-    clearTimeout(timer);
-    if (auto) timer = setTimeout(() => select((cur + 1) % TRACKS.length), 5200);
-  };
-  list.addEventListener('click', (e) => { const b = e.target.closest('.track'); if (b) select(Number(b.dataset.t), true); });
-  list.addEventListener('mouseover', (e) => { const b = e.target.closest('.track'); if (b && !narrow.matches) select(Number(b.dataset.t), true); });
-  select(0);
-  onLeave(() => clearTimeout(timer));
-}
-
-// Fade sections in as they scroll into view. Anything already on screen shows at once.
-function revealOnScroll() {
-  const els = $$('[data-reveal]');
-  if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  document.documentElement.classList.add('reveal-ready');
-  const io = new IntersectionObserver((entries) => {
-    entries.forEach((e) => {
-      if (!e.isIntersecting) return;
-      const sibs = [...e.target.parentElement.children].filter((x) => x.hasAttribute('data-reveal'));
-      e.target.style.setProperty('--d', `${Math.min(sibs.indexOf(e.target), 5) * 80}ms`);
-      e.target.classList.add('is-in');
-      io.unobserve(e.target);
-    });
-  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 });
-  els.forEach((el) => io.observe(el));
-  onLeave(() => { io.disconnect(); document.documentElement.classList.remove('reveal-ready'); });
 }

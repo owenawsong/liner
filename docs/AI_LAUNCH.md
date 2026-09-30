@@ -21,6 +21,7 @@ Updated 2026-09-30.
 - Histories with at least 12,000 rows are calculated in a module worker so setup can remain responsive. The synchronous calculation is a compatibility fallback. Calculations use the device time zone.
 - The demo archive ends at the last complete day, so a reload within that day does not invalidate its prepared writing. In local live checks, both structured tasks completed through the OpenRouter Gemma fallback, but a later attempt encountered editor 429, quick-writer 502 and a localhost NVIDIA timeout. Free-provider availability remains a launch risk; exact calculations and cached recommendations remain usable when writing fails.
 - AOTY and RYM appear as external opinion search links, not imported scores. AOTY's terms require written permission for automated retrieval and invite API/data partnerships. A feed needs permission, a stable identity mapping, attribution and a sample-size display before activation. Do not present a MusicBrainz score as an AOTY or RYM score.
+- The next AOTY access request should cover release IDs, canonical links, user-score averages and counts, critic-score averages and counts, permitted cache duration, attribution and public display rights. User and critic scores must remain separate and secondary to the personal recommendation. Obtain a supported feed and explicit access terms before implementing its adapter. Sonemic's public homepage still describes API rollout as planned; its API landing page alone does not verify access to a public ratings feed. No partner request has been sent.
 
 ## Current limits and launch gates
 
@@ -48,3 +49,4 @@ The optional Data audit now follows this policy: exact title, complete credited 
 - [OpenRouter data-collection controls](https://openrouter.ai/docs/guides/get-started/sovereign-ai#data-collection-controls)
 
 - [Album of the Year terms and data partnerships](https://www.albumoftheyear.org/terms-of-use/)
+- [Sonemic public API plans](https://sonemic.com/)

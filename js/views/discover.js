@@ -12,6 +12,26 @@ const spotifyArtist = (name) => `https://open.spotify.com/search/${encodeURIComp
 const lastfmArtist = (name) => `https://www.last.fm/music/${encodeURIComponent(name)}`;
 const lastfmAlbum = (name, artist) => `${lastfmArtist(artist)}/${encodeURIComponent(name)}`;
 
+export function ratingsReviewsHTML(name,artist,group=null,reviews=0) {
+  const score=Number.isFinite(group?.rating)&&group.rating>=0&&group.rating<=5&&group.votes>=20;
+  const matched=group?.id?`<a href="https://musicbrainz.org/release-group/${esc(group.id)}" target="_blank" rel="noopener">${score?`MusicBrainz community · ${group.rating.toFixed(1)}/5 · ${num(group.votes)} ratings`:group.votes?`MusicBrainz · ${num(group.votes)} ratings (score not shown)`:'View the MusicBrainz record'} ↗</a>`:'';
+  const written=group?.id&&reviews?`<a href="https://critiquebrainz.org/release-group/${esc(group.id)}" target="_blank" rel="noopener">CritiqueBrainz · ${num(reviews)} written reviews ↗</a>`:'';
+  return `<details class="disc-ratings" data-opinion-key="${esc(tasteKey('album',name,artist))}"><summary>Ratings & reviews <span aria-hidden="true">＋</span></summary><div>${matched}${written}<a href="https://www.albumoftheyear.org/search/?q=${encodeURIComponent(`${artist} ${name}`)}" target="_blank" rel="noopener">Search Album of the Year ↗</a><a href="https://rateyourmusic.com/search?searchterm=${encodeURIComponent(`${artist} ${name}`)}&searchtype=l" target="_blank" rel="noopener">Search Rate Your Music ↗</a><small>AOTY and RYM open search results on their sites; their scores are not imported. Community opinions are separate from your rating.</small></div></details>`;
+}
+
+export function shelfImportPreview(input,taste) {
+  if(input?.format!=='sleeve-taste-v1'||!Array.isArray(input.items)||input.items.length>10000)throw new Error('Choose a Sleeve shelf backup (.json). AOTY and RYM exports cannot be restored here.');
+  const rows=new Map();
+  for(const row of input.items){
+    if(!['album','artist'].includes(row?.kind)||typeof row.name!=='string'||!row.name.trim()||!['','saved','known','hidden'].includes(row.status||''))continue;
+    const name=row.name.trim().slice(0,200),artist=String(row.artist||'').trim().slice(0,200),key=tasteKey(row.kind,name,artist),rating=Number(row.rating);
+    rows.set(key,{kind:row.kind,name,artist,mbid:String(row.mbid||'').slice(0,40),status:row.status||'',rating:row.rating!=null&&Number.isFinite(rating)&&rating>=1&&rating<=5?rating:null,note:String(row.note||'').slice(0,800)});
+  }
+  if(!rows.size)throw new Error('This backup has no valid shelf entries to restore.');
+  const replaced=[...rows.keys()].filter(key=>Object.prototype.hasOwnProperty.call(taste.items,key)).length;
+  return {input:{format:'sleeve-taste-v1',items:[...rows.values()]},added:rows.size-replaced,replaced,total:rows.size};
+}
+
 export function discoverView(ctx, banner) {
   const root = $('#tab');
   root.innerHTML = `${banner}
@@ -27,11 +47,11 @@ export function discoverView(ctx, banner) {
     <section class="disc-section"><div class="disc-section__head"><div><span class="label">FROM THE SAME CONNECTIONS</span><h2>More records to try</h2></div><span class="label">Album & artist matched</span></div>
       <p class="muted">More matched records from the same selection. Your own saves and passes shape future picks; community scores stay secondary.</p><div id="disc-album-status" class="disc-status" role="status" aria-live="polite">Finding artists first…</div><div id="disc-albums" class="disc-albums"></div>
     </section>
-    <div class="disc-lower"><section class="disc-section"><div class="disc-section__head"><div><span class="label">THE RECORD YOU KNOW</span><h2>What did you actually love?</h2></div></div><p class="muted">A play count cannot tell us that. Rate albums you already heard if you want your opinion to shape later picks.</p><label class="sr" for="disc-album-search">Find an album in your history</label><input id="disc-album-search" class="input" type="search" placeholder="Search your listened albums…" autocomplete="off"><div id="disc-listened"></div></section>
-      <section class="disc-section"><div class="disc-section__head"><div><span class="label">KEPT FOR LATER</span><h2>Your shelf</h2></div><span class="label" id="disc-shelf-count"></span></div><div id="disc-shelf"></div><div class="disc-backup"><p>Saved artists and records influence the next recommendations. Your shelf stays in this browser; keep a copy for another device.</p><div><button class="btn btn--line btn--sm" type="button" data-disc-export>Export shelf</button><label class="btn btn--line btn--sm" for="disc-import">Import shelf</label><input id="disc-import" type="file" accept=".json,application/json" hidden></div></div></section></div>
+    <div class="disc-lower"><details class="disc-section disc-collection"><summary><b>Your opinions</b><span>Rate music you already know <i aria-hidden="true">＋</i></span></summary><div class="disc-collection__body"><p class="muted">Optional: your ratings help shape future picks. Listening counts never become ratings.</p><label class="sr" for="disc-album-search">Find an album in your history</label><input id="disc-album-search" class="input" type="search" placeholder="Search your listened albums…" autocomplete="off"><div id="disc-listened"></div></div></details>
+      <details class="disc-section disc-collection"><summary><b>Your shelf</b><span><span id="disc-shelf-count">Loading…</span> <i aria-hidden="true">＋</i></span></summary><div class="disc-collection__body"><div id="disc-shelf"></div><div class="disc-backup"><p>Saved music and your notes stay in this browser. Export a Sleeve JSON backup to keep a copy or move it to another device.</p><div><button class="btn btn--line btn--sm" type="button" data-disc-export>Export Sleeve backup</button><label class="btn btn--line btn--sm" for="disc-import">Restore Sleeve backup</label><input id="disc-import" type="file" accept=".json,application/json" hidden></div><div id="disc-import-preview" hidden></div></div></div></details></div>
     <p class="disc-method">Connections and artist tags: Last.fm. Album identities and community scores: MusicBrainz. The optional AI curator works from this candidate data and your listening summary; your raw plays stay here. Community scores stay separate from your own opinions.</p>`;
 
-  let alive = true, taste, pool = [], albums = [], catalogue = [], starts = {}, curation = [], mode = 'for-you', selectedSeed = '', runCtrl;
+  let alive = true, taste, pool = [], albums = [], catalogue = [], starts = {}, curation = [], mode = 'for-you', selectedSeed = '', runCtrl,showAllShelf=false,pendingImport=null;
   const editionKey = `liner.discover.edition:${ctx.pid}`;
   const lookup = new Map();
   const keepRated = new Set();
@@ -56,6 +76,7 @@ export function discoverView(ctx, banner) {
   const explanation = (x) => usefulCuration(x.editorial,x) ? x.editorial : connectionReason(x);
   const paintStarts = () => {
     if (!alive || !taste) return;
+    const openOpinions=new Set($$('.disc-ratings[open]',$('#disc-starts',root)).map(x=>x.dataset.opinionKey));
     starts=startingRecords(pool,albums,catalogue,taste,ctx.A,curation);
     const labels={current:['01','FOLLOW YOUR ROTATION','A close connection'],explore:['02','TRY ANOTHER DIRECTION','A different starting point'],revisit:['03','FROM YOUR OWN ARCHIVE','Worth another listen']};
     const rows=Object.values(starts).filter(Boolean);
@@ -70,9 +91,9 @@ export function discoverView(ctx, banner) {
         <p class="disc-start__why">${esc(x.reason)}</p>
         ${track ? `<div class="disc-start__track"><span class="label">${x.recorded?'YOUR MOST PLAYED TRACK':album?'OR TRY THIS TRACK':'START WITH THIS TRACK'}</span><a data-start-listen="${x.lane}" href="${spotifySearch(track.name,x.artist)}" target="_blank" rel="noopener"><b>${esc(track.name)}</b><span aria-hidden="true">↗</span></a><small>${x.recorded?`${num(track.plays)} plays in your record`:track.listeners?`${compact(track.listeners)} Last.fm track listeners · artist catalogue`:'From the artist’s Last.fm catalogue'}</small></div>`:''}
         <div class="disc-start__actions"><a class="btn btn--sm" data-start-listen="${x.lane}" href="${spotifySearch(album?.name || track?.name || '',x.artist)}" target="_blank" rel="noopener">Find on Spotify ↗</a><div data-key="${esc(tasteKey(item.kind,item.name,item.artist))}"><button type="button" data-judge="saved" data-start-outcome="${x.lane}" aria-pressed="${feedback(item).status==='saved'}">${feedback(item).status==='saved'?'✓ Saved':'Save for later'}</button><button type="button" data-judge="hidden" data-start-outcome="${x.lane}">Pass</button></div></div>
-        ${group?.votes>=20?`<a class="disc-start__opinion" href="https://musicbrainz.org/release-group/${group.id}" target="_blank" rel="noopener">MusicBrainz ${group.rating?.toFixed(1)}/5 · ${num(group.votes)} ratings ↗</a>`:''}
-        ${album?`<details class="disc-start__opinions"><summary>Other opinions</summary><a href="https://www.albumoftheyear.org/search/?q=${encodeURIComponent(`${x.artist} ${album.name}`)}" target="_blank" rel="noopener">Find on Album of the Year ↗</a><a href="https://rateyourmusic.com/search?searchterm=${encodeURIComponent(`${x.artist} ${album.name}`)}&searchtype=l" target="_blank" rel="noopener">Find on Rate Your Music ↗</a></details>`:''}</div></article>`;
+        ${album?ratingsReviewsHTML(album.name,x.artist,group,album.reviews||0):''}</div></article>`;
     }).join('') : '<p class="empty">No starting record is ready yet. Your shelf and artist browser remain available.</p>';
+    $$('.disc-ratings',$('#disc-starts',root)).forEach(x=>{x.open=openOpinions.has(x.dataset.opinionKey);});
     hydrate($('#disc-starts',root));
   };
   const status = (message, pct) => {
@@ -102,6 +123,7 @@ export function discoverView(ctx, banner) {
   };
   const paintAlbums = () => {
     if (!alive || !taste) return;
+    const openOpinions=new Set($$('.disc-ratings[open]',$('#disc-albums',root)).map(x=>x.dataset.opinionKey));
     const opening=new Set(Object.values(starts).filter(x=>x?.album).map(x=>tasteKey('album',x.album.name,x.artist)));
     const visible = albums.filter((x) => {
       const own = feedback({ kind: 'album', name: x.name, artist: x.artist });
@@ -110,12 +132,10 @@ export function discoverView(ctx, banner) {
     });
     $('#disc-albums', root).innerHTML = visible.length ? visible.map((x, i) => {
       const item = remember({ kind: 'album', name: x.name, artist: x.artist, mbid: x.group.id });
-      const g = x.group, critics = x.reviews ? `<a href="https://critiquebrainz.org/release-group/${g.id}" target="_blank" rel="noopener">${num(x.reviews)} written reviews ↗</a>` : '';
-      const community = g.votes >= 20 ? `<b>${g.rating?.toFixed(1)}<small>/5</small></b><span>MusicBrainz · ${num(g.votes)} ratings</span>`
-        : g.votes ? `<span>MusicBrainz · ${num(g.votes)} ratings<br><small>Too few for a reliable score</small></span>` : '<span>No community score yet</span>';
-      const opinions=`<details class="disc-opinions"><summary>Other opinions ↗</summary><a href="https://www.albumoftheyear.org/search/?q=${encodeURIComponent(`${x.artist} ${x.name}`)}" target="_blank" rel="noopener">Search Album of the Year ↗</a><a href="https://rateyourmusic.com/search?searchterm=${encodeURIComponent(`${x.artist} ${x.name}`)}&searchtype=l" target="_blank" rel="noopener">Search Rate Your Music ↗</a></details>`;
-      return `<article class="disc-album${i === 0 ? ' disc-album--lead' : ''}"><span class="disc-album__no">${String(i + 1).padStart(2, '0')}</span>${sleeve(x.name, x.artist, { size: i === 0 ? 176 : 88, kind: 'album' })}<div class="disc-album__body"><span class="label">${esc(g.type)}${g.date ? ` / ${esc(g.date.slice(0, 4))}` : ''}</span><h3>${esc(x.name)}</h3><p class="disc-album__artist">${esc(x.artist)}</p>${marker(item)}<p class="disc-why">Connected through <b>${esc(x.reason.join(' + '))}</b>.</p><div class="disc-links"><a class="link" href="${spotifySearch(x.name, x.artist)}" target="_blank" rel="noopener">Listen on Spotify ↗</a><a class="link link--quiet" href="${esc(x.url || lastfmAlbum(x.name, x.artist))}" target="_blank" rel="noopener">Details ↗</a></div>${controls(item)}</div><aside class="disc-community"><span class="label">COMMUNITY OPINION</span>${community}${critics}${opinions}</aside></article>`;
+      const g = x.group;
+      return `<article class="disc-album${i === 0 ? ' disc-album--lead' : ''}"><span class="disc-album__no">${String(i + 1).padStart(2, '0')}</span>${sleeve(x.name, x.artist, { size: i === 0 ? 176 : 88, kind: 'album' })}<div class="disc-album__body"><span class="label">${esc(g.type)}${g.date ? ` / ${esc(g.date.slice(0, 4))}` : ''}</span><h3>${esc(x.name)}</h3><p class="disc-album__artist">${esc(x.artist)}</p>${marker(item)}<p class="disc-why">Connected through <b>${esc(x.reason.join(' + '))}</b>.</p><div class="disc-links"><a class="link" href="${spotifySearch(x.name, x.artist)}" target="_blank" rel="noopener">Listen on Spotify ↗</a><a class="link link--quiet" href="${esc(x.url || lastfmAlbum(x.name, x.artist))}" target="_blank" rel="noopener">Details ↗</a></div>${controls(item)}</div><aside class="disc-community">${ratingsReviewsHTML(x.name,x.artist,g,x.reviews||0)}</aside></article>`;
     }).join('') : '<p class="empty">No new albums passed the identity check yet. Try rebuilding after more listening or rating a few records.</p>';
+    $$('.disc-ratings',$('#disc-albums',root)).forEach(x=>{x.open=openOpinions.has(x.dataset.opinionKey);});
     hydrate($('#disc-albums', root));
   };
   const paintShelf = () => {
@@ -123,7 +143,8 @@ export function discoverView(ctx, banner) {
     const all = Object.values(taste.items).filter((x) => x.status || x.rating || x.note).sort((a, b) => b.updated - a.updated);
     $('#disc-shelf-count', root).textContent = `${all.length} ${all.length === 1 ? 'entry' : 'entries'}`;
     const row = (x) => { remember(x); return `<div class="disc-shelf-row">${sleeve(x.name, x.artist || x.name, { size: 44, round: x.kind === 'artist', kind: x.kind })}<div><b>${esc(x.name)}</b><small>${esc(x.artist || 'Artist')}${x.rating ? ` · your ${x.rating}/5` : ''}${x.status ? ` · ${x.status}` : ''}</small>${x.note ? `<p>${esc(x.note)}</p>` : ''}</div>${controls(x)}</div>`; };
-    $('#disc-shelf', root).innerHTML = all.length ? `${all.filter((x) => x.status !== 'hidden').slice(0, 20).map(row).join('')}${all.some((x) => x.status === 'hidden') ? `<details class="disc-hidden"><summary>${all.filter((x) => x.status === 'hidden').length} hidden items</summary>${all.filter((x) => x.status === 'hidden').map(row).join('')}</details>` : ''}` : '<p class="empty">Save an artist, rate a record, or add a note. Your shelf will grow here.</p>';
+    const visible=all.filter(x=>x.status!=='hidden');
+    $('#disc-shelf', root).innerHTML = all.length ? `${visible.slice(0,showAllShelf?visible.length:20).map(row).join('')}${visible.length>20?`<button class="btn btn--line btn--sm disc-show-shelf" type="button" data-disc-show-shelf>${showAllShelf?'Show recent 20':`Show all ${num(visible.length)} shelf entries`}</button>`:''}${all.some((x) => x.status === 'hidden') ? `<details class="disc-hidden"><summary>${all.filter((x) => x.status === 'hidden').length} hidden items</summary>${all.filter((x) => x.status === 'hidden').map(row).join('')}</details>` : ''}` : '<p class="empty">Save an artist, rate a record, or add a note. Your shelf will grow here.</p>';
     hydrate($('#disc-shelf', root));
   };
   const paintListened = () => {
@@ -139,6 +160,10 @@ export function discoverView(ctx, banner) {
   const repaint = () => { paintStarts(); paintArtists(); paintAlbums(); paintShelf(); paintListened(); };
 
   root.addEventListener('click', async (event) => {
+    if(event.target.closest('[data-disc-show-shelf]')){showAllShelf=!showAllShelf;paintShelf();return;}
+    if(event.target.closest('[data-disc-cancel-import]')){pendingImport=null;$('#disc-import-preview',root).hidden=true;return;}
+    const applyImport=event.target.closest('[data-disc-apply-import]');
+    if(applyImport&&pendingImport){applyImport.disabled=true;try{const count=await importTaste(ctx.pid,pendingImport.input);pendingImport=null;if(alive){$('#disc-import-preview',root).hidden=true;repaint();toast(`Restored ${num(count)} shelf entries.`);}}catch(e){toast(e.message,'bad');applyImport.disabled=false;}return;}
     const listen=event.target.closest('[data-start-listen]');
     if(listen) { recommendationOutcome(ctx.pid,starts[listen.dataset.startListen],'listen').catch(()=>{}); return; }
     const modeButton = event.target.closest('[data-disc-mode]');
@@ -187,10 +212,13 @@ export function discoverView(ctx, banner) {
   $('#disc-album-search', root).addEventListener('input', paintListened);
   $('#disc-import', root).addEventListener('change', async (event) => {
     const file = event.target.files?.[0]; if (!file) return;
+    if(!taste){toast('Your shelf is still loading. Try again in a moment.');event.target.value='';return;}
+    pendingImport=null;$('#disc-import-preview',root).hidden=true;
     try {
       if (file.size > 2e6) throw new Error('That shelf file is too large.');
-      const count = await importTaste(ctx.pid, JSON.parse(await file.text()));
-      if (alive) { repaint(); toast(`Imported ${num(count)} shelf entries.`); }
+      const input=JSON.parse(await file.text());if(!alive)return;
+      pendingImport=shelfImportPreview(input,taste);
+      const preview=$('#disc-import-preview',root);preview.hidden=false;preview.innerHTML=`<h3>Restore ${esc(file.name)}?</h3><p>${num(pendingImport.added)} new entries · ${num(pendingImport.replaced)} existing entries will be replaced with this backup’s ratings, notes and saved status.</p><div><button class="btn btn--sm" type="button" data-disc-apply-import>Apply backup</button><button class="btn btn--line btn--sm" type="button" data-disc-cancel-import>Cancel</button></div>`;
     } catch (e) { toast(e instanceof SyntaxError ? 'That file is not valid JSON.' : e.message, 'bad'); }
     event.target.value = '';
   });

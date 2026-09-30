@@ -34,7 +34,7 @@ export function discoverySeeds(A, taste, edition = 0) {
   const lifetimeTotal = A.artists.slice(0, 24).reduce((sum, a) => sum + (a.n || 1), 0) || 1;
   recent.forEach((a) => add(a.name, 1.6 * Math.sqrt(a.plays / recentTotal), 'in your recent rotation'));
   A.artists.slice(0, 24).forEach((a) => add(a.name, .75 * Math.sqrt((a.n || 1) / lifetimeTotal), 'an all-time favorite'));
-  const favorites = Object.values(taste.items).filter((x) => x.rating >= 4 || x.status === 'saved')
+  const favorites = Object.values(taste.items).filter((x) => x.status !== 'hidden' && (x.rating >= 4 || (x.status === 'saved' && !x.rating)))
     .sort((a, b) => (b.updated || 0) - (a.updated || 0));
   favorites.forEach((x) => add(x.kind === 'album' ? x.artist : x.name,
     x.rating >= 4 ? .8 + .1 * (x.rating - 4) : .8,

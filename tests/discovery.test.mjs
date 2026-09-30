@@ -22,6 +22,18 @@ test('connection diversity does not refill a seed beyond the cap',()=>{
   assert.equal(picks.length,3);
 });
 
+test('saved albums with low ratings and hidden high-rated albums do not become positive seeds', () => {
+  const A = { to: Date.now(), rows: [], artists: [] };
+  const taste = { items: {
+    low: { kind: 'album', name: 'Disliked record', artist: 'Disliked artist', status: 'saved', rating: 1 },
+    neutral: { kind: 'album', name: 'Neutral record', artist: 'Neutral artist', status: 'saved', rating: 3 },
+    hidden: { kind: 'album', name: 'Hidden record', artist: 'Hidden artist', status: 'hidden', rating: 5 },
+    saved: { kind: 'album', name: 'Unheard record', artist: 'Unheard artist', status: 'saved' },
+    liked: { kind: 'album', name: 'Liked record', artist: 'Liked artist', rating: 5 },
+  } };
+  assert.deepEqual(discoverySeeds(A, taste).map(seed => seed.name).sort(), ['Liked artist', 'Unheard artist']);
+});
+
 test('the strongest weighted source supplies the explanation, with recorded counts',()=>{
   const candidate={name:'Next artist',sources:[{name:'Weak',weight:.1,match:1,recentPlays:2},
     {name:'Current favorite',weight:2,match:.7,recentPlays:430,lifetimePlays:900}]};

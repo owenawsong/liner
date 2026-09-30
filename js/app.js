@@ -20,6 +20,10 @@ async function route() {
   leave();
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map((s) => { try { return decodeURIComponent(s); } catch { return s; } });
   const [a, b, c, d] = parts;
+  document.body.dataset.page = ['u', 'demo', 'file', 'spotify'].includes(a) ? 'profile' : (a || 'home');
+  $('#mobile-menu').hidden = true;
+  $('#menu-btn').setAttribute('aria-expanded', 'false');
+  $('#menu-btn').setAttribute('aria-label', 'Open menu');
   let pid = null;
   try {
     if (!a) await renderHome();
@@ -62,7 +66,7 @@ function updateNavUser() {
   const onProfile = /^#\/(u|demo|file|spotify)/.test(location.hash);
   el.innerHTML = p && !onProfile
     ? `<a class="nav__user" href="${hrefFor(p.pid)}">${avatar(p.display, p.image, 26)}<span>${esc(p.display)}</span></a>`
-    : (onProfile ? '' : '<a class="btn btn--ink btn--sm" href="#/start">Get started</a>');
+    : (onProfile ? '<a class="nav__user" href="#/settings">Settings</a>' : '<a class="btn btn--ink btn--sm" href="#/start">Get started</a>');
 }
 
 addEventListener('scroll', () => $('#nav').classList.toggle('is-stuck', scrollY > 4), { passive: true });
@@ -130,6 +134,11 @@ function initDrop() {
 
 /* ---------- Boot ---------- */
 async function boot() {
+  $('.skip').addEventListener('click', (event) => {
+    event.preventDefault();
+    view().focus({ preventScroll: true });
+    view().scrollIntoView({ behavior: 'instant' });
+  });
   initThemes();
   initMenu();
   initDrop();
