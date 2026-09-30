@@ -17,9 +17,7 @@ import { demoRecent, DEMO_USER } from '../sources/demo.js';
 import * as lastfm from '../sources/lastfm.js';
 import * as spotify from '../sources/spotify.js';
 
-const TABS = [['overview', 'Overview'], ['discover', 'Discover'], ['top', 'Charts'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['patterns', 'Deep dive'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
-const PRIMARY_TABS = TABS.slice(0, 4);
-const MORE_TABS = TABS.slice(4);
+const TABS = [['overview', 'Overview'], ['discover', 'Discover'], ['top', 'Top'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['patterns', 'Deep dive'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
 const LABEL = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export', demo: 'Demo' };
 const DAY = 864e5;
 let overviewPick = -1;
@@ -75,15 +73,12 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
   }
   const current = DETAIL[tab] || tab;
   const tabLink = ([t, label]) => `<a href="${hrefFor(pid, t === 'overview' ? '' : t)}"${t === current ? ' aria-current="page"' : ''}>${label}${t === 'insights' && A ? `<small>${A.insights.length}</small>` : ''}</a>`;
-  const activeMore = MORE_TABS.find(([t]) => t === current);
   view().innerHTML = `
     <div class="wrap">${header(ctx)}</div>
-    <nav class="tabs" aria-label="Profile sections"><div class="wrap tabs__inner">${PRIMARY_TABS.map(tabLink).join('')}<details class="tabs__more"><summary class="${activeMore ? 'is-current' : ''}" aria-label="More profile sections">${activeMore ? activeMore[1] : 'More'} <span aria-hidden="true">⌄</span></summary><div class="tabs__menu">${MORE_TABS.map(tabLink).join('')}</div></details></div></nav>
+    <nav class="tabs" aria-label="Profile sections"><div class="wrap tabs__inner">${TABS.map(tabLink).join('')}</div></nav>
     <div class="wrap" id="sync-banner" aria-live="polite"></div>
     <div class="wrap fade-in" id="tab"></div>`;
   ({ overview, discover: discoverTab, top, timeline: timelineTab, evolution: evolutionTab, patterns: patternsTab, insights: insightsTab, clock, data, artist: detail, song: detail, year: detail })[tab](ctx);
-  const more = $('.tabs__more');
-  more.addEventListener('keydown', (event) => { if (event.key === 'Escape') { more.open = false; $('summary', more).focus(); } });
   bindSyncBanner(ctx);
   autoSync(ctx);
   mountSearch($('#search'), A, ctx.L);

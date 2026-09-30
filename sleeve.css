@@ -284,27 +284,7 @@
 .phead__covers { position: absolute; right: -30px; bottom: -40px; display: flex; gap: 10px; transform: rotate(-8deg); pointer-events: none; opacity: .95; }
 .phead__covers .sleeve { box-shadow: 0 20px 40px -20px rgb(0 0 0 / .6); }
 .phead__body, .phead__side, .phead > .avatar { position: relative; z-index: 1; }
-@media (max-width: 860px) { .phead__covers { right: -12px; bottom: -22px; opacity: .16; } .phead__covers .sleeve:not(:first-child) { display: none; } }
-
-/* The record identity carries through the profile instead of stopping at setup. */
-.phead::before { content: ''; position: absolute; z-index: 2; inset: 0 0 auto; height: 5px; background: var(--accent); pointer-events: none; }
-.tabs__inner { overflow: visible; align-items: stretch; gap: clamp(14px, 2.5vw, 30px); }
-.tabs__more { position: relative; z-index: 2; margin-left: auto; }
-.tabs__more summary { display: flex; align-items: center; gap: 7px; height: 100%; padding: 13px 0 14px; color: var(--ink-3); font-size: 15px; font-weight: 500; cursor: pointer; list-style: none; white-space: nowrap; }
-.tabs__more summary::-webkit-details-marker { display: none; }
-.tabs__more summary:hover, .tabs__more summary.is-current { color: var(--ink); }
-.tabs__more summary span { color: var(--accent); font: 16px var(--f-mono); transition: transform .18s var(--ease); }
-.tabs__more[open] summary span { transform: rotate(180deg); }
-.tabs__menu { position: absolute; right: 0; top: calc(100% + 1px); display: grid; min-width: 190px; padding: 7px; border: 1px solid var(--line-2); background: var(--surface); box-shadow: 0 18px 45px rgb(0 0 0 / .16); }
-.tabs__menu a { padding: 10px 12px; font-size: 14px; }
-.tabs__menu a:hover, .tabs__menu a[aria-current="page"] { background: var(--bg-2); }
-.tabs__menu a[aria-current="page"]::after { display: none; }
-#tab > .grid > .panel { border-radius: 8px; }
-#now { background: var(--ink); border-color: var(--ink); color: var(--bg); }
-#now .panel__head .label, #now .now__artist, #now .now__album { color: color-mix(in srgb, var(--bg) 70%, var(--ink)); }
-#now .now__state { color: color-mix(in srgb, var(--bg) 75%, var(--ink)); }
-#now .now__state--live { color: #9be6b5; }
-@media (max-width: 520px) { .tabs__inner { gap: 11px; justify-content: space-between; } .tabs a, .tabs__more summary { font-size: 13px; } .tabs__menu a { font-size: 14px; } .phead__covers { opacity: .1; } }
+@media (max-width: 860px) { .phead__covers { display: none; } }
 @media (max-width: 700px) { .phead__side { flex: 0 0 100%; } .phead__side #search { flex: 0 0 100%; min-width: 100%; } .phead__side .search { width: 100%; max-width: none; } }
 
 /* Headings across the app pick up the poster face */
