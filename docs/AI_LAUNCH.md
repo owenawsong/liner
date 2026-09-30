@@ -1,6 +1,6 @@
 # Sleeve AI launch notes
 
-Updated 2026-09-29.
+Updated 2026-09-30.
 
 ## Current routing
 
@@ -10,6 +10,16 @@ Updated 2026-09-29.
 - The Insights question box now calculates supported answers locally from the complete saved history before any model request. It sends only that answer's short evidence to the writer for optional context. Unsupported questions show examples of what Sleeve can calculate; exact answers still work with AI disabled or unavailable. The server rejects generated numeric claims absent from the supplied evidence before caching the response, and the question view checks the optional note again before showing it. Names and qualitative claims still need manual review; this guard is not a complete factual verifier.
 - A versioned cache avoids repeating the same generation; concurrent identical requests in one Worker isolate are coalesced. Per-visitor limits in isolate memory are a safety net, not a global provider budget.
 - `ai-budget/worker.js` is a Durable Object budget for OpenRouter free requests. It admits at most 19 attempts per rolling minute and 900 per UTC day, leaving headroom below the provider's published limits. Every attempted OpenRouter model, including a fallback, consumes one slot. Cached answers do not.
+
+## Prepared profiles
+
+- After the initial history import, `js/preparation.js` prepares artist metadata and artwork, then runs the profile writer and recommendation builder concurrently. One structured `profile` generation supplies the opening note, evidence-linked observations, the last two year summaries and recent era labels. A separate `curate` generation reviews a bounded shortlist of actual Last.fm candidates. These use the fixed editor first, the quick writer second, and the localhost-only NVIDIA fallback.
+- Exact findings are computed locally first. Artist play shares across equal periods, discoveries with repeat listening across three months, quiet older favorites, artist origins, year changes and listening hours are available with writing disabled. The opening report shows the facts and their destinations without requiring a question. Generated observations are checked against their individual evidence IDs and numeric claims; this is a partial factual guard, not a guarantee that prose is correct.
+- Recommendations use actual recent and lifetime play shares, saved opinions, multiple artist connections and supplied Last.fm artist tags. AI can adjust a candidate's weight within a cap. It cannot add names outside the pool or bypass hidden, known or previously heard artists. Albums are matched by both title and artist, including a MusicBrainz fallback for records missing Last.fm IDs. Scores require at least 20 votes.
+- The prepared packet lasts seven days; recommendation boards last three. Failed optional services become eligible for another attempt on a later visit after 15 minutes. Changes to the record, AI prompt version, writing setting, Last.fm availability or shelf opinions invalidate relevant cached results. Only the first visit is gated; existing visitors retain access during refresh. An early-preview option is available. Optional preparation has a 100-second deadline, with exact statistics retained when remote services fail. Data offers a deliberate refresh; all work is cancelled before a profile is removed or storage is cleared.
+- Histories with at least 12,000 rows are calculated in a module worker so setup can remain responsive. The synchronous calculation is a compatibility fallback. Calculations use the device time zone.
+- The demo archive ends at the last complete day, so a reload within that day does not invalidate its prepared writing. In local live checks, both structured tasks completed through the OpenRouter Gemma fallback, but a later attempt encountered editor 429, quick-writer 502 and a localhost NVIDIA timeout. Free-provider availability remains a launch risk; exact calculations and cached recommendations remain usable when writing fails.
+- AOTY and RYM appear as external opinion search links, not imported scores. AOTY's terms require written permission for automated retrieval and invite API/data partnerships. A feed needs permission, a stable identity mapping, attribution and a sample-size display before activation. Do not present a MusicBrainz score as an AOTY or RYM score.
 
 ## Current limits and launch gates
 
@@ -33,3 +43,5 @@ Listening logs alone do not carry mood, tempo, key, energy, or acousticness. Spo
 - [AcousticBrainz data and project status](https://acousticbrainz.org/data)
 - [Cloudflare Pages Durable Object bindings](https://developers.cloudflare.com/pages/functions/bindings/#durable-objects)
 - [OpenRouter data-collection controls](https://openrouter.ai/docs/guides/get-started/sovereign-ai#data-collection-controls)
+
+- [Album of the Year terms and data partnerships](https://www.albumoftheyear.org/terms-of-use/)

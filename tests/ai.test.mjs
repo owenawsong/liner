@@ -11,11 +11,11 @@ globalThis.caches = { default: {
 } };
 
 let visitor = 0;
-function request(facts, { local = false, seed = '' } = {}) {
+function request(facts, { local = false, seed = '', task = 'notes' } = {}) {
   return new Request(`${local ? 'http://127.0.0.1:5195' : 'https://sleeve.example'}/api/ai`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': `192.0.2.${++visitor}` },
-    body: JSON.stringify({ task: 'notes', facts, seed }),
+    body: JSON.stringify({ task, facts, seed }),
   });
 }
 const openBudget = { idFromName: (name) => name, get: () => ({ fetch: async () => new Response('', { status: 200 }) }) };
@@ -40,6 +40,32 @@ test('rejects an invented number and tries the next writer', async () => {
   assert.equal(response.status, 200);
   assert.equal(models.length, 2);
   assert.match((await response.json()).text, /23 plays/);
+});
+
+test('profile and curation can run together with structured outputs and one budget slot each',async()=>{
+  let slots=0;const tasks=[];
+  const budget={idFromName:name=>name,get:()=>({fetch:async()=>{slots++;return new Response('',{status:200});}})};
+  globalThis.fetch=async(_url,options)=>{
+    const payload=JSON.parse(options.body);const profile=payload.messages[1].content.includes("listener's profile");
+    tasks.push(profile?'profile':'curate');
+    const output=profile?{notes:'Earlier led before Recent.',observations:[{id:'shift',text:'Recent moved into the rotation.'}],years:[],eras:[]}:
+      {picks:[{id:'artist_a',reason:'Connected to Earlier.'},{id:'artist_b',reason:'Connected to Recent.'},{id:'artist_c',reason:'Connected to both.'}]};
+    return Response.json({model:payload.model,choices:[{message:{content:JSON.stringify(output)}}]});
+  };
+  const env={OPENROUTER_API_KEY:'test-or',AI_BUDGET:budget};
+  const responses=await Promise.all(['profile','curate'].map(task=>onRequestPost(context(request('Earlier and Recent. Evidence ID="shift". artist_a artist_b artist_c.',{task}),env))));
+  assert.equal(slots,2);assert.deepEqual(tasks.sort(),['curate','profile']);
+  for(const response of responses){assert.equal(response.status,200);assert.ok(JSON.parse((await response.json()).text));}
+});
+test('invalid profile structure tries the next writer before caching',async()=>{
+  const models=[];
+  globalThis.fetch=async(_url,options)=>{
+    const model=JSON.parse(options.body).model;models.push(model);
+    const output=model.includes('qwen')?{notes:'Recent rose.'}:{notes:'Recent rose.',observations:[{id:'shift',text:'Earlier was overtaken.'}],years:[],eras:[]};
+    return Response.json({model,choices:[{message:{content:model.includes('qwen')?JSON.stringify(output):'```json\n'+JSON.stringify(output)+'\n```'}}]});
+  };
+  const response=await onRequestPost(context(request('Structure test: Recent and Earlier, shift.',{task:'profile'})));
+  assert.equal(response.status,200);assert.equal(models.length,2);assert.match((await response.json()).model,/gemma/);
 });
 
 test('public traffic uses OpenRouter and reuses a cached answer', async () => {

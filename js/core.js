@@ -61,6 +61,12 @@ export async function setArchive(pid, a) {
 }
 
 export async function clearArchive(pid) {
+  const { forgetPreparation } = await import('./preparation.js');
+  const { forgetRecommendations } = await import('./recommendations.js');
+  const { forgetSync } = await import('./sync.js');
+  await forgetSync(pid);
+  await forgetPreparation(pid);
+  await forgetRecommendations(pid);
   cache.delete(pid);
   await idb.del(`archive:${pid}`);
   await clearTaste(pid);
@@ -82,7 +88,8 @@ export function analysisFor(pid, a) {
   const c = cache.get(pid) || { archive: a };
   if (c.A && c.minMs === state.minMs && c.ver === a.ver) return c.A;
   const rows = mergedRows(a);
-  const A = rows.length ? analyze(rows, { minMs: state.minMs }) : null;
+  const result = rows.length ? analyze(rows, { minMs: state.minMs }) : null;
+  const A = result?.plays ? result : null;
   cache.set(pid, { archive: a, A, minMs: state.minMs, ver: a.ver });
   return A;
 }
@@ -90,6 +97,33 @@ export function analysisFor(pid, a) {
 export function setMinMs(v) {
   state.minMs = v;
   store.set('liner.minMs', String(v));
+}
+
+// A large first import should not freeze the setup screen while stats are built.
+export async function prepareAnalysis(pid,a,signal) {
+  const c=cache.get(pid);
+  if(c?.A&&c.minMs===state.minMs&&c.ver===a.ver)return c.A;
+  const rows=mergedRows(a),minMs=state.minMs;
+  if(rows.length<12000||typeof Worker==='undefined')return analysisFor(pid,a);
+  if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
+  let A;
+  try {
+    A=await new Promise((resolve,reject)=>{
+      const worker=new Worker(new URL('./analysis-worker.js',import.meta.url),{type:'module'});
+      const close=()=>{worker.terminate();clearTimeout(timer);signal?.removeEventListener('abort',abort);};
+      const abort=()=>{close();reject(new DOMException('Cancelled','AbortError'));};
+      const timer=setTimeout(()=>{close();reject(new Error('The history calculation timed out.'));},45000);
+      signal?.addEventListener('abort',abort,{once:true});
+      worker.onmessage=({data})=>{close();data.error?reject(new Error(data.error)):resolve(data.result);};
+      worker.onerror=()=>{close();reject(new Error('Background calculations are unavailable in this browser.'));};
+      try{worker.postMessage({rows,minMs});}catch(error){close();reject(error);}
+    });
+  }catch(error){if(error.name==='AbortError'||signal?.aborted)throw new DOMException('Cancelled','AbortError');return analysisFor(pid,a);}
+  if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
+  A=A?.plays?A:null;
+  if(A)A.rows=rows.filter(r=>r.track&&r.artist&&(r.ms==null||r.ms>=minMs));
+  cache.set(pid,{archive:a,A,minMs,ver:a.ver});
+  return A;
 }
 
 // Deduplicate plays that arrive from more than one place (same song within a minute).

@@ -5,6 +5,8 @@ import { themeButtons, setTheme } from '../theme.js';
 import * as lastfm from '../sources/lastfm.js';
 import * as spotify from '../sources/spotify.js';
 import { cancelSync, cancelAllSync } from '../sync.js';
+import { cancelAllPreparation } from '../preparation.js';
+import { clearMetadata } from '../meta.js';
 
 const SOURCE = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export' };
 
@@ -112,7 +114,7 @@ export function renderSettings() {
     toast('Local picture removed.'); rerender();
   }));
   $$('[data-min]').forEach((b) => b.addEventListener('click', () => { setMinMs(Number(b.dataset.min)); rerender(); }));
-  $('#set-ai').addEventListener('change', (e) => { store.set('liner.ai', e.target.checked ? null : 'off'); toast(e.target.checked ? 'AI writing is on.' : 'AI writing is off.'); });
+  $('#set-ai').addEventListener('change', async (e) => { store.set('liner.ai', e.target.checked ? null : 'off'); if(!e.target.checked)await cancelAllPreparation();toast(e.target.checked ? 'AI writing is on.' : 'AI writing is off.'); });
   $('#set-key-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const v = $('#set-key').value.trim();
@@ -127,6 +129,8 @@ export function renderSettings() {
   $('#set-wipe').addEventListener('click', async (e) => {
     if (!armed) { armed = true; e.target.textContent = 'Tap again to clear everything'; e.target.style.color = 'var(--bad)'; return; }
     await cancelAllSync();
+    await cancelAllPreparation();
+    clearMetadata();
     await idb.clear();
     Object.keys(localStorage).filter((k) => k.startsWith('liner.')).forEach((k) => store.set(k, null));
     toast('Everything Sleeve stored in this browser is gone.');

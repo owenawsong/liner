@@ -71,7 +71,8 @@ export function sampleArchive() {
   const HOURS = [5, 3, 1.5, .6, .3, .3, 1, 4, 6, 4, 3, 3, 4, 4, 4, 5, 6, 7, 6, 6, 7, 8, 9, 8].map((w, h) => [h, w]);
   const rows = [];
   const start = new Date(2017, 8, 3);
-  const end = new Date();
+  // A complete-day snapshot survives reloads without re-running the AI jobs.
+  const end = new Date(new Date().setHours(0, 0, 0, 0));
   for (let day = new Date(start); day < end; day.setDate(day.getDate() + 1)) {
     const key = ym(day);
     const era = ERAS.find((e) => key <= e.until);

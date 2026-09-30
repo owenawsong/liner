@@ -16,7 +16,7 @@ export function renderStart(choice = '') {
   view().innerHTML = `
     <div class="wrap start">
       <header class="start__head">
-        <span class="catno">SLV · SETUP</span>
+        <span class="catno">SLEEVE / GET STARTED</span>
         <h1>Start with what you have.</h1>
         <p>Already track your listening? Open it now. Only use Spotify? Start logging new plays, and add your past from Spotify's data file if you want.</p>
       </header>
@@ -40,7 +40,8 @@ function panel(choice) {
   const el = $('#start-panel');
   if (choice === 'lastfm') {
     el.innerHTML = '<h2>Type your Last.fm username</h2><div id="start-lookup"></div>';
-    mountLookup($('#start-lookup'), { source: 'lastfm', id: 'start-lastfm', cta: 'Open my stats', onConfirm: (res) => go(hrefFor(pidFor('lastfm', res.user.name))) }).focus();
+    el.insertAdjacentHTML('beforeend','<p class="faint" style="margin-block:12px">Sleeve reads your history, prepares the artist data, then builds your listening notes and recommendations. You will see each step before your profile opens.</p>');
+    mountLookup($('#start-lookup'), { source: 'lastfm', id: 'start-lastfm', cta: 'Prepare my profile', onConfirm: (res) => go(hrefFor(pidFor('lastfm', res.user.name))) }).focus();
   } else if (choice === 'file') {
     el.innerHTML = `<h2>Drop your Spotify ZIP</h2>${dropzone({ big: true, title: 'Drop your Spotify ZIP here', sub: 'Or click to choose it. It never leaves your device.' })}
       <p class="faint" style="font-size:14px">Don't have it yet? <a href="#/connect/file">Here's how to request it</a>.</p>`;

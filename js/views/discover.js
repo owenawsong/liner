@@ -1,7 +1,8 @@
 import { $, $$, esc, sleeve, num, compact, toast, store } from '../ui.js';
 import { onLeave } from '../core.js';
-import { hydrate, listeners, cachedListeners, releaseGroupForAlbum, critiqueCount } from '../meta.js';
-import { discoverySeeds, candidatePool, rankCandidates, albumsFor } from '../discovery.js';
+import { hydrate, critiqueCount } from '../meta.js';
+import { discoverySeeds, rankCandidates } from '../discovery.js';
+import { buildRecommendations } from '../recommendations.js';
 import { getTaste, setTasteItem, tasteKey, tasteExport, importTaste, normalize } from '../taste.js';
 import * as lastfm from '../sources/lastfm.js';
 
@@ -14,22 +15,22 @@ const lastfmAlbum = (name, artist) => `${lastfmArtist(artist)}/${encodeURICompon
 export function discoverView(ctx, banner) {
   const root = $('#tab');
   root.innerHTML = `${banner}
-    <header class="disc-head"><div><span class="label">SLEEVE / DISCOVER</span><h2>Follow the thread.</h2><p>Your listening makes the first connection. Save what interests you and the next set of picks will follow that thread. Ratings are optional.</p><button type="button" class="link" data-refresh>Find a new set of picks ↗</button></div><div class="disc-head__count"><b>${num(ctx.A.artists.length)}</b><span>artists already<br>in your record</span></div></header>
+    <header class="disc-head"><div><span class="label">BASED ON YOUR LISTENING</span><h2>Discover</h2><p id="disc-personal-copy">New artists and records, chosen from connections to your recent listening and older favorites.</p><button type="button" class="link" data-refresh>Prepare a different selection ↗</button></div><div class="disc-head__count"><span class="label">YOUR LISTENING GOES FIRST</span><p>You can save, pass, or listen. Ratings are there when you have an opinion.</p></div></header>
     <div class="disc-seeds" id="disc-seeds"></div>
-    <section class="disc-section"><div class="disc-section__head"><div><span class="label">SIDE A / SOMEWHERE NEW</span><h2>Artists to follow</h2></div><span class="label" id="disc-count"></span></div>
+    <section class="disc-section"><div class="disc-section__head"><div><span class="label">A STARTING POINT</span><h2>Artists to try</h2></div><span class="label" id="disc-count"></span></div>
       <div class="disc-toolbar"><div class="seg" role="group" aria-label="Discovery distance">${modes.map(([id, label]) => `<button type="button" data-disc-mode="${id}" aria-pressed="${id === 'for-you'}"${id === 'deep' ? ' disabled title="Checking artist audiences"' : ''}>${label}</button>`).join('')}</div><p id="disc-mode-copy" class="faint"></p></div>
       <div id="disc-status" class="disc-status" role="status" aria-live="polite">Reading your listening record…</div><div class="ms-progress" role="progressbar" aria-label="Finding recommendations" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><i></i></div>
       <div id="disc-feature" class="disc-feature" aria-live="polite"></div>
       <div id="disc-artists" class="disc-artists"></div>
     </section>
-    <section class="disc-section"><div class="disc-section__head"><div><span class="label">SIDE B / PUT ON A RECORD</span><h2>Albums to take home</h2></div><span class="label">Identity checked with MusicBrainz</span></div>
+    <section class="disc-section"><div class="disc-section__head"><div><span class="label">WHAT TO PLAY FIRST</span><h2>Start with a record</h2></div><span class="label">Album & artist matched</span></div>
       <p class="muted">A starting record from each artist. Save one for later; a community score is only a side note when enough people have rated it.</p><div id="disc-album-status" class="disc-status" role="status" aria-live="polite">Finding artists first…</div><div id="disc-albums" class="disc-albums"></div>
     </section>
     <div class="disc-lower"><section class="disc-section"><div class="disc-section__head"><div><span class="label">THE RECORD YOU KNOW</span><h2>What did you actually love?</h2></div></div><p class="muted">A play count cannot tell us that. Rate albums you already heard if you want your opinion to shape later picks.</p><label class="sr" for="disc-album-search">Find an album in your history</label><input id="disc-album-search" class="input" type="search" placeholder="Search your listened albums…" autocomplete="off"><div id="disc-listened"></div></section>
       <section class="disc-section"><div class="disc-section__head"><div><span class="label">KEPT FOR LATER</span><h2>Your shelf</h2></div><span class="label" id="disc-shelf-count"></span></div><div id="disc-shelf"></div><div class="disc-backup"><p>Saved artists and records influence the next recommendations. Your shelf stays in this browser; keep a copy for another device.</p><div><button class="btn btn--line btn--sm" type="button" data-disc-export>Export shelf</button><label class="btn btn--line btn--sm" for="disc-import">Import shelf</label><input id="disc-import" type="file" accept=".json,application/json" hidden></div></div></section></div>
-    <p class="disc-method">Artist connections and album popularity come from Last.fm. Album identities and available community scores come from MusicBrainz. Community ratings show their vote count; they do not override your own ratings. Sleeve does not pull ratings from Album of the Year or Rate Your Music.</p>`;
+    <p class="disc-method">Connections and artist tags: Last.fm. Album identities and community scores: MusicBrainz. The optional AI curator works from this candidate data and your listening summary; your raw plays stay here. Community scores stay separate from your own opinions.</p>`;
 
-  let alive = true, taste, pool = [], albums = [], mode = 'for-you', selectedSeed = '', runCtrl;
+  let alive = true, taste, pool = [], albums = [], curation = [], mode = 'for-you', selectedSeed = '', runCtrl;
   const editionKey = `liner.discover.edition:${ctx.pid}`;
   const lookup = new Map();
   const keepRated = new Set();
@@ -59,19 +60,18 @@ export function discoverView(ctx, banner) {
   const paintArtists = () => {
     if (!alive || !taste) return;
     const scope = selectedSeed ? pool.filter((x) => x.sources.some((s) => s.name === selectedSeed)) : pool;
-    const picks = rankCandidates(scope, taste, mode, keepRated);
+    const picks = rankCandidates(scope, taste, mode, keepRated, curation);
     $('#disc-count', root).textContent = `${picks.length} picks`;
     $('#disc-mode-copy', root).textContent = selectedSeed ? `From ${selectedSeed} in your record.` : mode === 'deep' ? 'Smaller Last.fm audiences, still connected to your record.'
       : mode === 'explore' ? 'A little further from the names you know.' : 'The clearest threads from your recent and long-term favorites.';
-    const lead = picks.find((x) => x.audience && x.audience <= 3000000 && x.sources.length >= 2)
-      || picks.find((x) => x.audience && x.audience <= 5000000) || picks[0];
+    const lead = picks[0];
     if (lead) {
       const item = remember({ kind: 'artist', name: lead.name, artist: '', mbid: lead.mbid });
-      $('#disc-feature', root).innerHTML = `<article class="disc-feature__inner"><div class="disc-feature__art">${sleeve(lead.name, lead.name, { size: 240, kind: 'artist' })}</div><div class="disc-feature__body"><span class="label">FIRST ON THE STACK / 01</span><h3>${esc(lead.name)}</h3><p>Not in your listening history. Last.fm connects this artist to <b>${esc(reason(lead))}</b>${lead.sources.length > 2 ? ` and ${lead.sources.length - 2} other artists you play` : ''}.</p><div class="disc-feature__meta">${lead.audience ? `${compact(lead.audience)} Last.fm listeners` : 'Audience still being checked'} <span>·</span> ${lead.sources.length} ${lead.sources.length === 1 ? 'connection' : 'connections'}</div><div class="disc-feature__links"><a class="link" href="${spotifyArtist(lead.name)}" target="_blank" rel="noopener">Find music ↗</a><a class="link link--quiet" href="${lastfmArtist(lead.name)}" target="_blank" rel="noopener">Artist details ↗</a></div>${controls(item)}</div></article>`;
+      $('#disc-feature', root).innerHTML = `<article class="disc-feature__inner"><div class="disc-feature__art">${sleeve(lead.name, lead.name, { size: 240, kind: 'artist' })}</div><div class="disc-feature__body"><span class="label">CHOSEN FROM YOUR CONNECTIONS</span><h3>${esc(lead.name)}</h3><p>${lead.editorial ? esc(lead.editorial) : `Last.fm connects this artist to <b>${esc(reason(lead))}</b>${lead.sources.length > 2 ? ` and ${lead.sources.length - 2} other artists in your record` : ''}.`}</p><div class="disc-feature__tags">${(lead.tags||[]).slice(0,3).map(t=>`<span>${esc(t)}</span>`).join('')}</div><div class="disc-feature__meta">${lead.audience ? `${compact(lead.audience)} Last.fm listeners` : 'Audience count unavailable'} <span>·</span> ${lead.sources.length} ${lead.sources.length === 1 ? 'connection' : 'connections'} <span>·</span> Not in your record</div><div class="disc-feature__links"><a class="link" href="${spotifyArtist(lead.name)}" target="_blank" rel="noopener">Listen on Spotify ↗</a><a class="link link--quiet" href="${lastfmArtist(lead.name)}" target="_blank" rel="noopener">Artist details ↗</a></div>${controls(item)}</div></article>`;
     } else $('#disc-feature', root).innerHTML = '<p class="empty">No unheard artists matched this view. Change the distance or starting point.</p>';
     $('#disc-artists', root).innerHTML = picks.filter((x) => x !== lead).map((x, i) => {
       const item = remember({ kind: 'artist', name: x.name, artist: '', mbid: x.mbid });
-      return `<article class="disc-artist"><span class="disc-no">${String(i + 2).padStart(2, '0')}</span>${sleeve(x.name, x.name, { size: 54, kind: 'artist' })}<div class="disc-artist__body"><h3>${esc(x.name)}</h3><p>From ${esc(reason(x))}${x.sources.length > 2 ? ` + ${x.sources.length - 2} more` : ''}</p></div><span class="disc-artist__audience">${x.audience ? `${compact(x.audience)} listeners` : 'New to you'}</span><a class="link link--quiet" href="${spotifyArtist(x.name)}" target="_blank" rel="noopener" aria-label="Find music by ${esc(x.name)}">Listen ↗</a>${controls(item)}</article>`;
+      return `<article class="disc-artist"><span class="disc-no">${String(i + 2).padStart(2, '0')}</span>${sleeve(x.name, x.name, { size: 54, kind: 'artist' })}<div class="disc-artist__body"><h3>${esc(x.name)}</h3><p>${x.editorial ? esc(x.editorial) : `From ${esc(reason(x))}${x.sources.length > 2 ? ` + ${x.sources.length - 2} more` : ''}`}</p></div><span class="disc-artist__audience">${x.audience ? `${compact(x.audience)} listeners` : 'New to you'}</span><a class="link link--quiet" href="${spotifyArtist(x.name)}" target="_blank" rel="noopener" aria-label="Find music by ${esc(x.name)}">Listen ↗</a>${controls(item)}</article>`;
     }).join('');
     hydrate($('#disc-feature', root)); hydrate($('#disc-artists', root));
   };
@@ -87,7 +87,8 @@ export function discoverView(ctx, banner) {
       const g = x.group, critics = x.reviews ? `<a href="https://critiquebrainz.org/release-group/${g.id}" target="_blank" rel="noopener">${num(x.reviews)} written reviews ↗</a>` : '';
       const community = g.votes >= 20 ? `<b>${g.rating?.toFixed(1)}<small>/5</small></b><span>MusicBrainz · ${num(g.votes)} ratings</span>`
         : g.votes ? `<span>MusicBrainz · ${num(g.votes)} ratings<br><small>Too few for a reliable score</small></span>` : '<span>No community score yet</span>';
-      return `<article class="disc-album${i === 0 ? ' disc-album--lead' : ''}"><span class="disc-album__no">${String(i + 1).padStart(2, '0')}</span>${sleeve(x.name, x.artist, { size: i === 0 ? 176 : 88, kind: 'album' })}<div class="disc-album__body"><span class="label">${esc(g.type)}${g.date ? ` / ${esc(g.date.slice(0, 4))}` : ''}</span><h3>${esc(x.name)}</h3><p class="disc-album__artist">${esc(x.artist)}</p>${marker(item)}<p class="disc-why">Start here if you follow the thread from <b>${esc(x.reason.join(' + '))}</b>.</p><div class="disc-links"><a class="link" href="${spotifySearch(x.name, x.artist)}" target="_blank" rel="noopener">Find the record ↗</a><a class="link link--quiet" href="${esc(x.url || lastfmAlbum(x.name, x.artist))}" target="_blank" rel="noopener">Details ↗</a></div>${controls(item)}</div><aside class="disc-community"><span class="label">COMMUNITY OPINION</span>${community}${critics}</aside></article>`;
+      const opinions=`<details class="disc-opinions"><summary>Other opinions ↗</summary><a href="https://www.albumoftheyear.org/search/?q=${encodeURIComponent(`${x.artist} ${x.name}`)}" target="_blank" rel="noopener">Search Album of the Year ↗</a><a href="https://rateyourmusic.com/search?searchterm=${encodeURIComponent(`${x.artist} ${x.name}`)}&searchtype=l" target="_blank" rel="noopener">Search Rate Your Music ↗</a></details>`;
+      return `<article class="disc-album${i === 0 ? ' disc-album--lead' : ''}"><span class="disc-album__no">${String(i + 1).padStart(2, '0')}</span>${sleeve(x.name, x.artist, { size: i === 0 ? 176 : 88, kind: 'album' })}<div class="disc-album__body"><span class="label">${esc(g.type)}${g.date ? ` / ${esc(g.date.slice(0, 4))}` : ''}</span><h3>${esc(x.name)}</h3><p class="disc-album__artist">${esc(x.artist)}</p>${marker(item)}<p class="disc-why">Connected through <b>${esc(x.reason.join(' + '))}</b>.</p><div class="disc-links"><a class="link" href="${spotifySearch(x.name, x.artist)}" target="_blank" rel="noopener">Listen on Spotify ↗</a><a class="link link--quiet" href="${esc(x.url || lastfmAlbum(x.name, x.artist))}" target="_blank" rel="noopener">Details ↗</a></div>${controls(item)}</div><aside class="disc-community"><span class="label">COMMUNITY OPINION</span>${community}${critics}${opinions}</aside></article>`;
     }).join('') : '<p class="empty">No new albums passed the identity check yet. Try rebuilding after more listening or rating a few records.</p>';
     hydrate($('#disc-albums', root));
   };
@@ -168,64 +169,44 @@ export function discoverView(ctx, banner) {
 
   async function build() {
     runCtrl?.abort(); runCtrl = new AbortController();
+    const controller = runCtrl;
     const signal = runCtrl.signal;
-    pool = []; albums = [];
-    $('#disc-feature', root).innerHTML = '<div class="disc-feature__loading"><span>01 / FIRST ON THE STACK</span><b>Tracing the artists in your record…</b></div>';
-    $('#disc-artists', root).innerHTML = '';
-    $('#disc-albums', root).innerHTML = '';
+    if(!pool.length) $('#disc-feature', root).innerHTML = '<div class="disc-feature__loading"><span>YOUR RECOMMENDATIONS</span><b>Preparing artists and starting records…</b></div>';
     const deepButton = $('[data-disc-mode="deep"]', root);
     deepButton.disabled = true;
     deepButton.innerHTML = 'Deep cuts <small>checking…</small>';
     const seeds = discoverySeeds(ctx.A, taste, Number(store.get(editionKey) || 0));
-    $('#disc-seeds', root).innerHTML = `<span class="label">TRACE A CONNECTION</span><button type="button" data-disc-seed="" aria-pressed="true">All</button>${seeds.map((s) => `<button type="button" data-disc-seed="${esc(s.name)}" aria-pressed="false">${esc(s.name)}</button>`).join('')}`;
+    $('#disc-seeds', root).innerHTML = `<span class="label">BASED ON</span><button type="button" data-disc-seed="" aria-pressed="true">All</button>${seeds.map((s) => `<button type="button" data-disc-seed="${esc(s.name)}" aria-pressed="false">${esc(s.name)}</button>`).join('')}`;
+    $('#disc-personal-copy',root).textContent=`Starting from ${seeds.slice(0,3).map(s=>s.name).join(', ')}${seeds.length>3?' and the rest of your rotation':''}. These artists have no plays in your saved record.`;
     if (!lastfm.isLive()) {
       status('Add a Last.fm API key in Settings to find new artists.', 0);
+      $('#disc-feature',root).innerHTML='<p class="empty">Artist recommendations need a Last.fm API key. Your listening stats and saved shelf still work.</p>';
       $('#disc-album-status', root).innerHTML = '<a class="link" href="#/settings">Open Settings →</a>';
       return;
     }
+    const deadline=setTimeout(()=>controller.abort('timeout'),95000);
     try {
-      status('Following connections from your favorite artists…', 4);
-      pool = await candidatePool(ctx.A, seeds, signal, (done, total) => status(`Checking connections · ${done} of ${total} artists`, Math.round(done / total * 54)));
-      if (!alive || signal.aborted) return;
-      if (!pool.length) { status('Last.fm returned no new matches. Try again later or save a few artists.', 100); $('#disc-album-status', root).textContent = 'No album candidates yet.'; return; }
-      status(`${pool.length} unheard artists found · checking the first picks`, 57);
-      const firstLook = rankCandidates(pool, taste, 'for-you').slice(0, 12);
-      await Promise.all(firstLook.map((x) => listeners(x.name)));
-      if (!alive || signal.aborted) return;
-      paintArtists();
-      status(`${pool.length} unheard artists found · checking album starting points`, 62);
-      $('#disc-album-status', root).textContent = 'Checking popular records by these artists…';
-      const ranked = rankCandidates(pool, taste, 'for-you');
-      const rawAlbums = await albumsFor(ranked, ctx.A, taste, signal, (done, total, name) => {
-        if (alive && !signal.aborted) $('#disc-album-status', root).textContent = `Finding albums · ${done} of ${total} · ${name}`;
-      });
-      if (!alive || signal.aborted) return;
-      $('#disc-album-status', root).textContent = `Checking ${rawAlbums.length} album IDs and available ratings…`;
-      const groups = await Promise.all(rawAlbums.map((x) => releaseGroupForAlbum(x)));
-      if (!alive || signal.aborted) return;
-      albums = rawAlbums.map((x, i) => ({ ...x, group: groups[i], reviews: null }))
-        .filter((x) => x.group && ['Album', 'EP'].includes(x.group.type));
-      paintAlbums();
-      $('#disc-album-status', root).textContent = `${albums.length} verified albums · community scores shown when available`;
-      status(`${pool.length} unheard artists found · ready to explore`, 100);
+      const board=await buildRecommendations({...ctx,taste},{signal,edition:Number(store.get(editionKey)||0),onProgress:status});
+      if(!alive||signal.aborted)return;
+      pool=board.pool;albums=board.albums;curation=board.curation||[];
+      if(board.warning){status(board.warning,100);paintArtists();paintAlbums();return;}
+      paintArtists();paintAlbums();
+      $('#disc-album-status',root).textContent=`${albums.length} matched albums · ${curation.length?'recommendation notes prepared':'ranked from your artist connections'}`;
+      status(`${pool.length} unheard candidates checked · saved ${new Date(board.at).toLocaleDateString('en',{month:'short',day:'numeric'})}`,100);
       Promise.all(albums.map((x) => critiqueCount(x.group.id))).then((counts) => {
         if (!alive || signal.aborted) return;
         albums.forEach((x, i) => { x.reviews = counts[i]; }); paintAlbums();
       });
-      const top = [...pool].sort((a, b) => b.score - a.score).slice(0, 36);
-      for (let i = 0; i < top.length; i += 4) {
-        if (!alive || signal.aborted) return;
-        await Promise.allSettled(top.slice(i, i + 4).map((x) => listeners(x.name)));
-        if (alive && !signal.aborted) deepButton.innerHTML = `Deep cuts <small>${Math.min(i + 4, top.length)}/${top.length}</small>`;
-        if (i >= 16 && top.filter((x) => cachedListeners(x.name) > 0).length >= 20) break;
-      }
       if (!alive || signal.aborted) return;
       deepButton.disabled = false;
       deepButton.textContent = 'Deep cuts';
     } catch (e) {
-      if (!alive || signal.aborted || e.name === 'AbortError') return;
+      if (!alive || (signal.aborted && signal.reason!=='timeout')) return;
       status(`Discovery paused: ${e.message}`, 0);
       $('#disc-album-status', root).textContent = 'Your ratings and saved items still work. Rebuild picks to retry.';
+      if(!pool.length)$('#disc-feature',root).innerHTML='<p class="empty">The recommendation checks could not finish. Your listening stats are ready; use “Prepare a different selection” to try again.</p>';
+    } finally {
+      clearTimeout(deadline);
     }
   }
 

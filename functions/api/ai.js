@@ -6,7 +6,7 @@
 
 // Fixed OpenRouter models keep the voice testable. NVIDIA's hosted developer
 // endpoint is for local evaluation only; public traffic must never use it.
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v14';
 // Thinking models spend part of max_tokens on their private reasoning. Leave enough
 // room for the short visible answer, otherwise it returns an empty message.
 const EDITOR = { via: 'openrouter', model: 'qwen/qwen3.8-27b:free', timeout: 12000, maxTokens: 850 };
@@ -15,6 +15,8 @@ const DIFFUSION = { via: 'nvidia', model: 'google/diffusiongemma-26b-a4b-it', ti
 const ROUTES = {
   notes: [QUICK, EDITOR], year: [EDITOR, QUICK], eras: [QUICK, EDITOR],
   roast: [QUICK, EDITOR], ask: [EDITOR, QUICK],
+  profile: [{ ...EDITOR, timeout: 18000, maxTokens: 1800 }, { ...QUICK, timeout: 20000, maxTokens: 1500 }],
+  curate: [{ ...EDITOR, timeout: 16000, maxTokens: 1300 }, { ...QUICK, timeout: 20000, maxTokens: 1100 }],
 };
 const ENDPOINT = {
   nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
@@ -23,9 +25,17 @@ const ENDPOINT = {
 
 const STYLE = `You write for Sleeve, a music stats site. Sound like a perceptive music editor speaking directly to "you": plain, specific, and a little surprising.
 Use only the supplied facts. Make a concrete observation about a change, contrast, or pattern; back it with artist names and counts from those facts. Every number you mention must appear verbatim in the facts. Do not calculate new differences, percentages, or time spans. A fall to a nonzero count is not a disappearance. Do not infer personality, emotion, genre, or audio qualities from play counts. If the evidence is thin, say less.
-Avoid praise, corporate wording, and stock phrases: "eclectic", "sonic journey", "tapestry", "soundtrack of your life", "vibes", "delve", "engagement", "in contrast", "the record accumulated", "during this period", "clearly", "you have always". Every sentence should add evidence or interpretation grounded in evidence. No filler closing summary. No emojis, hashtags, markdown, headings, or lists. Plain sentences only.`;
+Avoid praise, corporate wording, and stock phrases: "eclectic", "sonic journey", "tapestry", "soundtrack of your life", "vibes", "delve", "engagement", "in contrast", "the record accumulated", "during this period", "clearly", "you have always". Every sentence should add evidence or interpretation grounded in evidence. No filler closing summary. No emojis, hashtags, or markdown. Use the exact JSON schema when the task requests JSON; otherwise write plain sentences only.`;
 
 const TASKS = {
+  profile: {
+    max: 1200, json: true,
+    prompt: (f) => `Prepare this listener's profile before they open it. Read the evidence for changes, repeated habits, and discoveries. Return JSON only with this shape: {"notes":"one specific paragraph under 75 words connecting two supplied facts","observations":[{"id":"an evidence ID","text":"one useful sentence grounded ONLY in that ID's facts"}],"years":[{"year":"exact supplied year","text":"one short sentence from that year's supplied summary"}],"eras":[{"artist":"exact supplied era artist","title":"short title","line":"one factual sentence"}]}. Use at most four observations, the supplied year summaries, and at most four supplied eras. For an observation, add a relationship or implication supported by the extra facts. Do not merely shorten or repeat the original answer. If there is nothing to add, omit that observation. Do not produce generic praise or restate a heading. Omit an item if the evidence is thin. No invented artists, dates, counts, genres, or audio properties. Every numeral must appear in the relevant supplied facts.\n\nEvidence:\n${f}`,
+  },
+  curate: {
+    max: 750, json: true,
+    prompt: (f) => `Choose eight artists to explore from this supplied candidate pool. Consider recent listening, older favorites, multiple independent connections, supplied artist tags, and a mix of familiar directions and less obvious directions. The listener has not recorded these candidates. Do not invent candidates, genres or listening history. Return JSON only: {"picks":[{"id":"exact supplied candidate ID","reason":"a useful reason under 30 words using ONLY that candidate's supplied tags and connections"}]}. Explain which part of this listener's recent or older rotation points here. Do not repeat the candidate's name or just list their genres; those already appear on the card. Spread picks across different seed artists. No scores or probabilities. Avoid "sonic journey", "vibes", "perfect fit", "offers", "utilizes", "provides", or claims about mood. Choose only supported connections, and omit uncertain claims.\n\n${f}`,
+  },
   notes: {
     max: 320,
     prompt: (f) => `Write one compact liner-note paragraph (at most 85 words). Find a connection between an older pattern and a recent change, or a clear reversal within the record. Open with that change. Support it with two distinct facts from different parts of the record. Explain the relationship instead of listing unrelated statistics. If the facts are thin, write one precise sentence. Do not restate total plays, conclude with filler, or guess how songs sound or how the listener felt.\n\nFacts:\n${f}`,
@@ -79,7 +89,8 @@ function limited(ip) {
   return list.length > 12;
 }
 
-function clean(text) {
+function clean(text, structured = false) {
+  if(structured)return String(text||'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i,'$1').trim();
   return String(text || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/^\s*(here'?s a thinking process|thinking process|we need to|the user wants)[\s\S]*$/i, '')
@@ -94,7 +105,7 @@ function groundedNumbers(text, facts) {
   return numbers(text).every((value) => allowed.has(value));
 }
 
-async function call(step, env, messages, max, localPreview) {
+async function call(step, env, messages, max, localPreview, structured = false) {
   const key = step.via === 'nvidia' ? env.NVIDIA_API_KEY : env.OPENROUTER_API_KEY;
   if (!key) throw new Error(`no key for ${step.via}`);
   if (step.via === 'openrouter') await reserveOpenRouter(env, localPreview);
@@ -109,7 +120,7 @@ async function call(step, env, messages, max, localPreview) {
         'Content-Type': 'application/json',
         ...(step.via === 'openrouter' ? { 'HTTP-Referer': 'https://liner-c7u.pages.dev', 'X-Title': 'Sleeve' } : {}),
       },
-      body: JSON.stringify({ model: step.model, messages, max_tokens: step.maxTokens || max, temperature: 0.65, top_p: 0.9,
+      body: JSON.stringify({ model: step.model, messages, max_tokens: step.maxTokens || max, temperature: structured ? 0.35 : 0.65, top_p: 0.9,
         ...(step.via === 'openrouter' ? { provider: { data_collection: 'deny' } } : {}),
         ...(step.model === EDITOR.model ? { reasoning: { effort: 'low' } } : {}) }),
     });
@@ -119,7 +130,7 @@ async function call(step, env, messages, max, localPreview) {
       throw error;
     }
     const d = await res.json();
-    const text = clean(d.choices?.[0]?.message?.content);
+    const text = clean(d.choices?.[0]?.message?.content, structured);
     if (text.length < 20) throw new Error(`${step.model} empty`);
     return { text, model: d.model || step.model };
   } finally {
@@ -161,7 +172,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
     work = (async () => {
       const errors = [];
       let budgetFailure = null;
-      const deadline = Date.now() + 37000;
+      const deadline = Date.now() + 50000;
       const host = new URL(request.url).hostname;
       const localPreview = host === 'localhost' || host === '127.0.0.1';
       const routes = [...ROUTES[body.task], ...(localPreview ? [DIFFUSION] : [])];
@@ -172,8 +183,14 @@ export async function onRequestPost({ request, env, waitUntil }) {
         if ((cooldowns.get(step.model) || 0) > Date.now()) continue;
         const started = Date.now();
         try {
-          const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max, localPreview);
+          const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max, localPreview, task.json);
           if (!groundedNumbers(result.text, facts)) throw new Error(`${step.model} unsupported number`);
+          if (task.json) {
+            let structured;
+            try { structured = JSON.parse(result.text); } catch { throw new Error(`${step.model} invalid structured response`); }
+            if (body.task === 'profile' && (typeof structured?.notes !== 'string' || !Array.isArray(structured.observations))) throw new Error(`${step.model} incomplete profile`);
+            if (body.task === 'curate' && !Array.isArray(structured?.picks)) throw new Error(`${step.model} incomplete curation`);
+          }
           console.log('ai: served', body.task, step.model, `${Date.now() - started}ms`);
           const out = JSON.stringify(result);
           waitUntil?.(cache.put(cacheKey, new Response(out, { headers: { 'Cache-Control': 'public, max-age=604800' } })).catch(() => {}));

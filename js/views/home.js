@@ -6,6 +6,7 @@ import { mountLookup } from './connect.js';
 import { art, hydrate } from '../meta.js';
 import { palette } from '../color.js';
 import { DEMO_NOTES, DEMO_ROAST } from '../sources/demo.js';
+import { evolution } from '../evolution.js';
 
 const HERO_ALBUMS = [
   ['Blonde', 'Frank Ocean'], ['Melodrama', 'Lorde'], ['SOS', 'SZA'], ['Punisher', 'Phoebe Bridgers'], ['brat', 'Charli xcx'],
@@ -23,12 +24,15 @@ export async function renderHome() {
   const year = A.years[A.years.length - 2] || A.years[0];
   const yArtists = topIn(A, 'artists', new Date(year.y, 0, 1).getTime(), new Date(year.y + 1, 0, 1).getTime(), 3);
   const insight = (id) => A.insights.find((x) => x.id === id);
+  const E=evolution(A,A.to+1);
+  const recent=topIn(A,'artists',A.to-90*864e5,A.to+1,3);
+  const monthBars=A.months.slice(-12),peak=Math.max(1,...monthBars.map(m=>m.n));
 
   const TRACKS = [
-    { side: 'A', title: 'Find your next favorite', desc: 'Discover artists and albums connected to your listening, then rate and save what you find.', vis: '<div class="minichat"><p class="minichat__q">What should I play next?</p><p class="minichat__a">Start with artists you love. Go further out, dig for deeper cuts, and build a shelf of records to try.</p></div>' },
+    { side: 'A', title: 'Find your next favorite', desc: 'Discover artists and albums connected to your listening, then rate and save what you find.', vis: `<div class="pv-record"><span class="label">STARTING FROM MIRA'S RECENT ROTATION</span>${recent.map(a=>`<div>${sleeve(a.name,a.name,{size:52,kind:'artist'})}<span><b>${esc(a.name)}</b><small>${num(a.plays)} plays in the latest recorded 90 days</small></span></div>`).join('')}<a class="link" href="#/demo/discover">Open the recommendations ↗</a></div>` },
     { side: 'A', title: 'Timeline and eras', desc: 'Every month you have ever listened, on one line, with your eras found for you.', vis: `<div id="pv-timeline">${timeline(A, { height: 170, fit: true })}</div>` },
-    { side: 'A', title: 'How your taste changes', desc: 'See the artists rising, the old favorites fading, and who you discovered this season.', vis: '<div class="minichat"><p class="minichat__q">Your next chapter</p><p class="minichat__a">Compare two equal 90-day stretches. Find discoveries, comebacks and the artists moving into your rotation.</p></div>' },
-    { side: 'A', title: 'Your listening, four ways', desc: 'Explore 24 months of plays, artist breadth, discoveries and how much one favorite dominated.', vis: '<div class="minichat"><p class="minichat__q">More than a top list</p><p class="minichat__a">See how wide your rotation got, when it narrowed, and when new artists arrived.</p></div>' },
+    { side: 'A', title: 'How your taste changes', desc: 'See the artists rising, the old favorites fading, and who you discovered this season.', vis: `<div class="pv-record"><span class="label">GAINING SHARE / MIRA'S RECORD</span>${E.rising.slice(0,3).map(a=>`<div>${sleeve(a.name,a.name,{size:52,kind:'artist'})}<span><b>${esc(a.name)}</b><small>${num(a.before)} → ${num(a.plays)} plays across equal 90-day periods</small></span></div>`).join('')}<a class="link" href="#/demo/evolution">See the comparison ↗</a></div>` },
+    { side: 'A', title: 'Your listening, four ways', desc: 'Explore 24 months of plays, artist breadth, discoveries and how much one favorite dominated.', vis: `<div class="pv-months"><span class="label">MIRA / LAST 12 RECORDED MONTHS</span><div>${monthBars.map(m=>`<i style="height:${Math.max(2,m.n/peak*100)}%" title="${m.y}-${m.m+1}: ${num(m.n)} plays"></i>`).join('')}</div><p>Peak ${num(peak)} plays in a month.</p><a class="link" href="#/demo/patterns">Open the deeper charts ↗</a></div>` },
     { side: 'A', title: 'Year in review, any year', desc: 'Wrapped for every year you have been listening, with a card you can share.', vis: `<div class="minicard"><span class="mono">SLEEVE · ${year.y}</span><b>${year.y}</b><ol>${yArtists.map((a) => `<li>${esc(a.name)}</li>`).join('')}</ol><span class="mono">${num(year.n)} plays</span></div>` },
     { side: 'A', title: 'Every artist, every song', desc: 'First play, biggest month, longest break and your favourite songs, for everything you have played.', vis: `<a class="miniartist" href="#/demo/artist/${encodeURIComponent(topArtist.name)}">${sleeve(topArtist.name, topArtist.name, { size: 72, round: true, kind: 'artist' })}<span><b>${esc(topArtist.name)}</b><span>${num(topArtist.n)} plays · since ${new Date(topArtist.first).getFullYear()}</span></span></a>` },
     { side: 'A', title: 'The listening clock', desc: 'When the music actually happens, hour by hour across your week.', vis: heatmap(A) },
@@ -36,7 +40,7 @@ export async function renderHome() {
     { side: 'A', title: 'Things you never noticed', desc: 'Obsessions, comebacks, streaks, late nights. Sleeve goes looking so you don\'t have to.', vis: `<div class="bento__stack">${['comeback', 'loop', 'streak'].map(insight).filter(Boolean).slice(0, 2).map((x) => `<div class="minisight"><span class="label">${esc(x.kicker)}</span><p>${x.title}</p></div>`).join('')}</div>` },
     { side: 'B', title: 'Liner notes, written for you', desc: 'A short write-up of your taste, by AI, from a summary of your stats.', vis: `<div class="pv-quote"><p>${esc(DEMO_NOTES)}</p></div>` },
     { side: 'B', title: 'Roast my taste', desc: 'The same, but mean. Affectionately.', vis: `<div class="pv-quote pv-quote--ink"><p>${esc(DEMO_ROAST)}</p></div>` },
-    { side: 'B', title: 'Ask your stats anything', desc: 'When did I get into Mitski? What was last summer? Just ask.', vis: '<div class="minichat"><p class="minichat__q">When did I get into Mitski?</p><p class="minichat__a">Your first Mitski play was in 2019, and she took over completely from late 2020 into 2022.</p></div>' },
+    { side: 'B', title: 'Answers already waiting', desc: 'Artist origins, recent changes, late nights and past summers, prepared from your own record. Ask another question whenever you want.', vis: `<div class="minicard"><span class="mono">FROM MIRA'S RECORD</span><b>${year.y}</b><ol>${yArtists.map(a=>`<li>${esc(a.name)} · ${num(a.plays)} plays</li>`).join('')}</ol><span class="mono">Counts from recorded plays</span></div>` },
     { side: 'B', title: 'Compare with a friend', desc: 'A match score, what you share, and what you would each get from the other.', vis: '<div class="miniring"><div class="cmp-ring" style="--p:73"><div><b>73</b><span>% match</span></div></div></div>' },
     { side: 'B', title: 'How mainstream are you?', desc: 'Scored from how many people listen to your favourite artists.', vis: '<div class="minims"><div class="ms__score"><b>34</b><span>out of 100 obscurity</span><p>A healthy mix</p></div><div class="ms__track" style="margin-top:18px"><i style="left:34%"></i></div><div class="ms__ends"><span>Everyone knows them</span><span>Nobody does</span></div></div>' },
   ];
@@ -50,7 +54,8 @@ export async function renderHome() {
       <div class="sl-hero__grid">
         <div class="sl-hero__copy">
           <h1 class="sl-hero__title" data-reveal>${'Your whole record.'.split(' ').map((w, i) => `<span style="--i:${i}">${w}</span>`).join(' ')}</h1>
-          <p class="sl-hero__lede" data-reveal>Sleeve turns your listening history into your eras, a year in review for every year, and new artists and albums to try. Every feature is free.</p>
+          <p class="sl-hero__lede" data-reveal>Bring your Last.fm history or a Spotify file. Sleeve prepares your listening patterns, personal notes and new records to try before you open the full profile. Every feature is free.</p>
+          <div class="sl-hero__proof"><span>IN THE DEMO / ${year.y}</span><b>${num(year.n)} plays</b><span>Led by ${esc(year.topArtist)}</span><a href="#/demo/year/${year.y}">Open that year ↗</a></div>
           <div class="sl-connect" data-reveal>
             ${returning.length ? `<div class="returning"><span>Welcome back</span>${returning.map((r) => `<a href="${hrefFor(r.pid)}">${avatar(r.display, r.image, 26)}${esc(r.display)}</a>`).join('')}</div>` : ''}
             <div class="sl-hero__actions"><a class="btn btn--ink sl-hero__cta" href="#/start">Get started ${icon.arrow}</a><a class="btn btn--line sl-hero__cta" href="#/demo">Explore the demo</a></div>

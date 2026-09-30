@@ -6,6 +6,7 @@ import { write, facts, reveal, loadingLines, paragraphs } from '../ai.js';
 import { store } from '../ui.js';
 import { DEMO_NOTES, DEMO_ROAST } from '../sources/demo.js';
 import { answerQuestion } from '../questions.js';
+import { recordEvidence } from '../dossier.js';
 const aiOff = () => store.get('liner.ai') === 'off';
 
 const TITLES = { notes: 'Your liner notes', roast: 'Your taste, roasted' };
@@ -51,6 +52,11 @@ export function bindNotes(ctx) {
     body.innerHTML = `<p class="ai__text">${esc(mode === 'notes' ? DEMO_NOTES : DEMO_ROAST)}</p>`;
   };
   const run = async (fresh = false) => {
+    if (!fresh && mode === 'notes') {
+      const text=ctx.prepared?.dossier?.notes;
+      if(text){body.innerHTML=`<p class="ai__text">${esc(text)}</p>`;$('[data-again]',root)?.removeAttribute('hidden');return;}
+      if(!demo){body.innerHTML=`<p class="ai__text">${esc(fallbackNote(ctx.A))}</p><p class="faint">${ctx.prepared ? 'Calculated from your saved record.' : 'Preparing a closer read of your listening…'}</p>`;return;}
+    }
     if (demo) return example();
     const mine = ++request;
     body.innerHTML = loadingLines;
@@ -75,7 +81,18 @@ export function bindNotes(ctx) {
     demo ? example() : run();
   }));
   $('[data-again]', root)?.addEventListener('click', () => run(true));
-  if (!demo) run();
+  run();
+}
+
+export function listeningRead(ctx,limit=6) {
+  const evidence=(ctx.prepared?.evidence||recordEvidence(ctx.A)).slice(0,limit);
+  const observations=store.get('liner.ai')==='off'?{}:ctx.prepared?.dossier?.observations||{};
+  // Keep a writer's shorter restatement from repeating the counts just above it.
+  const words=text=>new Set(String(text||'').toLowerCase().match(/[a-zÀ-ÿ]{4,}/g)||[]);
+  const addsContext=(text,entry)=>{const base=words(`${entry.title} ${entry.detail} ${entry.basis}`),written=words(text);const extra=[...written].filter(w=>!base.has(w));return extra.length>=2&&extra.length/Math.max(1,written.size)>=.2;};
+  const visibleObservations=Object.fromEntries(evidence.filter(entry=>observations[entry.id]&&addsContext(observations[entry.id],entry)).map(entry=>[entry.id,observations[entry.id]]));
+  const destination=(entry)=>entry.target?.kind==='artist'?ctx.L.artist(entry.target.name):entry.target?.kind==='year'?ctx.L.year(entry.target.year):entry.target?.kind==='song'?ctx.L.song(entry.target.name,entry.target.artist):'';
+  return `<section class="record-read c-12"><div class="record-read__head"><span class="label">ALREADY IN YOUR RECORD</span><h2>${limit<=2?'Worth a closer look':'A few things worth opening'}</h2><p>Prepared from your listening, with the evidence one click away.</p></div><div class="record-read__entries">${evidence.map(entry=>`<article><span class="label">${esc(entry.label)}</span><h3>${destination(entry)?`<a href="${destination(entry)}">${esc(entry.title)} ↗</a>`:esc(entry.title)}</h3><p>${esc(entry.detail)}</p>${entry.comparison?`<div class="record-read__comparison" aria-label="Artist plays across two recorded 90-day periods">${[['Before',entry.comparison.before],['Latest',entry.comparison.now]].map(([label,n])=>`<div><span>${label}</span><i><b style="width:${Math.max(n?2:0,n/Math.max(1,entry.comparison.before,entry.comparison.now)*100)}%"></b></i><strong>${num(n)}</strong></div>`).join('')}</div>`:''}${visibleObservations[entry.id]?`<p class="record-read__note">${esc(visibleObservations[entry.id])}<small>Written from this evidence</small></p>`:''}<small>${esc(entry.basis)}</small></article>`).join('')}</div></section>`;
 }
 
 /* ---------- Ask ---------- */
@@ -88,7 +105,7 @@ export function askPanel(A) {
     'How has my taste changed over the years?',
     A.skipRate != null ? 'Which artist do I skip the most?' : 'What do I listen to late at night?',
   ].filter(Boolean);
-  return `<section class="panel ask" id="ask"><div class="panel__head"><div><span class="label">Answers from your plays</span><h2>Ask your record</h2></div></div><p class="muted">Sleeve calculates the answer from your saved history. When writing is on, it can add a short note from the same evidence.</p>
+  return `<section class="panel ask" id="ask"><div class="panel__head"><div><span class="label">SOMETHING ELSE ON YOUR MIND?</span><h2>Ask your record</h2></div></div><p class="muted">Explore an artist, a month, your discoveries or listening hours.</p>
     <form class="ask__form" novalidate>
       <label class="sr" for="ask-q">Ask about your listening</label>
       <input id="ask-q" class="ask__input" placeholder="Try an artist, month, year, skips or late nights…" maxlength="200" autocomplete="off">
@@ -125,7 +142,8 @@ export function bindAsk(ctx) {
     out.innerHTML = `<div class="ask__q">${esc(q)}</div><div class="ask__answer"><span class="label">FROM YOUR RECORD</span><h3>${esc(answer.title)}</h3><p>${esc(answer.detail)}</p>${answer.stats.length ? `<dl>${answer.stats.map(([label, value]) => `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>` : ''}${href ? `<a class="link" href="${href}">Explore the evidence ↗</a>` : ''}<small>${esc(answer.basis)}</small></div>${!aiOff() && ctx.source !== 'demo' ? '<div class="ask__aside" aria-live="polite"><span class="label">A little more context</span><span class="faint">Writing from the evidence above…</span></div>' : ''}`;
     if (aiOff() || ctx.source === 'demo' || !$('.ask__aside', out)) return;
     try {
-      const text = await write('ask', answer.facts, { question: q, signal: pending.signal });
+      const prepared=(ctx.prepared?.evidence||[]).find(x=>x.question===q);
+      const text = prepared && ctx.prepared?.dossier?.observations?.[prepared.id] || await write('ask', answer.facts, { question: q, signal: pending.signal });
       if (mine !== request || !root.isConnected) return;
       const aside = $('.ask__aside', out);
       if (!aside) return;
@@ -152,7 +170,8 @@ export async function nameEras(ctx) {
     return `${e.artist}, ${monthYear(e.from)} to ${monthYear(e.to)}, ${num(e.plays)} plays. Their songs then: ${songs.join(', ')}. Also playing: ${others.join(', ')}.`;
   }).join('\n');
   try {
-    const text = await write('eras', lines, { signal: ctx.signal });
+    if(!ctx.prepared)return;
+    const text = ctx.prepared.dossier?.eras ? JSON.stringify(ctx.prepared.dossier.eras) : await write('eras', lines, { signal: ctx.signal });
     if (ctx.signal.aborted) return;
     const json = JSON.parse(text.slice(text.indexOf('['), text.lastIndexOf(']') + 1));
     json.forEach((x) => {
@@ -184,6 +203,8 @@ export function yearNotes() {
 export function bindYearNotes(ctx, y) {
   const body = $('#ai-year .ai__body');
   if (!body) return;
+  const prepared=ctx.prepared?.dossier?.years?.[y];
+  if(prepared){body.innerHTML=`<p class="ai__text">${esc(prepared)}</p>`;return;}
   if (ctx.source === 'demo') {
     const from = new Date(y, 0, 1).getTime(), to = new Date(y + 1, 0, 1).getTime();
     const top = topIn(ctx.A, 'artists', from, to, 2);

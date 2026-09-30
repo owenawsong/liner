@@ -1,9 +1,10 @@
 // Sleeve service worker: keeps the app shell available offline.
 // Live data (Last.fm, ListenBrainz, Spotify, artwork) always goes to the network.
-const CACHE = 'sleeve-v2';
+const CACHE = 'sleeve-v3';
 const SHELL = [
   './', './index.html', './styles.css', './sleeve.css', './js/color.js', './js/theme.js', './js/views/start.js', './js/views/settings.js', './config.js', './manifest.webmanifest', './assets/mark.svg',
   './js/app.js', './js/ui.js', './js/core.js', './js/components.js', './js/analysis.js', './js/export.js', './js/actions.js', './js/meta.js', './js/ai.js', './js/sync.js', './js/evolution.js', './js/patterns.js', './js/taste.js', './js/discovery.js',
+  './js/questions.js', './js/dossier.js', './js/preparation.js', './js/recommendations.js', './js/analysis-worker.js',
   './js/views/home.js', './js/views/connect.js', './js/views/profile.js', './js/views/detail.js', './js/views/aiviews.js', './js/views/compare.js', './js/views/mainstream.js', './js/views/discover.js', './js/views/evolution.js', './js/views/patterns.js',
   './js/sources/demo.js', './js/sources/lastfm.js', './js/sources/listenbrainz.js', './js/sources/spotify.js',
 ];

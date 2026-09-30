@@ -1,14 +1,14 @@
 import { $, $$, esc, avatar, sleeve, trackSleeve, num, monthYear, longMonth, fullDate, ago, icon, eq, toast, store, idb } from '../ui.js';
-import { SOURCES, state, view, onLeave, go, rerender, hrefFor, profiles, getArchive, setArchive, clearArchive, analysisFor, setMinMs } from '../core.js';
+import { SOURCES, state, view, onLeave, go, rerender, hrefFor, profiles, getArchive, setArchive, clearArchive, prepareAnalysis, setMinMs } from '../core.js';
 import { topIn, monthDetail, monthStory, lowerBound } from '../analysis.js';
 import { health, healthLine, trackRows, rankList, statStrip, timeline, bindTimeline, heatmap, heatLegend, hoursChart, daysChart, insightCard, dropzone, bindDrops, sourceBadge } from '../components.js';
 import { handleFiles, keepSpotifyPlays } from '../actions.js';
 import { autoSync, startSync, cancelSync, cancelAllSync, watchSync, syncStatus } from '../sync.js';
 import { linker, artistPage, songPage, yearPage, bindYear, onThisDay, mountSearch, genres, genresHTML } from './detail.js';
-import { hydrate, art, cachedArtist, artistInfo } from '../meta.js';
+import { hydrate, art, cachedArtist, artistInfo, clearMetadata } from '../meta.js';
 import { palette, paint } from '../color.js';
 import { mainstreamPanel, bindMainstream, milestonesPanel } from './mainstream.js';
-import { notesPanel, bindNotes, askPanel, bindAsk, nameEras, yearNotes, bindYearNotes } from './aiviews.js';
+import { notesPanel, bindNotes, askPanel, bindAsk, nameEras, yearNotes, bindYearNotes, listeningRead } from './aiviews.js';
 import { evolutionView } from './evolution.js';
 import { patternsView } from './patterns.js';
 import { discoverView } from './discover.js';
@@ -16,6 +16,7 @@ import { evolution } from '../evolution.js';
 import { demoRecent, DEMO_USER } from '../sources/demo.js';
 import * as lastfm from '../sources/lastfm.js';
 import * as spotify from '../sources/spotify.js';
+import { preparedProfile, startPreparation, watchPreparation, preparationStatus } from '../preparation.js';
 
 const TABS = [['overview', 'Overview'], ['discover', 'Discover'], ['top', 'Top'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['patterns', 'Deep dive'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
 const LABEL = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export', demo: 'Demo' };
@@ -44,7 +45,7 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
     if (source === 'file' && !archive.export) return go('#/connect/file');
     if (!fresh && (archive.export?.rows?.length || archive.live?.rows?.length)) await new Promise((resolve) => setTimeout(resolve, 0));
     if (ctrl.signal.aborted) return;
-    A = analysisFor(pid, archive);
+    A = await prepareAnalysis(pid, archive, ctrl.signal);
     if (fresh) p = live.p;
     else if (source === 'demo') p = demoProfile(A);
     else if (source === 'file') p = fileProfile(archive);
@@ -58,18 +59,26 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
   if (source === 'spotify' && p.recentRows) {
     await keepSpotifyPlays(p.recentRows);
     archive = await getArchive(pid);
-    A = analysisFor(pid, archive);
+    A = await prepareAnalysis(pid, archive, ctrl.signal);
   }
   if (source !== 'demo') profiles.remember({ pid, source, display: p.user.display, image: p.user.image });
 
   const ctx = { pid, source, name, tab, args, p, archive, A, L: linker(pid, A), signal: ctrl.signal };
-  const firstJob = syncStatus(pid);
-  const preparingFirstRecord = source === 'lastfm' && (!A && !archive.live?.synced || firstJob?.state === 'running' && firstJob.phase === 'writing') &&
+  const preparingFirstRecord = source === 'lastfm' && !A && !archive.live?.synced &&
     !p.simulated && !p.hidden && p.user.playcount > 0 && store.get(`liner.setup.preview:${pid}`) !== '1';
   if (preparingFirstRecord) {
     firstRecordSetup(ctx);
     autoSync(ctx);
     return;
+  }
+  ctx.prepared = A ? await preparedProfile(pid,A) : null;
+  if (ctrl.signal.aborted) return;
+  if (A && !ctx.prepared) {
+    startPreparation(ctx);
+    if (source !== 'demo' && store.get(`liner.prepared.once:${pid}`) !== '1' && store.get(`liner.setup.preview:${pid}`) !== '1') {
+      preparationSetup(ctx);
+      return;
+    }
   }
   const current = DETAIL[tab] || tab;
   const tabLink = ([t, label]) => `<a href="${hrefFor(pid, t === 'overview' ? '' : t)}"${t === current ? ' aria-current="page"' : ''}>${label}${t === 'insights' && A ? `<small>${A.insights.length}</small>` : ''}</a>`;
@@ -78,6 +87,8 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
     <nav class="tabs" aria-label="Profile sections"><div class="wrap tabs__inner">${TABS.map(tabLink).join('')}</div></nav>
     <div class="wrap" id="sync-banner" aria-live="polite"></div>
     <div class="wrap fade-in" id="tab"></div>`;
+  const rail=$('.tabs__inner'),active=$('.tabs a[aria-current="page"]');
+  if(rail&&active){const r=rail.getBoundingClientRect(),a=active.getBoundingClientRect();if(a.right>r.right)rail.scrollLeft+=a.right-r.right+16;else if(a.left<r.left)rail.scrollLeft-=r.left-a.left+16;}
   ({ overview, discover: discoverTab, top, timeline: timelineTab, evolution: evolutionTab, patterns: patternsTab, insights: insightsTab, clock, data, artist: detail, song: detail, year: detail })[tab](ctx);
   bindSyncBanner(ctx);
   autoSync(ctx);
@@ -153,6 +164,7 @@ export function overviewHTML(ctx) {
     parts.push(`<div class="c-12">${statStrip(A)}</div>`);
     if (!ctx.preview) parts.push(storyPanel(ctx));
     if (!ctx.preview) parts.push(notesPanel(A, source === 'demo'));
+    if (!ctx.preview) parts.push(listeningRead(ctx,2));
     parts.push(`<section class="panel c-12"><div class="panel__head"><h2>Month by month</h2><a class="link link--quiet" href="${hrefFor(pid, 'timeline')}">Open the timeline ${icon.arrow}</a></div>${timeline(A, { height: 140, fit: true })}</section>`);
   } else if (!ctx.preview) {
     parts.push(source === 'lastfm' && !p.user.playcount ? firstPlayCTA() : importCTA(ctx));
@@ -240,7 +252,7 @@ function firstPlayCTA() {
 
 function firstRecordSetup(ctx) {
   const { pid, p } = ctx;
-  const writing = store.get('liner.ai') !== 'off';
+  const writing = false;
   const recent = (p.recent || []).filter((track) => track.artist && track.name).slice(0, 3);
   view().innerHTML = `<div class="wrap setup-wrap"><section class="setup-record" aria-labelledby="setup-title">
     <div class="setup-record__copy"><span class="label">SLEEVE / FIRST PRESSING</span><h1 id="setup-title">Making sense of your record.</h1>
@@ -288,6 +300,29 @@ function firstRecordSetup(ctx) {
   onLeave(off);
   $('#setup-preview').addEventListener('click', () => { store.set(`liner.setup.preview:${pid}`, '1'); rerender(); });
   $('#setup-retry').addEventListener('click', () => startSync(pid, ctx.source, ctx.name, { prepare: true, profile: p }));
+}
+
+function preparationSetup(ctx) {
+  const {pid,A,p}=ctx;
+  const stages=[['metadata','Artists & artwork','Match names, audience counts and the covers you will see.'],['notes','Listening notes','Read your changes and prepare the answers worth opening.'],['recommendations','Recommendations','Build a candidate pool, compare its connections and check album identities.']];
+  view().innerHTML=`<div class="wrap prep-wrap"><section class="prep-screen" aria-labelledby="prep-title">
+    <header class="prep-screen__head"><span class="label">PROFILE SETUP</span><h1 id="prep-title">Preparing your profile.</h1><p>${esc(p.user.display)} · ${num(A.plays)} recorded plays · ${num(A.artists.length)} artists</p></header>
+    <div class="prep-screen__layout"><div><ol class="prep-stages">${stages.map(([id,label,detail])=>`<li data-prep-stage="${id}"><span class="prep-stages__state" aria-hidden="true"></span><div><b>${label}</b><p>${detail}</p><small data-prep-label>Waiting</small></div></li>`).join('')}</ol>
+    <div class="prep-screen__live" role="status" aria-live="polite"><b id="prep-detail">Reading the saved listening record</b><span id="prep-elapsed"></span></div><div class="setup-record__bar" role="progressbar" aria-label="Profile preparation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+    <button class="link link--quiet" type="button" id="prep-open">Open the stats while this finishes ↗</button><p class="prep-screen__foot">This setup is saved on this device. Your notes and recommendation checks run together after the artist data is ready.</p></div>
+    <aside class="prep-screen__shelf"><span class="label">FROM YOUR LISTENING</span>${A.albums.slice(0,4).map(al=>`<div>${sleeve(al.album,al.artist,{size:82,kind:'album'})}<span><b>${esc(al.album)}</b><small>${esc(al.artist)} · ${num(al.n)} plays</small></span></div>`).join('')}</aside></div></section></div>`;
+  const labels={waiting:'Waiting',running:'Preparing…',done:'Ready',unavailable:'Stats ready · extra data unavailable',skipped:'Writing switched off'};
+  const off=watchPreparation(pid,job=>{
+    if(!job||!$('#prep-detail'))return;
+    $('#prep-detail').textContent=job.detail;
+    const bar=$('.setup-record__bar');bar.setAttribute('aria-valuenow',String(job.progress));$('i',bar).style.width=`${job.progress}%`;
+    $$('[data-prep-stage]').forEach(row=>{const status=job.stages[row.dataset.prepStage];row.dataset.state=status;$('[data-prep-label]',row).textContent=labels[status];});
+  });
+  const started=preparationStatus(pid)?.started||Date.now();
+  const timer=setInterval(()=>{const el=$('#prep-elapsed');if(el)el.textContent=`${Math.floor((Date.now()-started)/1000)} seconds elapsed`;},1000);
+  onLeave(()=>{off();clearInterval(timer);});
+  $('#prep-open').onclick=()=>{store.set(`liner.setup.preview:${pid}`,'1');rerender();};
+  hydrate(view());
 }
 
 function storyPanel(ctx) {
@@ -651,15 +686,11 @@ function insightsTab(ctx) {
   const firstYear = A.years[0]?.y, lastYear = A.years.at(-1)?.y;
   $('#tab').innerHTML = `${banner(ctx)}
     <div class="insights-page">
-      <section class="insights-cover" aria-labelledby="insights-title">
-        <div class="insights-cover__top"><span>SLEEVE / THE LISTENING FILE</span><span>${firstYear}${firstYear !== lastYear ? `—${lastYear}` : ''}</span></div>
-        <div class="insights-cover__body"><div class="insights-cover__intro"><span class="insights-cover__eyebrow">YOUR RECORD, READ CLOSELY</span><h2 id="insights-title">THE STORY<br><em>IN THE PLAYS.</em></h2><p>Ask a question, trace a milestone, or look past your top ten. The counts come from the listening history saved here.</p></div>
-          <dl class="insights-cover__figures"><div><dt>RECORDED PLAYS</dt><dd>${num(A.plays)}</dd></div><div><dt>ARTISTS HEARD</dt><dd>${num(A.artists.length)}</dd></div><div><dt>PATTERNS TO EXPLORE</dt><dd>${num(A.insights.length)}</dd></div></dl></div>
-        <nav class="insights-cover__index" aria-label="Jump through this report"><button type="button" data-insights-jump="ask">01 <span>Ask the record</span> ↗</button><button type="button" data-insights-jump="mainstream">02 <span>Audience reach</span> ↗</button><button type="button" data-insights-jump="findings">03 <span>The details</span> ↗</button></nav>
-      </section>
-      ${askPanel(A)}
+      <header class="report-head"><div><span class="label">${firstYear}${firstYear !== lastYear ? `—${lastYear}` : ''} / ${num(A.plays)} PLAYS</span><h2>Listening notes</h2><p>${ctx.prepared?.dossier?.notes && store.get('liner.ai')!=='off' ? esc(ctx.prepared.dossier.notes) : 'The changes, habits and discoveries in your recorded listening.'}</p></div><nav class="report-nav" aria-label="Jump through this report"><button type="button" data-insights-jump="ask">Ask a question ↗</button><button type="button" data-insights-jump="mainstream">Audience reach ↗</button><button type="button" data-insights-jump="findings">All findings ↗</button></nav></header>
+      ${listeningRead(ctx)}
       <div class="insights-page__section"><span class="label">02 / AUDIENCE REACH</span><p>Where your most-played artists sit in Last.fm's global audience counts.</p></div>
       ${mainstreamPanel()}
+      ${askPanel(A)}
       <div class="insights-page__section" id="findings"><span class="label">03 / THE DETAILS</span><h2>${A.insights.length} things the plays reveal</h2><p>Counting ${A.minMs ? 'songs played for 30 seconds or more' : 'every recorded play, however short'}. <a href="${hrefFor(ctx.pid, 'data')}">Change this setting</a>.</p></div>
       ${milestonesPanel(A, ctx.L)}
       <div class="insights insights-page__findings">${A.insights.map((x, i) => insightCard(x, i === 0)).join('')}</div>
@@ -736,7 +767,9 @@ function data(ctx) {
       <section class="panel c-6">
         <div class="panel__head"><h2>Stored in this browser</h2></div>
         <p class="muted" style="font-size:14.5px">Your listening archive stays in this browser. Sleeve requests live data from ${source === 'spotify' ? 'Spotify' : src ? src.label : 'its music sources'} and artwork or artist tags from public music services. When AI writing is on, a short summary of your stats is sent to Sleeve's writer; raw plays are not sent. You can turn AI off in Settings.</p>
+        ${ctx.prepared ? `<div class="prep-summary"><span class="label">PREPARED ${fullDate(ctx.prepared.at)}</span><p>${ctx.prepared.evidence.length} calculated findings${ctx.prepared.dossier?`, ${Object.keys(ctx.prepared.dossier.observations).length} written observations`:''}. Saved for this listening record.</p>${ctx.prepared.errors.map(e=>`<small>${esc(e)}</small>`).join('')}</div>` : '<p class="faint" style="font-size:12px">Preparing your personal report in the background.</p>'}
         <div class="flow__actions" id="danger">
+          ${ctx.A ? '<button type="button" class="btn btn--line btn--sm" data-prepare>Prepare fresh notes & recommendations</button>' : ''}
           ${ctx.source !== 'demo' ? '<button type="button" class="btn btn--line btn--sm" data-forget>Remove this profile</button>' : ''}
           <button type="button" class="btn btn--line btn--sm" data-wipe>Clear everything</button>
         </div>
@@ -744,6 +777,7 @@ function data(ctx) {
     </div>`;
 
   bindDrops($('#tab'), handleFiles);
+  $('[data-prepare]')?.addEventListener('click',()=>{startPreparation(ctx,{fresh:true});preparationSetup(ctx);});
   $$('[data-min]').forEach((b) => b.addEventListener('click', () => { setMinMs(Number(b.dataset.min)); toast(Number(b.dataset.min) ? 'Counting plays of 30 seconds or more.' : 'Counting every play.'); rerender(); }));
   $$('[data-remove]').forEach((b) => b.addEventListener('click', async () => {
     const a = { ...await getArchive(pid) };
@@ -763,6 +797,9 @@ function data(ctx) {
   });
   confirmButton($('[data-wipe]'), 'Clear everything? Tap again', async () => {
     await cancelAllSync();
+    const { cancelAllPreparation } = await import('../preparation.js');
+    await cancelAllPreparation();
+    clearMetadata();
     await idb.clear();
     Object.keys(localStorage).filter((k) => k.startsWith('liner.')).forEach((k) => store.set(k, null));
     toast('Everything Sleeve stored in this browser is gone.');

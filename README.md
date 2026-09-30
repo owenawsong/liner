@@ -32,11 +32,12 @@ The public data access decision is in [docs/DATA_ACCESS_DECISION.md](docs/DATA_A
 
 - Overview, Discover, Top 100 with plays or minutes and date filters, Timeline, Evolution, Deep dive charts, Insights, Clock, and Data tabs. Timeline month details now include active days, first-heard artists, a prior-month and year-ago comparison, and previous/next controls.
 - Discover combines Last.fm artist similarities and album popularity with your listening history. It lets you follow any seed artist, rotate through longer-tail seeds, and find deeper cuts using listener counts checked against spelling variants. It filters artists and albums you already heard, checks album identities against MusicBrainz, and treats the sparse MusicBrainz community scores as secondary context, showing a score only when at least 20 people rated it. Saves and optional high ratings influence later picks; hiding or marking an item as known removes it. Export or import your personal shelf as JSON. Recommendations and ratings stay in this browser.
-- Evolution compares equal 30-, 90-, or 365-day periods, showing rising artists, new discoveries, older favorites and a taste-shift index. On demand, Last.fm similarity suggests artists missing from your record.
+- Evolution compares equal 30-, 90-, or 365-day periods, showing rising artists, new discoveries, older favorites and a taste-shift index. Prepared Discover suggestions appear automatically alongside the comparison.
 - Deep dive charts show 24 months of activity, artist breadth, discovery share, top-artist concentration, and artist-tag style trends by year with visible coverage. Last.fm imports save page checkpoints and resume after an interrupted setup.
 - Automatic eras, year pages with a shareable image, and detailed artist and song pages. Artist pages trace first play, first repeat month, peak month, and recent listening.
 - Search, genres, listening anniversaries, and compare
 - The mainstream score waits for a fixed set of leading-artist audience checks and requires at least five matches covering 70% of their plays. The score stays still while deeper artists are checked separately.
+- First setup prepares artist data, a saved recommendation board and a bundle of personal writing before the profile opens, with real stage progress and an early-preview option. Automatic findings include discoveries that stayed across months and older favorites to revisit. Large histories use a background calculation worker.
 - Insights opens with a listening report and direct paths to questions, audience reach, and recorded findings. Optional AI liner notes, evolution explanations, era names, year writing, roasts, and question commentary follow the exact statistics. Common questions about artists, dates, years, skips, and late nights are calculated directly from the saved history, then AI can add a short note from the same evidence. Exact answers continue to work with AI off or unavailable. Writing appears automatically where relevant and uses cached results.
 - Themes, local profile management, play-count rules, and an installable PWA with an offline app shell
 - Local profile-picture overrides; Last.fm photos and authorized Spotify photos appear when available. Mood and musical key are not inferred from listening logs, which do not contain reliable audio features.
@@ -47,6 +48,7 @@ The public data access decision is in [docs/DATA_ACCESS_DECISION.md](docs/DATA_A
 - `js/core.js` owns profiles, IndexedDB archives, and merged analysis; `js/analysis.js` finds timelines, eras, and insights.
 - `js/export.js` reads Spotify and ListenBrainz exports locally; `js/actions.js` updates archives.
 - `js/sources/*` contains Last.fm, ListenBrainz, Spotify, and demo adapters.
+- `js/preparation.js`, `js/dossier.js` and `js/recommendations.js` prepare and validate the personal report and saved discovery board.
 - `js/meta.js` batches artwork through `functions/api/art.js` and enriches music metadata.
 - `js/views/*` contains the landing page, onboarding, settings, connections, profiles, and detail pages.
 - `styles.css` holds the app layout and theme tokens; `sleeve.css` adds the Sleeve visual language.

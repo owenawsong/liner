@@ -7,13 +7,16 @@ import { $$, idb, wait } from './ui.js';
 const mem = new Map();
 let loaded = false;
 let dirty = false;
+let caching = true;
 const loading = idb.get('meta').then((m) => { if (m) Object.entries(m).forEach(([k, v]) => mem.set(k, v)); loaded = true; });
 
 function save() {
-  if (dirty) return;
+  if (dirty || !caching) return;
   dirty = true;
-  setTimeout(() => { dirty = false; idb.set('meta', Object.fromEntries(mem)); }, 1500);
+  setTimeout(() => { dirty = false; if(caching)idb.set('meta', Object.fromEntries(mem)); }, 1500);
 }
+// A wipe reloads the app. Outstanding lookups must not refill cleared storage.
+export function clearMetadata(){caching=false;mem.clear();}
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/\(.*?\)|\[.*?\]| - .*$/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 const same = (a, b) => { const x = norm(a), y = norm(b); return x && y && (x === y || x.startsWith(y) || y.startsWith(x)); };
@@ -196,17 +199,27 @@ export function artistInfo(name, front = false) {
 // release to the MusicBrainz release group (the album concept) before reading
 // community ratings, and keep these calls on the shared 1/sec MusicBrainz queue.
 export async function releaseGroupForAlbum(album) {
-  if (!/^[0-9a-f-]{36}$/i.test(album.mbid || '')) return null;
-  const key = `rg:v1:${album.mbid}`;
+  const hasId = /^[0-9a-f-]{36}$/i.test(album.mbid || '');
+  const key = `rg:v2:${hasId ? album.mbid : `${norm(album.artist)}|${norm(album.name)}`}`;
   if (mem.has(key)) return mem.get(key);
   if (inflight.has(key)) return inflight.get(key);
   if (Date.now() < mbUnavailableUntil) return null;
   const p = (async () => {
     const base = 'https://musicbrainz.org/ws/2/';
-    const release = await mbQ(() => getJSON(`${base}release/${album.mbid}?inc=release-groups&fmt=json`).catch(() => null));
-    const groupId = release?.['release-group']?.id || album.mbid;
-    const group = await mbQ(() => getJSON(`${base}release-group/${groupId}?inc=ratings+genres&fmt=json`).catch(() => null));
-    if (!group || !same(group.title, album.name)) return null;
+    let groupId = album.mbid;
+    if (hasId) {
+      const release = await mbQ(() => getJSON(`${base}release/${album.mbid}?inc=release-groups&fmt=json`).catch(() => null));
+      groupId = release?.['release-group']?.id || album.mbid;
+    } else {
+      const query = `releasegroup:"${String(album.name).replace(/"/g, '')}" AND artist:"${String(album.artist).replace(/"/g, '')}"`;
+      const found = await mbQ(() => getJSON(`${base}release-group/?query=${encodeURIComponent(query)}&fmt=json&limit=4`).catch(() => null));
+      groupId = found?.['release-groups']?.find((g) => g.score >= 95 && norm(g.title) === norm(album.name)
+        && g['artist-credit']?.some((a) => norm(a.artist?.name || a.name) === norm(album.artist)))?.id;
+    }
+    if (!groupId) return null;
+    const group = await mbQ(() => getJSON(`${base}release-group/${groupId}?inc=ratings+genres+artist-credits&fmt=json`).catch(() => null));
+    if (!group || norm(group.title) !== norm(album.name)
+      || !group['artist-credit']?.some((a) => norm(a.artist?.name || a.name) === norm(album.artist))) return null;
     const value = Number(group.rating?.value), count = Number(group.rating?.['votes-count'] || 0);
     const info = { id: group.id, title: group.title, type: group['primary-type'] || '',
       date: group['first-release-date'] || '', rating: Number.isFinite(value) && count ? value : null,

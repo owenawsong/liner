@@ -1,5 +1,5 @@
-// Discovery uses observed listening and explicit feedback. AI does not rank
-// recommendations; the reasons on each card can be traced to API results.
+// Measured listening creates the candidate pool. A validated curator can adjust
+// its order within limits; every name and connection still comes from the APIs.
 import { idb } from './ui.js';
 import { topIn } from './analysis.js';
 import { cachedArtist, cachedListeners } from './meta.js';
@@ -29,9 +29,11 @@ export function discoverySeeds(A, taste, edition = 0) {
     if (old) { old.weight += weight; old.why.add(why); }
     else map.set(key, { name, weight, why: new Set([why]), tag: cachedArtist(name)?.tags?.[0] || '' });
   };
-  const recent = topIn(A, 'artists', A.to - 180 * DAY, A.to + 1, 10);
-  recent.forEach((a, i) => add(a.name, .9 / (i + 2) ** .55, 'in your recent rotation'));
-  A.artists.slice(0, 24).forEach((a, i) => add(a.name, .55 / (i + 2) ** .55, 'an all-time favorite'));
+  const recent = topIn(A, 'artists', A.to - 90 * DAY, A.to + 1, 16);
+  const recentTotal = recent.reduce((sum, a) => sum + a.plays, 0) || 1;
+  const lifetimeTotal = A.artists.slice(0, 24).reduce((sum, a) => sum + (a.n || 1), 0) || 1;
+  recent.forEach((a) => add(a.name, 1.6 * Math.sqrt(a.plays / recentTotal), 'in your recent rotation'));
+  A.artists.slice(0, 24).forEach((a) => add(a.name, .75 * Math.sqrt((a.n || 1) / lifetimeTotal), 'an all-time favorite'));
   const favorites = Object.values(taste.items).filter((x) => x.rating >= 4 || x.status === 'saved')
     .sort((a, b) => (b.updated || 0) - (a.updated || 0));
   favorites.forEach((x) => add(x.kind === 'album' ? x.artist : x.name,
@@ -60,6 +62,7 @@ export async function candidatePool(A, seeds, signal, onProgress = () => {}) {
     onProgress(Math.min(i + batch.length, seeds.length), seeds.length);
   }
   const heard = new Set(A.artists.map((a) => normalize(a.name)));
+  if (!rows.length && seeds.length) throw new Error('Artist connections could not be loaded. Your saved picks are still available.');
   const map = new Map();
   for (const { seed, matches } of rows) {
     for (const match of matches) {
@@ -78,7 +81,8 @@ export async function candidatePool(A, seeds, signal, onProgress = () => {}) {
   return [...map.values()];
 }
 
-export function rankCandidates(pool, taste, mode = 'for-you', keepRated = new Set()) {
+export function rankCandidates(pool, taste, mode = 'for-you', keepRated = new Set(), curation = []) {
+  const editorial = new Map(curation.map((x) => [normalize(x.name), x]));
   const likedAlbums = new Set(Object.values(taste.items).filter((x) => x.kind === 'album' && x.rating >= 4).map((x) => normalize(x.artist)));
   const dislikedArtists = new Set(Object.values(taste.items).filter((x) => x.kind === 'album' && x.rating && x.rating <= 2 && !likedAlbums.has(normalize(x.artist))).map((x) => normalize(x.artist)));
   let allowed = pool.filter((x) => {
@@ -86,26 +90,28 @@ export function rankCandidates(pool, taste, mode = 'for-you', keepRated = new Se
     return !dislikedArtists.has(normalize(x.name)) && (!f || (f.status !== 'hidden' && f.status !== 'known' && (!f.rating || keepRated.has(key))));
   });
   if (mode === 'deep') {
-    const withAudience = allowed.filter((x) => cachedListeners(x.name) > 0);
-    const ceiling = [100000, 500000, 1000000, 3000000].find((n) => withAudience.filter((x) => cachedListeners(x.name) <= n).length >= 8);
-    if (ceiling) allowed = withAudience.filter((x) => cachedListeners(x.name) <= ceiling);
+    const audienceFor = (x) => cachedListeners(x.name) || x.audience;
+    const withAudience = allowed.filter((x) => audienceFor(x) > 0);
+    const ceiling = [100000, 500000, 1000000, 3000000].find((n) => withAudience.filter((x) => audienceFor(x) <= n).length >= 8);
+    if (ceiling) allowed = withAudience.filter((x) => audienceFor(x) <= ceiling);
     else if (withAudience.length) allowed = withAudience;
   }
   const scored = allowed.map((x) => {
-    const audience = cachedListeners(x.name);
+    const audience = cachedListeners(x.name) || x.audience;
     const audienceBonus = audience ? Math.min(1, Math.max(0, (Math.log10(20e6) - Math.log10(Math.max(1, audience))) / 3.8)) : 0;
     const connectionBonus = Math.min(3, x.sources.length) * .06;
-    const base = x.score * (1 + connectionBonus);
+    const note = editorial.get(normalize(x.name));
+    const base = x.score * (1 + connectionBonus) * (mode === 'for-you' && note ? 1.25 - Math.min(note.rank, 10) * .018 : 1);
     // Keep a famous adjacent artist available, but let a strong less-obvious
     // connection lead the ordinary view once its audience has been checked.
     const novelty = !audience ? 1 : audience > 5000000 ? .76 : audience > 3000000 ? .9 : audience < 3000000 ? 1.12 : 1;
     const score = mode === 'deep' ? base * (1 + audienceBonus * 2.2)
       : mode === 'explore' ? base * (1.3 - x.match * .7) * novelty : base * novelty;
-    return { ...x, audience, score };
+    return { ...x, audience, score, editorial: note?.reason || '' };
   }).sort((a, b) => b.score - a.score);
   const picked = [], used = new Map();
   for (const x of scored) {
-    const lead = x.sources.sort((a, b) => b.match - a.match)[0]?.name;
+    const lead = [...x.sources].sort((a, b) => b.match - a.match)[0]?.name;
     if ((used.get(lead) || 0) >= 3) continue;
     picked.push(x); used.set(lead, (used.get(lead) || 0) + 1);
     if (picked.length === 12) break;
@@ -125,7 +131,7 @@ export async function albumsFor(artists, A, taste, signal, onProgress = () => {}
     const pick = albums.find((album) => {
       const key = tasteKey('album', album.name, album.artist);
       const feedback = taste.items[key];
-      return album.mbid && !heard.has(key) && !feedback?.status && !feedback?.rating;
+      return !heard.has(key) && !feedback?.status && !feedback?.rating && !/^(\(null\)|unknown|greatest hits|best of)/i.test(album.name);
     });
     if (pick) picks.push({ ...pick, reason: artist.sources.slice(0, 2).map((x) => x.name), match: artist.match });
     onProgress(Math.min(picks.length, 6), 6, artist.name);

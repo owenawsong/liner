@@ -7,6 +7,7 @@ import { cachedArtist } from './meta.js';
 
 const DAY = 864e5;
 const local = new Map();
+export const AI_VERSION = 'v14';
 
 async function key(s) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
@@ -14,7 +15,7 @@ async function key(s) {
 }
 
 export async function write(task, facts, { question = '', fresh = false, signal } = {}) {
-  const k = `ai:v10:${task}:${await key(`${facts}|${question}`)}`;
+  const k = `ai:${AI_VERSION}:${task}:${await key(`${facts}|${question}`)}`;
   if (!fresh) {
     if (local.has(k)) return local.get(k);
     const saved = await idb.get(k);
@@ -25,7 +26,7 @@ export async function write(task, facts, { question = '', fresh = false, signal 
   let timedOut = false;
   const abort = () => ctrl.abort();
   signal?.addEventListener('abort', abort, { once: true });
-  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, 50000);
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, 60000);
   let res, d;
   try {
     res = await fetch('/api/ai', {
