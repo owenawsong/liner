@@ -648,14 +648,27 @@ function monthHTML(A, i, L = {}) {
 function insightsTab(ctx) {
   const { A } = ctx;
   if (!A) return needArchive(ctx, 'insights');
+  const firstYear = A.years[0]?.y, lastYear = A.years.at(-1)?.y;
   $('#tab').innerHTML = `${banner(ctx)}
-    <div class="subhead" style="margin-top:0"><div><h2>${A.insights.length} things we noticed</h2><p class="muted">Worked out from ${num(A.plays)} plays, counting ${A.minMs ? 'songs played for 30 seconds or more' : 'every play, however short'}. <a href="${hrefFor(ctx.pid, 'data')}">Change this</a>.</p></div></div>
-    ${askPanel(A)}
-    ${mainstreamPanel()}
-    ${milestonesPanel(A, ctx.L)}
-    <div class="insights" style="margin-top:16px">${A.insights.map((x, i) => insightCard(x, i === 0)).join('')}</div>`;
+    <div class="insights-page">
+      <section class="insights-cover" aria-labelledby="insights-title">
+        <div class="insights-cover__top"><span>SLEEVE / THE LISTENING FILE</span><span>${firstYear}${firstYear !== lastYear ? `—${lastYear}` : ''}</span></div>
+        <div class="insights-cover__body"><div class="insights-cover__intro"><span class="insights-cover__eyebrow">YOUR RECORD, READ CLOSELY</span><h2 id="insights-title">THE STORY<br><em>IN THE PLAYS.</em></h2><p>Ask a question, trace a milestone, or look past your top ten. The counts come from the listening history saved here.</p></div>
+          <dl class="insights-cover__figures"><div><dt>RECORDED PLAYS</dt><dd>${num(A.plays)}</dd></div><div><dt>ARTISTS HEARD</dt><dd>${num(A.artists.length)}</dd></div><div><dt>PATTERNS TO EXPLORE</dt><dd>${num(A.insights.length)}</dd></div></dl></div>
+        <nav class="insights-cover__index" aria-label="Jump through this report"><button type="button" data-insights-jump="ask">01 <span>Ask the record</span> ↗</button><button type="button" data-insights-jump="mainstream">02 <span>Audience reach</span> ↗</button><button type="button" data-insights-jump="findings">03 <span>The details</span> ↗</button></nav>
+      </section>
+      ${askPanel(A)}
+      <div class="insights-page__section"><span class="label">02 / AUDIENCE REACH</span><p>Where your most-played artists sit in Last.fm's global audience counts.</p></div>
+      ${mainstreamPanel()}
+      <div class="insights-page__section" id="findings"><span class="label">03 / THE DETAILS</span><h2>${A.insights.length} things the plays reveal</h2><p>Counting ${A.minMs ? 'songs played for 30 seconds or more' : 'every recorded play, however short'}. <a href="${hrefFor(ctx.pid, 'data')}">Change this setting</a>.</p></div>
+      ${milestonesPanel(A, ctx.L)}
+      <div class="insights insights-page__findings">${A.insights.map((x, i) => insightCard(x, i === 0)).join('')}</div>
+    </div>`;
   bindAsk(ctx);
   bindMainstream(A, ctx.L);
+  $$('[data-insights-jump]', $('#tab')).forEach((button) => button.addEventListener('click', () => {
+    $(`#${button.dataset.insightsJump}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
 }
 
 /* ---------- Clock ---------- */
