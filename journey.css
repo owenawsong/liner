@@ -12,6 +12,12 @@ body[data-page="profile"] .nav__menu-btn { display:none !important; }
 body[data-page="profile"] #nav-user { display:inline; }
 body[data-page="profile"] .nav__user { color:var(--ink-2); }
 body[data-page="profile"] .nav__inner { justify-content:space-between; }
+body:is([data-page="start"],[data-page="settings"],[data-page="connect"]) .nav__links { display:none; }
+body:is([data-page="start"],[data-page="settings"],[data-page="connect"]) .nav__menu-btn { display:none !important; }
+body:is([data-page="start"],[data-page="settings"],[data-page="connect"]) .nav__inner { justify-content:space-between; }
+body[data-page="settings"] .settings__head h1 { font:700 clamp(34px,4vw,46px)/1.08 var(--f-display); letter-spacing:-.035em; text-transform:none; }
+.setlist li > span { min-width:0; }
+.setlist b { overflow-wrap:anywhere; }
 @media (max-width:960px) {
   .profile-identity .phead__side > .btn, .profile-identity .phead__side .search__input { min-height:44px; }
   .profile-nav__inner { display:block; }

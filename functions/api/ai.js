@@ -3,21 +3,22 @@
 // Keys live in Cloudflare secrets (NVIDIA_API_KEY, OPENROUTER_API_KEY) and never reach
 // the browser. Prompts are fixed here, so this can't be used as a general chatbot.
 // Answers are cached, so the same request is only paid for once.
-import { validStructuredWriting } from '../lib/writing-quality.js';
+import { normalizeStructuredWriting, validStructuredWriting } from '../lib/writing-quality.js';
 
 // Fixed OpenRouter models keep the voice testable. NVIDIA's hosted developer
 // endpoint is for local evaluation only; public traffic must never use it.
-const CACHE_VERSION = 'v18';
-// Use published, fixed model IDs. The previous Qwen3.8 OpenRouter route returned
-// 404 in the launch audit; Gemma 4 31B supports structured response formatting.
-const EDITOR = { via: 'openrouter', model: 'google/gemma-4-31b-it:free', timeout: 12000, maxTokens: 850 };
+const CACHE_VERSION = 'v19';
+// Verified with synthetic profile/curation requests under data_collection=deny.
+// Nemotron free requires a different data policy; Inkling free rejected this app.
+// Gemma 31B timed out twice. Do not silently relax privacy to unlock a model.
+const EDITOR = { via: 'openrouter', model: 'dots-studio/dots-3-note-preview:free', timeout: 12000 };
 const QUICK = { via: 'openrouter', model: 'google/gemma-4-26b-a4b-it:free', timeout: 8000 };
 const DIFFUSION = { via: 'nvidia', model: 'google/diffusiongemma-26b-a4b-it', timeout: 16000 };
 const ROUTES = {
-  notes: [QUICK, EDITOR], year: [EDITOR, QUICK], eras: [QUICK, EDITOR],
-  roast: [QUICK, EDITOR], ask: [EDITOR, QUICK],
-  profile: [{ ...QUICK, timeout: 20000, maxTokens: 1500 }, { ...EDITOR, timeout: 18000, maxTokens: 1800 }],
-  curate: [{ ...QUICK, timeout: 20000, maxTokens: 1500 }, { ...EDITOR, timeout: 16000, maxTokens: 1500 }],
+  notes: [EDITOR, QUICK], year: [EDITOR, QUICK], eras: [EDITOR, QUICK],
+  roast: [EDITOR, QUICK], ask: [EDITOR, QUICK],
+  profile: [{ ...EDITOR, maxTokens: 1500 }, { ...QUICK, timeout: 16000, maxTokens: 1500 }],
+  curate: [{ ...EDITOR, maxTokens: 1500 }, { ...QUICK, timeout: 16000, maxTokens: 1500 }],
 };
 const ENDPOINT = {
   nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
@@ -28,18 +29,30 @@ const STYLE = `You write for Sleeve, a music stats site. Sound like a perceptive
 Use only the supplied facts. Make a concrete observation about a change, contrast, or pattern; back it with artist names and counts from those facts. Every number you mention must appear verbatim in the facts. Do not calculate new differences, percentages, or time spans. A fall to a nonzero count is not a disappearance. Do not infer personality, emotion, genre, or audio qualities from play counts. If the evidence is thin, say less.
 Avoid praise, corporate wording, and stock phrases: "eclectic", "sonic journey", "tapestry", "soundtrack of your life", "vibes", "delve", "engagement", "in contrast", "the record accumulated", "during this period", "clearly", "you have always". Every sentence should add evidence or interpretation grounded in evidence. No filler closing summary. No emojis, hashtags, or markdown. Use the exact JSON schema when the task requests JSON; otherwise write plain sentences only.`;
 
-const TASKS = {
+export const TASKS = {
   profile: {
     max: 1200, json: true,
-    prompt: (f) => `Prepare this listener's profile before they open it. The findings are already calculated and ranked; write only the useful relationship between them. Return JSON only with this shape: {"notes":"one paragraph under 55 words connecting two DISTINCT supplied findings about DIFFERENT artists or habits","observations":[{"id":"an evidence ID","text":"one useful sentence grounded ONLY in that ID's facts"}],"years":[{"year":"exact supplied year","text":"one short observation connecting that year's supplied monthly leaders, repeat discoveries or activity pattern"}],"eras":[{"artist":"exact supplied era artist","title":"short title","line":"one factual sentence"}]}. The note must explain a supported relationship between enduring habits, returning favorites, discoveries or unusual changes. Lead with what that relationship reveals about the recorded listening, in a sentence without numbers; then give the supporting facts. Merely joining two statistics with while is insufficient. Do not make a list of rising artist counts. Mention at most two artists and at most two numeric facts in the note. Use at most four observations and at most four supplied eras. For an observation, add context supplied under that ID; if it would only repeat the visible heading or counts, omit it. Privately check each sentence for unsupported names, numbers or musical descriptions, remove repetition, and return the checked result. Every numeral must appear in the relevant supplied facts. Do not infer personality, feelings, sound or reasons why listening changed. For year writing, use the supplied month-to-month or discovery context instead of repeating the total and leading artist. First and last monthly leaders do not prove continuous leadership; use the supplied list of monthly leaders. Coverage may be partial; never compare a partial year total with a full year as a decline. Omit thin evidence.\n\nEvidence:\n${f}`,
+    prompt: (f) => `Prepare this listener's profile from already calculated findings. Return JSON only: {"notes":"one paragraph under 55 words","observations":[{"id":"exact evidence ID","text":"one sentence"}],"years":[{"year":"exact supplied year","text":"one sentence"}],"eras":[{"artist":"exact supplied era artist","title":"2 to 5 words","line":"under 20 words"}]}.
+The note should connect two DISTINCT findings about different artists or habits. Say what actually changed or stayed: use named artists and the precise relationship, not abstract descriptions such as cyclical movement, core favorites, evolving tastes, or attention shifts. Speak to you. At most two numeric facts. Do not join unrelated counts. An artist who rose is not the artist who fell unless that same artist's facts explicitly say both. Do not imply one artist replaced another without a supplied comparison. Never infer reasons, feelings, sound, personality, or a causal relationship.
+Observations are optional. Use an empty array when you would only repeat a finding's title or counts. At most two observations; each must add supplied context from ONLY that evidence ID. Do not borrow a number or artist from a different finding. Omit years and eras with thin context, using empty arrays. For year text name specific supplied monthly leaders; a few months cannot establish dominance, consistency, or lack of dominance across a whole year. Never compare incomplete and complete year totals. Era leadership can be interrupted; do not turn endpoints into continuous leadership. No closing moral or generalized conclusion. Every numeric value must occur in the specific evidence being described. Privately check these rules, then return the JSON.
+
+Evidence:
+${f}`,
   },
   curate: {
     max: 750, json: true,
-    prompt: (f) => `Choose up to eight artists to explore from this supplied candidate pool. If fewer than eight candidates are supplied, choose only those available; never duplicate or invent an ID to reach eight. Consider recent listening, older favorites, multiple independent connections, supplied artist tags, and a mix of familiar directions and less obvious directions. The listener has not recorded these candidates. Do not invent candidates, genres or listening history. Return JSON only: {"picks":[{"id":"exact supplied candidate ID","reason":"a useful reason under 30 words using ONLY that candidate's supplied tags and connections"}]}. Explain which part of this listener's recent or older rotation points here. Do not repeat the candidate's name or just list their genres; those already appear on the card. Spread picks across different seed artists. No scores or probabilities. Avoid "sonic journey", "vibes", "perfect fit", "offers", "utilizes", "provides", or claims about mood. Choose only supported connections, and omit uncertain claims.\n\n${f}`,
+    prompt: (f) => `Choose three to eight distinct supplied candidates to explore. Return a JSON OBJECT only, never an array: {"picks":[{"id":"exact supplied artist_a-style ID","reason":"one sentence under 30 words"}]}.
+Only choose actual supplied IDs. If fewer than eight exist, do not invent or duplicate any. Spread choices across recent seeds, older favorites, and independent connections. These candidates have no recorded listening.
+For each reason, START with the NAME of a connected seed artist and its supplied role in this listener's history, then explain why that connection makes this a useful next listen. A link to both an older favorite and a recent discovery is useful; a genre list is not. Example form: "Your recent return to SEED points here; Last.fm also links this artist to OLDER SEED, which you have kept listening to." Use that form ONLY when both those connections and roles are actually supplied for that candidate. A Last.fm connection is evidence of listener overlap, not proof two artists sound alike. Do not infer sound or mood from that connection. Mention at most one supplied tag, and only when necessary. Do not start with tags or repeat the candidate's name. No claims that a candidate is new to a genre, will replace a favorite, or is a perfect fit. No scores, probabilities, invented musical descriptions or seed artists. Avoid offers, provides, aligns, core favorites, momentum, stylistic contrast, or generic closing praise. Privately check every reason against ONLY its candidate's evidence; omit an unsupported reason.
+
+${f}`,
   },
   notes: {
     max: 320,
-    prompt: (f) => `Write one compact liner-note paragraph (at most 85 words). Find a connection between an older pattern and a recent change, or a clear reversal within the record. Open with that change. Support it with two distinct facts from different parts of the record. Explain the relationship instead of listing unrelated statistics. If the facts are thin, write one precise sentence. Do not restate total plays, conclude with filler, or guess how songs sound or how the listener felt.\n\nFacts:\n${f}`,
+    prompt: (f) => `Write one short liner-note paragraph under 65 words. Connect an earlier recorded habit with one recent change or return, naming the artists precisely. Use at most two numeric facts. If one artist fell and a different artist rose, keep those directions attached to the correct names. A return is not a new discovery. Do not assume a favorite was replaced without evidence. Describe the concrete relationship, not cyclical movement, evolving tastes, core favorites or an abstract summary. Address you. Thin facts need only one sentence. Never guess reasons, feelings, sound or personality; never restate the total or end with a moral.
+
+Facts:
+${f}`,
   },
   year: {
     max: 260,
@@ -60,6 +73,7 @@ const TASKS = {
 };
 
 // Per-visitor isolate protection supplements the required public shared budget.
+export { STYLE };
 // An account-level Cloudflare rate rule should reject abuse before this route.
 const hits = new Map();
 const inflight = new Map();
@@ -122,7 +136,7 @@ async function call(step, env, messages, max, localPreview, structured = false) 
         ...(step.via === 'openrouter' ? { 'HTTP-Referer': 'https://liner-c7u.pages.dev', 'X-Title': 'Sleeve' } : {}),
       },
       body: JSON.stringify({ model: step.model, messages, max_tokens: step.maxTokens || max, temperature: structured ? 0.35 : 0.65, top_p: 0.9,
-        ...(step.via === 'openrouter' ? { provider: { data_collection: 'deny' } } : {}),
+        ...(step.via === 'openrouter' ? { provider: { data_collection: 'deny' }, reasoning: { enabled: false } } : {}),
         ...(step.via === 'openrouter' && structured ? { response_format: { type: 'json_object' }, provider: { data_collection: 'deny', require_parameters: true } } : {}) }),
     });
     if (!res.ok) {
@@ -188,8 +202,9 @@ export async function onRequestPost({ request, env, waitUntil }) {
           if (!groundedNumbers(result.text, facts)) throw new Error(`${step.model} unsupported number`);
           if (task.json) {
             let structured;
-            try { structured = JSON.parse(result.text); } catch { throw new Error(`${step.model} invalid structured response`); }
+            try { structured = normalizeStructuredWriting(body.task, JSON.parse(result.text)); } catch { throw new Error(`${step.model} invalid structured response`); }
             if (!validStructuredWriting(body.task,structured,facts)) throw new Error(`${step.model} unsupported structured writing`);
+            result.text = JSON.stringify(structured);
           }
           console.log('ai: served', body.task, step.model, `${Date.now() - started}ms`);
           const out = JSON.stringify(result);

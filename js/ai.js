@@ -7,7 +7,7 @@ import { cachedArtist } from './meta.js';
 
 const DAY = 864e5;
 const local = new Map();
-export const AI_VERSION = 'v18';
+export const AI_VERSION = 'v19';
 
 async function key(s) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
@@ -44,6 +44,7 @@ export async function write(task, facts, { question = '', fresh = false, signal 
   if (res.status === 404) throw new Error('AI writing only works on the live site.');
   if (!res.ok) throw new Error(d.error || 'The writer is busy. Try again in a moment.');
   if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
+  if(typeof d.text!=='string'||!d.text.trim())throw new Error('The writer returned no usable text. Try again.');
   local.set(k, d.text);
   idb.set(k, d.text);
   return d.text;

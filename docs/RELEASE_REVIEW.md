@@ -51,7 +51,7 @@ October 10 live local checks:
 - After changing the small-pool prompt and putting the quick route first, a fresh synthetic curation check returned HTTP 503: the quick and local fallback outputs failed structure validation, while the larger route timed out. Curation quality/availability remains an explicit open gate; the deterministic recommendation board still works.
 - A synthetic observation implied an unsupported sequence of changes despite passing numeric validation. Numeric and structural guards do not establish semantic accuracy. A fixed quality evaluation remains necessary.
 
-Automatic report/curation now tries the locally working 26B route first, requests JSON formatting, permits fewer than eight curator picks when the pool is smaller, and retains the larger fixed alternative. Cache version 18 invalidates old prepared writing. AI summaries now compare periods ending at the last recorded play, not today's date.
+Those checks describe the initial routing revision. A later bounded synthetic evaluation selected Dots 3 Note Preview first, with Gemma 4 26B as fallback, and removed the timing-out Gemma 4 31B route. Cache version 19 invalidates earlier writing. See [AI_MODEL_EVALUATION.md](AI_MODEL_EVALUATION.md) for the actual results and semantic limitations. AI summaries compare periods ending at the last recorded play, not today's date.
 
 Before launch, demonstrate profile, curator, year and question tasks on the public Pages Functions route, with the Durable Object budget bound and required. Check actual served models, semantic accuracy, p95 latency, provider failures, cache hits, fallback consumption and quota exhaustion. NVIDIA remains local-only. The 900-attempt daily shared budget gives a theoretical maximum of 450 two-call preparations before interactive traffic and failures; repeated fallbacks reduce that capacity.
 
@@ -71,3 +71,11 @@ Official model catalogue: [OpenRouter models API](https://openrouter.ai/api/v1/m
 No public deployment, partner outreach or license selection was performed during this review.
 
 Verification: all 89 tests pass. Browser checks at 1440px and 320px found no horizontal overflow, all nine navigation links present, and Overview liner notes outside any closed details element. The Insights prepared note is visible. These checks cover the visibility correction; they do not establish a flawless end-to-end release.
+
+## Setup repair
+
+The reported setup screenshot exposed an actual layout collision: a `height: 100%` input inside an auto-height wrapping flex field pushed the submit button past its wrapper and into the lookup output. The setup field now uses a single-column grid with explicit 56px input and 46px button heights. The label, action and live result occupy separate rows. Source choices and saved-record shortcuts are visible before the form; setup has a smaller heading and a compact step indicator.
+
+Browser checks at 320px, 390px and 1366px found no horizontal overflow or button/output overlap. At 1366×768 the primary action ends at 675px, within the viewport. Valid username lookup, invalid username feedback, blank submission and clearing a loaded result were checked. Lookup edits abort and invalidate the previous request immediately, and submission cancels the pending debounce. Settings now has a smaller scoped heading and wraps long profile names. These repairs do not certify every chart or import state.
+
+Final verification after the setup/model repair: 95 tests passed. The restarted local Pages `/api/ai` served a synthetic notes request from Dots in 1.808 seconds. Public budget enforcement and a deployed user journey remain open gates.

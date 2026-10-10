@@ -31,7 +31,7 @@ test('rejects an invented number and tries the next writer', async () => {
   globalThis.fetch = async (_url, options) => {
     const model = JSON.parse(options.body).model;
     models.push(model);
-    const content = model.includes('gemma-4-26b')
+    const content = model.includes('dots-3-note')
       ? 'The artist gained 999 plays during the recorded period.'
       : 'The artist gained 23 plays during the recorded period.';
     return Response.json({ model, choices: [{ message: { content } }] });
@@ -64,11 +64,11 @@ test('invalid profile structure tries the next writer before caching',async()=>{
   const models=[];
   globalThis.fetch=async(_url,options)=>{
     const model=JSON.parse(options.body).model;models.push(model);
-    const output=model.includes('26b')?{notes:'Recent rose.'}:{notes:'Recent rose.',observations:[{id:'shift',text:'Earlier was overtaken.'}],years:[],eras:[]};
-    return Response.json({model,choices:[{message:{content:model.includes('26b')?JSON.stringify(output):'```json\n'+JSON.stringify(output)+'\n```'}}]});
+    const output=model.includes('dots-3-note')?{notes:'Recent rose.'}:{notes:'Recent rose.',observations:[{id:'shift',text:'Earlier was overtaken.'}],years:[],eras:[]};
+    return Response.json({model,choices:[{message:{content:model.includes('dots-3-note')?JSON.stringify(output):'```json\n'+JSON.stringify(output)+'\n```'}}]});
   };
   const response=await onRequestPost(context(request('Structure test: Recent and Earlier, shift.',{task:'profile'})));
-  assert.equal(response.status,200);assert.equal(models.length,2);assert.match((await response.json()).model,/gemma-4-31b/);
+  assert.equal(response.status,200);assert.equal(models.length,2);assert.match((await response.json()).model,/gemma-4-26b/);
 });
 
 test('public traffic uses OpenRouter and reuses a cached answer', async () => {
@@ -82,7 +82,7 @@ test('public traffic uses OpenRouter and reuses a cached answer', async () => {
   const facts = 'Public test: Radiohead 90 to 10 plays; SZA 4 to 44 plays.';
   const first = await onRequestPost(context(request(facts)));
   assert.equal(first.status, 200);
-  assert.match((await first.json()).model, /gemma-4-26b/);
+  assert.match((await first.json()).model, /dots-3-note/);
   assert.equal(urls.length, 1);
   assert.ok(urls.every((url) => url.includes('openrouter.ai')));
   assert.equal(payloads[0].provider.data_collection, 'deny');
@@ -110,16 +110,24 @@ test('public AI writing fails closed without a shared budget binding', async () 
   assert.equal(calls, 0);
 });
 
-test('an unavailable quick writer falls back to the fixed editor', async () => {
+test('the observed singleton curator envelope is normalized before caching',async()=>{
+  const picks=['artist_a','artist_b','artist_c'].map(id=>({id,reason:'Connected to the supplied rotation.'}));
+  globalThis.fetch=async(_url,options)=>Response.json({model:JSON.parse(options.body).model,choices:[{message:{content:JSON.stringify([{picks}])}}]});
+  const response=await onRequestPost(context(request('Envelope test: artist_a artist_b artist_c',{task:'curate'})));
+  assert.equal(response.status,200);
+  assert.deepEqual(JSON.parse((await response.json()).text),{picks});
+});
+
+test('an unavailable editor falls back to the verified smaller writer', async () => {
   const models = [];
   globalThis.fetch = async (_url, options) => {
     const model = JSON.parse(options.body).model;
     models.push(model);
-    return model.includes('gemma-4-26b') ? new Response('', { status: 503 }) : success(model);
+    return model.includes('dots-3-note') ? new Response('', { status: 503 }) : success(model);
   };
   const response = await onRequestPost(context(request('Fallback test: 23 plays by one artist and 17 by another.')));
   assert.equal(response.status, 200);
-  assert.match((await response.json()).model, /gemma-4-31b/);
+  assert.match((await response.json()).model, /gemma-4-26b/);
   assert.equal(models.length, 2);
 });
 

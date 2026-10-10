@@ -19,14 +19,14 @@ function cleanUsername(v) {
   return v.trim().replace(/^@/, '');
 }
 
-export function mountLookup(root, { source = 'lastfm', id, cta = 'Continue', initial = '', onConfirm }) {
+export function mountLookup(root, { source = 'lastfm', id, cta = 'Continue', initial = '', label = '', onConfirm }) {
   const src = SOURCES[source];
   const hint = source === 'lastfm'
     ? 'No password needed. Last.fm profiles are public, so your username is enough. Pasting your profile link works too.'
     : 'No password or key needed. ListenBrainz is open, so your username is enough.';
   root.innerHTML = `
     <form class="lookup" novalidate>
-      <label class="sr" for="${id}">Your ${src.label} username</label>
+      <label class="${label?'lookup__label':'sr'}" for="${id}">${esc(label||`Your ${src.label} username`)}</label>
       <div class="lookup__field">
         <span class="lookup__prefix">${PREFIX[source]}</span>
         <input class="lookup__input" id="${id}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="your username" maxlength="120" value="${esc(initial)}">
@@ -43,10 +43,10 @@ export function mountLookup(root, { source = 'lastfm', id, cta = 'Continue', ini
 
   async function run(name) {
     ctrl?.abort();
+    const my = ++seq;
     result = null; queried = name; ready(false);
     if (!name) { out.innerHTML = idle; busy = false; return; }
     if (!src.USERNAME_RE.test(name)) { busy = false; wantSubmit = false; out.innerHTML = `<p class="lookup__msg">${src.usernameRule}</p>`; return; }
-    const my = ++seq;
     ctrl = new AbortController();
     busy = true;
     out.innerHTML = '<div class="skel"><i style="width:48px;height:48px;border-radius:50%"></i><span style="flex:1;display:grid;gap:8px"><i style="width:40%;height:12px"></i><i style="width:72%;height:12px"></i></span></div>';
@@ -74,12 +74,16 @@ export function mountLookup(root, { source = 'lastfm', id, cta = 'Continue', ini
     if (/(last\.fm|listenbrainz\.org)\//i.test(input.value)) input.value = name;
     wantSubmit = false;
     if (name === queried && (result || busy)) return;
+    ctrl?.abort(); ++seq; result = null; busy = false;
+    out.innerHTML = idle;
     ready(false);
     later(name);
   });
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    later.cancel();
     const name = cleanUsername(input.value);
+    if(!name){out.innerHTML=`<p class="lookup__msg lookup__msg--bad">Enter your ${src.label} username or paste your profile link.</p>`;input.focus();return;}
     if (result && name === queried) return confirm();
     wantSubmit = true;
     if (name !== queried || !busy) run(name);
