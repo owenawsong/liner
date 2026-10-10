@@ -34,7 +34,7 @@ export function notesPanel(A, isDemo = false) {
       <div class="ai__body" aria-live="polite">${isDemo ? `<p class="ai__text">${esc(DEMO_NOTES)}</p>` : loadingLines}</div>
       ${basis ? `<aside class="ai__basis"><span class="label">Based on</span>${basis}</aside>` : ''}
     </div>
-    <div class="ai__foot">${isDemo ? '' : '<button type="button" class="link link--quiet" data-again hidden>Write another take</button>'}<span class="faint">${isDemo ? 'Example text for this demo profile.' : 'Written by AI from a short summary of your stats. Your raw plays are not sent.'}</span></div>
+    <div class="ai__foot">${isDemo ? '' : '<button type="button" class="link link--quiet" data-again hidden>Write another take</button>'}<span class="faint" data-writing-basis>${isDemo ? 'Example text for this demo profile.' : 'Opening your prepared notes…'}</span></div>
   </section>`;
 }
 
@@ -45,6 +45,8 @@ export function bindNotes(ctx) {
   let alive = true, request = 0;
   onLeave(() => { alive = false; });
   const body = $('.ai__body', root);
+  const basis = $('[data-writing-basis]',root);
+  const origin = generated => { basis.textContent=generated ? 'AI interpretation of a short summary of your stats. Your raw plays are not sent.' : 'Calculated directly from your saved listening. Extra AI writing is unavailable or still being prepared.'; };
   const demo = ctx.source === 'demo';
   const f = facts(ctx.A, { ...ctx.p, topArtists: ctx.topArtists }, { detailed: true });
   const example = () => {
@@ -54,23 +56,27 @@ export function bindNotes(ctx) {
   const run = async (fresh = false) => {
     if (!fresh && mode === 'notes') {
       const text=ctx.prepared?.dossier?.notes;
-      if(text){body.innerHTML=`<p class="ai__text">${esc(text)}</p>`;$('[data-again]',root)?.removeAttribute('hidden');return;}
-      if(!demo){body.innerHTML=`<p class="ai__text">${esc(fallbackNote(ctx.A))}</p><p class="faint">${ctx.prepared ? 'Calculated from your saved record.' : 'Preparing a closer read of your listening…'}</p>`;return;}
+      if(text){body.innerHTML=`<p class="ai__text">${esc(text)}</p>`;origin(true);$('[data-again]',root)?.removeAttribute('hidden');return;}
+      if(!demo){body.innerHTML=`<p class="ai__text">${esc(fallbackNote(ctx.A))}</p><p class="faint">${ctx.prepared ? 'Calculated from your saved record.' : 'Preparing a closer read of your listening…'}</p>`;origin(false);return;}
     }
     if (demo) return example();
     const mine = ++request;
     body.innerHTML = loadingLines;
+    basis.textContent='Writing an interpretation from your measured listening…';
     $('[data-again]', root).hidden = true;
     $('.ai__title', root).textContent = TITLES[mode];
     try {
       const text = await write(mode, f, { fresh, signal: ctx.signal });
       if (!alive || mine !== request) return;
       const lines = paragraphs(text);
+      origin(true);
       body.innerHTML = lines.map(() => '<p class="ai__text"></p>').join('');
       $$('.ai__text', body).forEach((p, i) => reveal(p, lines[i]));
       $('[data-again]', root).hidden = false;
     } catch (e) {
       if (!alive || mine !== request || e.name === 'AbortError') return;
+      origin(false);
+      $('.ai__title',root).textContent='Your listening record';
       body.innerHTML = `<p class="ai__text">${esc(fallbackNote(ctx.A))}</p><p class="faint" style="font-size:13px;margin-top:12px">Calculated from your record. Extra writing is unavailable right now. <button type="button" class="link" data-retry>Try again</button></p>`;
       $('[data-retry]', body).addEventListener('click', () => run(true));
     }
@@ -106,7 +112,8 @@ export function findingHTML(ctx,entry,{compact=false,index=0}={}) {
   const text=aiOff()?'':ctx.prepared?.dossier?.observations?.[entry.id];
   const words=s=>new Set(String(s||'').toLowerCase().match(/[a-zÀ-ÿ]{4,}/g)||[]),base=words(`${entry.title} ${entry.detail} ${entry.basis}`),written=words(text),extra=[...written].filter(w=>!base.has(w));
   const note=text&&extra.length>=3&&extra.length/Math.max(1,written.size)>=.25;
-  return `<article class="listening-finding${compact?' listening-finding--compact':''} listening-finding--${esc(entry.family||entry.id)}" data-finding="${esc(entry.id)}"><div class="listening-finding__caption"><span>${esc(entry.label)}</span>${compact?'':`<span>${String(index+1).padStart(2,'0')}</span>`}</div><div class="listening-finding__opening">${artist?`<a class="listening-finding__art" href="${ctx.L.artist(artist)}" aria-label="Explore ${esc(artist)}">${sleeve(entry.target?.kind==='album'?entry.target.name:artist,artist,{size:compact?64:108,kind:entry.target?.kind==='album'?'album':'artist'})}</a>`:''}<h3>${dest?`<a href="${dest}">${esc(entry.title)} <span>↗</span></a>`:esc(entry.title)}</h3></div><p>${esc(entry.detail)}</p>${findingVisual(entry)}${note?`<details class="finding-context"><summary>A closer read</summary><p>${esc(text)}</p></details>`:''}<small class="record-basis">${esc(entry.basis)}</small></article>`;
+  const commentary=note ? (compact ? `<details class="finding-context"><summary>AI interpretation</summary><p>${esc(text)}</p></details>` : `<aside class="finding-context"><span class="label">AI interpretation</span><p>${esc(text)}</p></aside>`) : '';
+  return `<article class="listening-finding${compact?' listening-finding--compact':''} listening-finding--${esc(entry.family||entry.id)}" data-finding="${esc(entry.id)}"><div class="listening-finding__caption"><span>${esc(entry.label)}</span>${compact?'':`<span>${String(index+1).padStart(2,'0')}</span>`}</div><div class="listening-finding__opening">${artist?`<a class="listening-finding__art" href="${ctx.L.artist(artist)}" aria-label="Explore ${esc(artist)}">${sleeve(entry.target?.kind==='album'?entry.target.name:artist,artist,{size:compact?64:108,kind:entry.target?.kind==='album'?'album':'artist'})}</a>`:''}<h3>${dest?`<a href="${dest}">${esc(entry.title)} <span>↗</span></a>`:esc(entry.title)}</h3></div><p>${esc(entry.detail)}</p>${findingVisual(entry)}${commentary}<small class="record-basis">${esc(entry.basis)}</small></article>`;
 }
 
 export function listeningRead(ctx,limit=6) {

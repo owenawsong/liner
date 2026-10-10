@@ -7,7 +7,7 @@ import { cachedArtist } from './meta.js';
 
 const DAY = 864e5;
 const local = new Map();
-export const AI_VERSION = 'v17';
+export const AI_VERSION = 'v18';
 
 async function key(s) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
@@ -74,7 +74,7 @@ export function facts(A, p, { year, detailed = false } = {}) {
   L.push(`Top artists: ${artists.map((a) => `${a.name} (${num(a.plays)})`).join(', ')}.`);
   L.push(`Top songs: ${tracks.map((t) => `${t.name} by ${t.artist} (${num(t.plays)})`).join('; ')}.`);
   if (detailed) {
-    const E = evolution(A);
+    const E = evolution(A, A.to + 1);
     L.push(`Taste change across the latest and previous 90 days: ${num(E.total)} vs ${num(E.previous)} plays, ${E.shift == null ? 'not enough data for a shift score' : `${E.shift}/100 shift`}, ${E.newArtists} newly heard artists, ${E.overlap} top-20 artists shared across both periods.`);
     if (E.rising.length) L.push(`Artists gaining share: ${E.rising.slice(0, 5).map((x) => `${x.name} ${x.before} to ${x.plays} plays`).join('; ')}.`);
     if (E.discoveries.length) L.push(`New discoveries: ${E.discoveries.slice(0, 5).map((x) => `${x.name} ${x.plays} plays`).join('; ')}.`);

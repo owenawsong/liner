@@ -261,6 +261,7 @@
 .finding-context { font-size: 14px; margin-top: 18px; }
 .finding-context summary { cursor: pointer; color: var(--ink-3); }
 .finding-context p { margin-top: 12px; line-height: 1.7; color: var(--ink-2); }
+aside.finding-context { padding-left: 14px; border-left: 2px solid var(--line-2); }
 .prepared-commentary { margin-top: 20px; border-block: 1px solid var(--line-2); padding: 18px 0; }
 .prepared-commentary summary { cursor: pointer; display: flex; justify-content: space-between; font-size: 14px; }
 .prepared-commentary p { max-width: 75ch; font-size: 14px; line-height: 1.8; margin-top: 18px; color: var(--ink-2); }

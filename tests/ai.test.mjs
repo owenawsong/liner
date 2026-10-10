@@ -31,7 +31,7 @@ test('rejects an invented number and tries the next writer', async () => {
   globalThis.fetch = async (_url, options) => {
     const model = JSON.parse(options.body).model;
     models.push(model);
-    const content = model.includes('gemma-4')
+    const content = model.includes('gemma-4-26b')
       ? 'The artist gained 999 plays during the recorded period.'
       : 'The artist gained 23 plays during the recorded period.';
     return Response.json({ model, choices: [{ message: { content } }] });
@@ -47,6 +47,9 @@ test('profile and curation can run together with structured outputs and one budg
   const budget={idFromName:name=>name,get:()=>({fetch:async()=>{slots++;return new Response('',{status:200});}})};
   globalThis.fetch=async(_url,options)=>{
     const payload=JSON.parse(options.body);const profile=payload.messages[1].content.includes("listener's profile");
+    assert.deepEqual(payload.response_format,{type:'json_object'});
+    assert.equal(payload.provider.require_parameters,true);
+    assert.equal(payload.provider.data_collection,'deny');
     tasks.push(profile?'profile':'curate');
     const output=profile?{notes:'Earlier led before Recent.',observations:[{id:'shift',text:'Recent moved into the rotation.'}],years:[],eras:[]}:
       {picks:[{id:'artist_a',reason:'Connected to Earlier.'},{id:'artist_b',reason:'Connected to Recent.'},{id:'artist_c',reason:'Connected to both.'}]};
@@ -61,11 +64,11 @@ test('invalid profile structure tries the next writer before caching',async()=>{
   const models=[];
   globalThis.fetch=async(_url,options)=>{
     const model=JSON.parse(options.body).model;models.push(model);
-    const output=model.includes('qwen')?{notes:'Recent rose.'}:{notes:'Recent rose.',observations:[{id:'shift',text:'Earlier was overtaken.'}],years:[],eras:[]};
-    return Response.json({model,choices:[{message:{content:model.includes('qwen')?JSON.stringify(output):'```json\n'+JSON.stringify(output)+'\n```'}}]});
+    const output=model.includes('26b')?{notes:'Recent rose.'}:{notes:'Recent rose.',observations:[{id:'shift',text:'Earlier was overtaken.'}],years:[],eras:[]};
+    return Response.json({model,choices:[{message:{content:model.includes('26b')?JSON.stringify(output):'```json\n'+JSON.stringify(output)+'\n```'}}]});
   };
   const response=await onRequestPost(context(request('Structure test: Recent and Earlier, shift.',{task:'profile'})));
-  assert.equal(response.status,200);assert.equal(models.length,2);assert.match((await response.json()).model,/gemma/);
+  assert.equal(response.status,200);assert.equal(models.length,2);assert.match((await response.json()).model,/gemma-4-31b/);
 });
 
 test('public traffic uses OpenRouter and reuses a cached answer', async () => {
@@ -112,11 +115,11 @@ test('an unavailable quick writer falls back to the fixed editor', async () => {
   globalThis.fetch = async (_url, options) => {
     const model = JSON.parse(options.body).model;
     models.push(model);
-    return model.includes('gemma-4') ? new Response('', { status: 503 }) : success(model);
+    return model.includes('gemma-4-26b') ? new Response('', { status: 503 }) : success(model);
   };
   const response = await onRequestPost(context(request('Fallback test: 23 plays by one artist and 17 by another.')));
   assert.equal(response.status, 200);
-  assert.match((await response.json()).model, /qwen3.8-27b/);
+  assert.match((await response.json()).model, /gemma-4-31b/);
   assert.equal(models.length, 2);
 });
 

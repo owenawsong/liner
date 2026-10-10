@@ -7,17 +7,17 @@ import { validStructuredWriting } from '../lib/writing-quality.js';
 
 // Fixed OpenRouter models keep the voice testable. NVIDIA's hosted developer
 // endpoint is for local evaluation only; public traffic must never use it.
-const CACHE_VERSION = 'v17';
-// Thinking models spend part of max_tokens on their private reasoning. Leave enough
-// room for the short visible answer, otherwise it returns an empty message.
-const EDITOR = { via: 'openrouter', model: 'qwen/qwen3.8-27b:free', timeout: 12000, maxTokens: 850 };
+const CACHE_VERSION = 'v18';
+// Use published, fixed model IDs. The previous Qwen3.8 OpenRouter route returned
+// 404 in the launch audit; Gemma 4 31B supports structured response formatting.
+const EDITOR = { via: 'openrouter', model: 'google/gemma-4-31b-it:free', timeout: 12000, maxTokens: 850 };
 const QUICK = { via: 'openrouter', model: 'google/gemma-4-26b-a4b-it:free', timeout: 8000 };
 const DIFFUSION = { via: 'nvidia', model: 'google/diffusiongemma-26b-a4b-it', timeout: 16000 };
 const ROUTES = {
   notes: [QUICK, EDITOR], year: [EDITOR, QUICK], eras: [QUICK, EDITOR],
   roast: [QUICK, EDITOR], ask: [EDITOR, QUICK],
-  profile: [{ ...EDITOR, timeout: 18000, maxTokens: 1800 }, { ...QUICK, timeout: 20000, maxTokens: 1500 }],
-  curate: [{ ...EDITOR, timeout: 16000, maxTokens: 1300 }, { ...QUICK, timeout: 20000, maxTokens: 1100 }],
+  profile: [{ ...QUICK, timeout: 20000, maxTokens: 1500 }, { ...EDITOR, timeout: 18000, maxTokens: 1800 }],
+  curate: [{ ...QUICK, timeout: 20000, maxTokens: 1500 }, { ...EDITOR, timeout: 16000, maxTokens: 1500 }],
 };
 const ENDPOINT = {
   nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
@@ -35,7 +35,7 @@ const TASKS = {
   },
   curate: {
     max: 750, json: true,
-    prompt: (f) => `Choose eight artists to explore from this supplied candidate pool. Consider recent listening, older favorites, multiple independent connections, supplied artist tags, and a mix of familiar directions and less obvious directions. The listener has not recorded these candidates. Do not invent candidates, genres or listening history. Return JSON only: {"picks":[{"id":"exact supplied candidate ID","reason":"a useful reason under 30 words using ONLY that candidate's supplied tags and connections"}]}. Explain which part of this listener's recent or older rotation points here. Do not repeat the candidate's name or just list their genres; those already appear on the card. Spread picks across different seed artists. No scores or probabilities. Avoid "sonic journey", "vibes", "perfect fit", "offers", "utilizes", "provides", or claims about mood. Choose only supported connections, and omit uncertain claims.\n\n${f}`,
+    prompt: (f) => `Choose up to eight artists to explore from this supplied candidate pool. If fewer than eight candidates are supplied, choose only those available; never duplicate or invent an ID to reach eight. Consider recent listening, older favorites, multiple independent connections, supplied artist tags, and a mix of familiar directions and less obvious directions. The listener has not recorded these candidates. Do not invent candidates, genres or listening history. Return JSON only: {"picks":[{"id":"exact supplied candidate ID","reason":"a useful reason under 30 words using ONLY that candidate's supplied tags and connections"}]}. Explain which part of this listener's recent or older rotation points here. Do not repeat the candidate's name or just list their genres; those already appear on the card. Spread picks across different seed artists. No scores or probabilities. Avoid "sonic journey", "vibes", "perfect fit", "offers", "utilizes", "provides", or claims about mood. Choose only supported connections, and omit uncertain claims.\n\n${f}`,
   },
   notes: {
     max: 320,
@@ -123,7 +123,7 @@ async function call(step, env, messages, max, localPreview, structured = false) 
       },
       body: JSON.stringify({ model: step.model, messages, max_tokens: step.maxTokens || max, temperature: structured ? 0.35 : 0.65, top_p: 0.9,
         ...(step.via === 'openrouter' ? { provider: { data_collection: 'deny' } } : {}),
-        ...(step.model === EDITOR.model ? { reasoning: { effort: 'low' } } : {}) }),
+        ...(step.via === 'openrouter' && structured ? { response_format: { type: 'json_object' }, provider: { data_collection: 'deny', require_parameters: true } } : {}) }),
     });
     if (!res.ok) {
       const error = new Error(`${step.model} ${res.status}`);

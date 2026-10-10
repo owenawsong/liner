@@ -4,13 +4,15 @@ The complete record of your listening. Sleeve turns music history into timelines
 
 ## Run locally
 
-The frontend is plain HTML, CSS, and ES modules. On Windows, put `NVIDIA_API_KEY` and `OPENROUTER_API_KEY` in `%USERPROFILE%\.sleeve\dev\.dev.vars` and run:
+The frontend is plain HTML, CSS, and ES modules. On Windows with Node.js installed, run:
 
 ```powershell
 .\scripts\dev.ps1
 ```
 
 Open `http://127.0.0.1:5178`. The script stages only public assets outside the repository, then starts Cloudflare Pages Functions. To use another port, pass `-Port 5180`.
+
+AI keys are optional for local statistics and demo views. To enable writing, put `OPENROUTER_API_KEY=your-key` in `%USERPROFILE%\.sleeve\dev\.dev.vars`. An optional `NVIDIA_API_KEY` enables the development-only fallback. Never add either key to frontend code or commit that file.
 
 Do not serve the project root with `python -m http.server` or `wrangler pages dev .` if it contains a local `.dev.vars`: those commands can expose that file on localhost. The service worker registers on HTTPS deployments. Local development serves a public staging snapshot; restart the preview after repository edits to rebuild that snapshot.
 
@@ -30,7 +32,7 @@ The public data access decision is in [docs/DATA_ACCESS_DECISION.md](docs/DATA_A
 
 ## Explore
 
-- Five primary destinations: Overview, Music, History, Insights and Discover. Explore more keeps Taste changes, Deep dive, Listening clock and Data & settings within reach. All existing detailed artist, song and year routes remain available. Timeline month details include active days, first-heard artists, prior-month and year-ago comparisons, and previous/next controls.
+- Eight visible analytical destinations: Overview, Music, Timeline, Taste changes, Charts & sound, Insights, Discover and Clock. Data & settings is a separate visible utility link. Prepared liner notes appear openly on Overview and Insights; counting methods and supporting details expand on demand. All existing detailed artist, song and year routes remain available. Timeline month details include active days, first-heard artists, prior-month and year-ago comparisons, and previous/next controls.
 - Discover combines Last.fm artist similarities and album popularity with your listening history. It lets you follow any seed artist, rotate through longer-tail seeds, and find deeper cuts using listener counts checked against spelling variants. It filters artists and albums you already heard, checks album identities against MusicBrainz, and treats the sparse MusicBrainz community scores as secondary context, showing a score only when at least 20 people rated it. Saves and optional high ratings influence later picks; hiding or marking an item as known removes it. Export or import your personal shelf as JSON. Recommendations and ratings stay in this browser.
 - Evolution compares equal 30-, 90-, or 365-day periods, showing rising artists, new discoveries, older favorites and a taste-shift index. Prepared Discover suggestions appear automatically alongside the comparison.
 - Deep dive charts show 24 months of activity, artist breadth, discovery share, top-artist concentration, and artist-tag style trends by year with visible coverage. Last.fm imports save page checkpoints and resume after an interrupted setup.
@@ -54,7 +56,7 @@ The public data access decision is in [docs/DATA_ACCESS_DECISION.md](docs/DATA_A
 - `js/meta.js` batches artwork through `functions/api/art.js` and enriches music metadata.
 - `js/views/*` contains the landing page, onboarding, settings, connections, profiles, and detail pages.
 - `styles.css` holds the app layout and theme tokens; `sleeve.css` adds the Sleeve visual language.
-- `functions/api/ai.js` sends brief derived facts to fixed OpenRouter free models with provider data collection denied: Gemma 4 26B for automatic notes and short tasks, Qwen3.8 27B for questions and year writing. NVIDIA DiffusionGemma is available only for local development fallback; the developer endpoint is never used for public traffic. Results are cached, versioned, coalesced when identical requests overlap, and per-visitor requests are limited on a best-effort basis. The `ai-budget` Durable Object enforces a shared OpenRouter request budget once bound to the Pages project. Provider keys stay in Cloudflare secrets or `.dev.vars`, not frontend code.
+- `functions/api/ai.js` sends brief derived facts to fixed OpenRouter free models with provider data collection denied: Gemma 4 26B for short writing and automatic reports/curation, with Gemma 4 31B as the alternative and first for questions/year writing. Structured reports request JSON formatting and still pass local evidence validation. NVIDIA DiffusionGemma is available only for local development fallback; the developer endpoint is never used for public traffic. Generated responses are cached on the server for seven days, versioned, coalesced when identical requests overlap, and per-visitor requests are limited on a best-effort basis. Raw histories stay in the browser; some derived summaries include a display name. The `ai-budget` Durable Object enforces a shared OpenRouter request budget once bound to the Pages project. Provider keys stay in Cloudflare secrets or `.dev.vars`, not frontend code.
 - `sw.js` caches the app shell for offline use on HTTPS.
 
 The existing `liner.*` browser storage keys, `LINER_CONFIG`, and `liner` Cloudflare/GitHub project identifiers remain in place so existing visitors keep their saved data and the current deployment continues to work.

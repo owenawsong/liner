@@ -22,7 +22,7 @@ import { getTaste } from '../taste.js';
 import { savedStartingRecords } from '../recommendations.js';
 import { exclusionPanelHTML, bindExclusions, bindDetailExclusions } from './filters.js';
 import { audioPanelHTML, bindAudioPanel, cancelAllAudioAudits } from './audio.js';
-import { profileNavHTML, bindProfileNav } from '../profile-nav.js';
+import { profileNavHTML } from '../profile-nav.js';
 
 const TABS = [['overview', 'Overview'], ['discover', 'Discover'], ['top', 'Top'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['patterns', 'Deep dive'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
 const LABEL = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export', demo: 'Demo' };
@@ -92,7 +92,6 @@ export async function renderProfile({ pid, source, name, tab = 'overview', args 
     ${profileNavHTML(pid,current)}
     <div class="wrap" id="sync-banner" aria-live="polite"></div>
     <div class="wrap fade-in" id="tab"></div>`;
-  bindProfileNav(onLeave);
   ({ overview, discover: discoverTab, top, timeline: timelineTab, evolution: evolutionTab, patterns: patternsTab, insights: insightsTab, clock, data, artist: detail, song: detail, year: detail })[tab](ctx);
   bindSyncBanner(ctx);
   autoSync(ctx);
@@ -168,6 +167,7 @@ export function overviewHTML(ctx) {
   }
   if (A) {
     parts.push(`<div class="c-12">${statStrip(A)}</div>`);
+    if(!ctx.preview)parts.push(notesPanel(A,source==='demo'));
     parts.push(`<section class="panel c-12"><div class="panel__head"><h2>Month by month</h2><a class="link link--quiet" href="${hrefFor(pid, 'timeline')}">Open the timeline ${icon.arrow}</a></div>${timeline(A, { height: 140, fit: true })}</section>`);
   } else if (!ctx.preview) {
     parts.push(ctx.archive?.export?.rows?.length||ctx.archive?.live?.rows?.length ? `<section class="panel c-12"><h2>No plays match your counting settings</h2><p class="muted" style="margin-top:10px">Your original history is saved. Restore excluded listening or change the minimum play length to include it in your statistics.</p><a class="link" href="${hrefFor(pid,'data')}" style="margin-top:16px">Review counting settings ↗</a></section>` : source === 'lastfm' && !p.user.playcount ? firstPlayCTA() : importCTA(ctx));
@@ -178,7 +178,7 @@ export function overviewHTML(ctx) {
   else parts.push(`<section class="panel c-7"><div class="panel__head"><h2>Top songs</h2><span class="label">All time</span></div>${rankList(A?topIn(A, 'tracks', -Infinity, Infinity, 8):[], { kind: 'tracks', link: ctx.L?.rank })}</section>`);
   if (source === 'spotify') parts.push(`<section class="panel c-12" id="watch">${watchHTML()}</section>`);
   if (A && ctx.L?.song) parts.push(onThisDay(A, ctx.L));
-  if(A&&!ctx.preview)parts.push(`<details class="overview-deeper c-12"><summary>The story behind your listening <span>＋</span></summary><div class="grid">${storyPanel(ctx)}${notesPanel(A,source==='demo')}</div></details>`);
+  if(A&&!ctx.preview)parts.push(`<details class="overview-deeper c-12"><summary>Your listening eras <span>＋</span></summary><div class="grid">${storyPanel(ctx)}</div></details>`);
   if (A?.insights.length) {
     parts.push(`<details class="overview-deeper c-12"><summary>More details from your listening <span>＋</span></summary><a class="link link--quiet" href="${hrefFor(pid, 'insights')}">Explore all ${A.insights.length} findings ${icon.arrow}</a>
       <div class="insights">${A.insights.slice(0, 3).map((x) => insightCard(x, false)).join('')}</div></details>`);
@@ -742,8 +742,8 @@ function insightsTab(ctx) {
   $('#tab').innerHTML = `${banner(ctx)}
     <div class="insights-page">
       <header class="report-head report-head--compact"><div><h2>Inside your listening</h2><span class="label">${firstYear}${firstYear !== lastYear ? `—${lastYear}` : ''} / ${num(A.plays)} RECORDED PLAYS</span></div><nav class="report-nav" aria-label="Jump through this report"><button type="button" data-insights-jump="ask">Ask a question ↗</button><button type="button" data-insights-jump="mainstream">Audience reach ↗</button><button type="button" data-insights-jump="findings">All findings ↗</button></nav></header>
+      ${ctx.prepared?.dossier?.notes && store.get('liner.ai')!=='off' ? `<section class="prepared-commentary" aria-label="Prepared liner notes"><span class="label">${ctx.source==='demo'?'Example AI interpretation':'AI interpretation · prepared for you'}</span><p>${esc(ctx.prepared.dossier.notes)}</p><small>A reading of your measured listening. Check the supporting findings below.</small></section>` : ''}
       ${listeningRead(ctx)}
-      ${ctx.prepared?.dossier?.notes && store.get('liner.ai')!=='off' ? `<details class="prepared-commentary"><summary>A reading of this record <span>↗</span></summary><p>${esc(ctx.prepared.dossier.notes)}</p><small>Written from the recorded evidence above. Raw listening history stays in this browser.</small></details>` : ''}
       <div class="insights-page__section"><span class="label">AUDIENCE REACH</span><p>Where your most-played artists sit in Last.fm's global audience counts.</p></div>
       ${mainstreamPanel()}
       ${askPanel(A)}

@@ -47,8 +47,8 @@ export function renderSettings() {
       </section>
 
       <section class="setrow">
-        <div class="setrow__label"><h2>AI writing</h2><p>Liner notes, roasts, era names and questions. When it's on, a short summary of your stats is sent to write them. Never your full history.</p></div>
-        <label class="switch"><input type="checkbox" id="set-ai" ${aiEnabled() ? 'checked' : ''}><span></span>Show AI writing</label>
+        <div class="setrow__label"><h2>AI writing</h2><p>Liner notes, roasts, era names and question commentary. Enabling this sends a short derived summary, which may include your display name and favorite music, through Sleeve's server to the writing provider. Your raw play history is not sent. Generated responses are cached on Sleeve's server for seven days.</p></div>
+        <label class="switch"><input type="checkbox" id="set-ai" ${aiEnabled() ? 'checked' : ''}><span></span>Enable AI writing</label>
       </section>
 
       <section class="setrow">
@@ -69,7 +69,7 @@ export function renderSettings() {
       </section>
 
       <section class="setrow">
-        <div class="setrow__label"><h2>Your data</h2><p>Imported histories, exports, cached artwork and settings all live in this browser. Nothing is stored on a server.</p></div>
+        <div class="setrow__label"><h2>Your data</h2><p>Your imported histories, exports and preferences are saved in this browser. Clearing them removes this device's copies. It does not erase previously generated responses from the seven-day server cache or remove data held by external music services and writing providers.</p></div>
         <div><button type="button" class="btn btn--line" id="set-wipe">Clear everything</button></div>
       </section>
 

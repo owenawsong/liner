@@ -5,7 +5,7 @@ $project = Split-Path -Parent $PSScriptRoot
 $stage = Join-Path $env:USERPROFILE '.sleeve\dev'
 $secrets = Join-Path $stage '.dev.vars'
 if (-not (Test-Path -LiteralPath $secrets)) {
-  throw "Local AI secrets are missing at $secrets. Put NVIDIA_API_KEY and OPENROUTER_API_KEY there."
+  Write-Warning "Starting without local AI keys. Statistics and demo views work; writing requires OPENROUTER_API_KEY in $secrets."
 }
 
 # Pages serves every file in its asset directory during local development.
