@@ -4,7 +4,16 @@
 #tab .disc-head p { font-size: 14px; max-width: 69ch; line-height: 1.5; }
 #tab .disc-head > .link { margin: 0 0 5px; font-size: 12px; white-space: nowrap; }
 #tab .disc-status { text-transform: none; letter-spacing: 0; min-height: 0; margin: 12px 0 7px; font: 12px/1.45 var(--f-mono); }
+#tab .disc-preparation.is-working { overflow:hidden; }
+#tab .disc-preparation.is-working i { width:30%; animation:disc-checking 1.8s ease-in-out infinite; }
+@keyframes disc-checking { from { transform:translateX(-110%); } to { transform:translateX(440%); } }
+@media(prefers-reduced-motion:reduce) { #tab .disc-preparation.is-working i { animation:none; width:100%; opacity:.35; } }
 #tab .disc-starts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0 30px; margin: 22px 0 32px; }
+#tab .disc-starts[data-count="2"] { grid-template-columns:repeat(2,minmax(0,1fr)); max-width:920px; }
+#tab .disc-starts[data-count="1"] { grid-template-columns:minmax(0,460px); }
+.disc-feedback { display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding:13px 0; border-block:1px solid var(--line); font-size:13px; line-height:1.5; margin:14px 0; }
+.disc-feedback[hidden] { display:none; }
+.disc-feedback .link { flex-shrink:0; min-height:44px; }
 .disc-start { min-width: 0; display: flex; flex-direction: column; position: relative; border-top: 2px solid var(--accent); }
 .disc-start--explore { border-color: var(--c1); }
 .disc-start--revisit { border-color: var(--c2); }
@@ -28,7 +37,7 @@
 .disc-start__track small { font: 12px/1.4 var(--f-mono); color: var(--ink-3); display: block; }
 .disc-start__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; width: 100%; margin-top: 6px; }
 .disc-start__actions .btn { padding: 10px 13px; font-size: 12px; border-radius: 2px; }
-.disc-start__actions > div { display: flex; align-items: center; gap: 11px; }
+  .disc-start__actions > div { display: flex; flex-wrap:wrap; align-items: center; gap: 4px 11px; }
 .disc-start__actions button { border: 0; background: none; color: var(--ink-2); cursor: pointer; font: 12px var(--f-body); padding: 7px 0; text-decoration: underline; text-underline-offset: 3px; }
 .disc-start__actions button:hover { color: var(--ink); }
 .disc-start__actions button[aria-pressed=true] { color: var(--good); }
@@ -66,7 +75,7 @@
 @media (max-width: 760px) {
   #tab .disc-head { grid-template-columns: 1fr; gap: 5px; }
   #tab .disc-head > .link { justify-self: start; }
-  #tab .disc-starts { grid-template-columns: 1fr; gap: 26px; }
+  #tab .disc-starts, #tab .disc-starts[data-count] { grid-template-columns: 1fr; gap: 26px; }
   .disc-start { display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 0 16px; align-items: start; }
   .disc-start__mast { grid-column: 1/-1; }
   .disc-start__cover { grid-column: 1; }

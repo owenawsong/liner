@@ -34,6 +34,11 @@ foreach ($file in Get-ChildItem -LiteralPath $functionSource -Recurse -File) {
   New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
   Copy-Item -LiteralPath $file.FullName -Destination $target -Force
 }
+# The Function and browser share this pure claim filter. Preserve its relative
+# import beside the staged Functions; it contains no runtime configuration.
+$sharedModuleDir = Join-Path $run 'js'
+New-Item -ItemType Directory -Path $sharedModuleDir -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $project 'js\writing-claims.js') -Destination (Join-Path $sharedModuleDir 'writing-claims.js')
 
 Write-Host "Serving Sleeve from $site"
 # Local preview intentionally has no production budget binding. For a full budget

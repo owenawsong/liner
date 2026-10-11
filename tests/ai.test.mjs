@@ -71,6 +71,26 @@ test('invalid profile structure tries the next writer before caching',async()=>{
   assert.equal(response.status,200);assert.equal(models.length,2);assert.match((await response.json()).model,/gemma-4-26b/);
 });
 
+test('failure diagnostics distinguish provider, format and unsupported writing without exposing facts',async()=>{
+  const facts='Private diagnostic fixture: artist_a artist_b artist_c; only 23 plays supplied.';
+  for(const scenario of ['auth','format','unsupported']){
+    let calls=0;
+    globalThis.fetch=async()=>{
+      calls++;
+      if(scenario==='auth')return new Response('',{status:401});
+      const content=scenario==='format'?'Not a JSON object response':JSON.stringify({picks:['artist_a','artist_b','artist_c'].map(id=>({id,reason:'A supplied connection with 999 plays.'}))});
+      return Response.json({choices:[{message:{content}}]});
+    };
+    const response=await onRequestPost(context(request(facts,{task:'curate',seed:scenario})));
+    const body=await response.json();
+    assert.equal(response.status,503);
+    assert.equal(body.code,scenario==='auth'?'provider_unavailable':scenario==='format'?'invalid_response':'unsupported_output');
+    assert.ok(body.attempts.every(attempt=>typeof attempt.model==='string'&&attempt.code===body.code));
+    assert.ok(!JSON.stringify(body).includes('diagnostic fixture')&&!JSON.stringify(body).includes('999'));
+    if(scenario==='auth')assert.equal(calls,1,'another model cannot repair an invalid account key');
+  }
+});
+
 test('public traffic uses OpenRouter and reuses a cached answer', async () => {
   const urls = [], payloads = [];
   globalThis.fetch = async (url, options) => {
@@ -98,7 +118,7 @@ test('an unsupported year interpretation tries another writer before caching', a
     const content=model.includes('dots-3-note')
       ? "In 2025, Alpha led with 160 plays compared to Beta's 120."
       : 'You recorded 160 plays of Alpha and 120 of Beta in 2025.';
-    return Response.json({model,choices:[{message:{content}}]});
+    return Response.json({model,choices:[{message:{content:JSON.stringify({text:content})}}]});
   };
   const facts='Year: 2025. Year validation test: selected artist counts Alpha 160 and Beta 120; no annual ranking.';
   const response=await onRequestPost(context(request(facts,{task:'year'})));
@@ -113,7 +133,7 @@ test('question commentary cannot turn concurrent changes into a direct swap', as
     const content=model.includes('dots-3-note')
       ? "Alpha's decline mirrors Delta's rise, suggesting a direct rotation swap."
       : 'Alpha was still heard on 18 days in the latest window.';
-    return Response.json({model,choices:[{message:{content}}]});
+    return Response.json({model,choices:[{message:{content:JSON.stringify({text:content})}}]});
   };
   const response=await onRequestPost(context(request('Causal guard fixture: Alpha declined from 160 to 40 plays; Delta rose from 9 to 73. Alpha was still heard on 18 days.',{task:'ask',question:'What changed?'})));
   assert.equal(response.status,200);assert.equal(models.length,2);

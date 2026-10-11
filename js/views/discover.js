@@ -32,11 +32,20 @@ export function shelfImportPreview(input,taste) {
   return {input:{format:'sleeve-taste-v1',items:[...rows.values()]},added:rows.size-replaced,replaced,total:rows.size};
 }
 
+export function discoveryIntroduction(seeds,A) {
+  if(!seeds.length)return 'There are no artist starting points in this record yet. More listening or a saved favorite will give Discover something personal to follow.';
+  const recent=seeds.filter(seed=>seed.recentPlays>0).slice(0,3);
+  const names=(recent.length?recent:seeds.slice(0,3)).map(seed=>seed.name).join(', ');
+  const sparse=(A.artists?.length || 0)<4;
+  return `${recent.length?'Following your latest recorded rotation':'Following your listening history and saved favorites'}: ${names}. ${sparse?'This is an early selection from a small record; it will broaden as you listen.':'Try a close connection, another direction, or a record from your own archive.'}`;
+}
+
 export function discoverView(ctx, banner) {
   const root = $('#tab');
   root.innerHTML = `${banner}
     <header class="disc-head"><div><span class="label">DISCOVER</span><h2>What to play next</h2><p id="disc-personal-copy">Three ways into your next listen: follow your current rotation, try another direction, or return to a record you left behind.</p></div><button type="button" class="link" data-refresh>Another selection ↗</button></header>
-    <div id="disc-status" class="disc-status" role="status" aria-live="polite">Reading your listening record…</div><div class="ms-progress" role="progressbar" aria-label="Finding recommendations" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+    <div id="disc-status" class="disc-status" role="status" aria-live="polite">Reading your listening record…</div><div class="ms-progress disc-preparation is-working" role="progressbar" aria-label="Finding recommendations" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+    <div id="disc-feedback" class="disc-feedback" role="status" aria-live="polite" hidden></div>
     <div id="disc-starts" class="disc-starts" aria-live="polite"><div class="disc-start-placeholder"><span class="label">CHOOSING YOUR STARTING RECORDS</span><p>Checking artist catalogues and matching the albums. Your saved selection will appear here first.</p></div></div>
     <div class="disc-seeds" id="disc-seeds"></div>
     <details class="disc-section disc-artist-browser"><summary>Explore the artist connections <span class="label" id="disc-count"></span></summary>
@@ -51,7 +60,7 @@ export function discoverView(ctx, banner) {
       <details class="disc-section disc-collection"><summary><b>Your shelf</b><span><span id="disc-shelf-count">Loading…</span> <i aria-hidden="true">＋</i></span></summary><div class="disc-collection__body"><div id="disc-shelf"></div><div class="disc-backup"><p>Saved music and your notes stay in this browser. Export a Sleeve JSON backup to keep a copy or move it to another device.</p><div><button class="btn btn--line btn--sm" type="button" data-disc-export>Export Sleeve backup</button><label class="btn btn--line btn--sm" for="disc-import">Restore Sleeve backup</label><input id="disc-import" type="file" accept=".json,application/json" hidden></div><div id="disc-import-preview" hidden></div></div></div></details></div>
     <p class="disc-method">Connections and artist tags: Last.fm. Album identities and community scores: MusicBrainz. The optional AI curator works from this candidate data and your listening summary; your raw plays stay here. Community scores stay separate from your own opinions.</p>`;
 
-  let alive = true, taste, pool = [], albums = [], catalogue = [], starts = {}, curation = [], mode = 'for-you', selectedSeed = '', runCtrl,showAllShelf=false,pendingImport=null;
+  let alive = true, taste, pool = [], albums = [], catalogue = [], starts = {}, curation = [], mode = 'for-you', selectedSeed = '', runCtrl,showAllShelf=false,pendingImport=null,lastFeedback=null;
   const editionKey = `liner.discover.edition:${ctx.pid}`;
   const lookup = new Map();
   const keepRated = new Set();
@@ -90,16 +99,23 @@ export function discoverView(ctx, banner) {
         <h3>${esc(album?.name || track?.name || x.artist)}</h3><p class="disc-start__artist">${esc(x.artist)}</p>
         <p class="disc-start__why">${esc(x.reason)}</p>
         ${track ? `<div class="disc-start__track"><span class="label">${x.recorded?'YOUR MOST PLAYED TRACK':album?'OR TRY THIS TRACK':'START WITH THIS TRACK'}</span><a data-start-listen="${x.lane}" href="${spotifySearch(track.name,x.artist)}" target="_blank" rel="noopener"><b>${esc(track.name)}</b><span aria-hidden="true">↗</span></a><small>${x.recorded?`${num(track.plays)} plays in your record`:track.listeners?`${compact(track.listeners)} Last.fm track listeners · artist catalogue`:'From the artist’s Last.fm catalogue'}</small></div>`:''}
-        <div class="disc-start__actions"><a class="btn btn--sm" data-start-listen="${x.lane}" href="${spotifySearch(album?.name || track?.name || '',x.artist)}" target="_blank" rel="noopener">Find on Spotify ↗</a><div data-key="${esc(tasteKey(item.kind,item.name,item.artist))}"><button type="button" data-judge="saved" data-start-outcome="${x.lane}" aria-pressed="${feedback(item).status==='saved'}">${feedback(item).status==='saved'?'✓ Saved':'Save for later'}</button><button type="button" data-judge="hidden" data-start-outcome="${x.lane}">Pass</button></div></div>
+        <div class="disc-start__actions"><a class="btn btn--sm" data-start-listen="${x.lane}" href="${spotifySearch(album?.name || track?.name || '',x.artist)}" target="_blank" rel="noopener">Find on Spotify ↗</a><div data-key="${esc(tasteKey(item.kind,item.name,item.artist))}"><button type="button" data-judge="saved" data-start-outcome="${x.lane}" aria-pressed="${feedback(item).status==='saved'}">${feedback(item).status==='saved'?'✓ Saved':'Save for later'}</button>${x.recorded?'':`<button type="button" data-judge="known" data-start-outcome="${x.lane}">Already heard</button>`}<button type="button" data-judge="hidden" data-start-outcome="${x.lane}">Pass</button></div></div>
         ${album?ratingsReviewsHTML(album.name,x.artist,group,album.reviews||0):''}</div></article>`;
-    }).join('') : '<p class="empty">No starting record is ready yet. Your shelf and artist browser remain available.</p>';
+    }).join('') : '<p class="empty">No playable starting record passed the catalogue checks for this selection. Explore the artist connections below, or save a favorite to give the next selection another starting point.</p>';
+    $('#disc-starts',root).dataset.count=String(rows.length);
     $$('.disc-ratings',$('#disc-starts',root)).forEach(x=>{x.open=openOpinions.has(x.dataset.opinionKey);});
     hydrate($('#disc-starts',root));
   };
   const status = (message, pct) => {
     if (!alive) return;
     $('#disc-status', root).textContent = message;
-    if (pct != null) { const bar = $('.ms-progress', root); bar.setAttribute('aria-valuenow', String(pct)); bar.classList.toggle('is-complete', pct === 100); $('i', bar).style.width = `${pct}%`; }
+    if (pct != null) {
+      const bar = $('.ms-progress', root), complete=pct===100;
+      if(complete)bar.setAttribute('aria-valuenow','100');else bar.removeAttribute('aria-valuenow');
+      bar.setAttribute('aria-valuetext',message);
+      bar.classList.toggle('is-complete',complete);bar.classList.toggle('is-working',!complete);
+      $('i',bar).style.width=complete?'100%':'';
+    }
   };
   const paintArtists = () => {
     if (!alive || !taste) return;
@@ -160,6 +176,8 @@ export function discoverView(ctx, banner) {
   const repaint = () => { paintStarts(); paintArtists(); paintAlbums(); paintShelf(); paintListened(); };
 
   root.addEventListener('click', async (event) => {
+    const undo=event.target.closest('[data-disc-undo]');
+    if(undo&&lastFeedback){undo.disabled=true;try{await setTasteItem(ctx.pid,lastFeedback.item,{status:lastFeedback.status});if(lastFeedback.start)await recommendationOutcome(ctx.pid,lastFeedback.start,'undo');if(!alive)return;lastFeedback=null;$('#disc-feedback',root).hidden=true;repaint();toast('Your previous choice was restored.');}catch(e){toast(e.message,'bad');undo.disabled=false;}return;}
     if(event.target.closest('[data-disc-show-shelf]')){showAllShelf=!showAllShelf;paintShelf();return;}
     if(event.target.closest('[data-disc-cancel-import]')){pendingImport=null;$('#disc-import-preview',root).hidden=true;return;}
     const applyImport=event.target.closest('[data-disc-apply-import]');
@@ -196,7 +214,21 @@ export function discoverView(ctx, banner) {
     const old = taste.items[key] || {};
     const patch = control.dataset.judge ? { status: old.status === control.dataset.judge ? '' : control.dataset.judge }
       : { rating: old.rating === Number(control.dataset.rate) ? null : Number(control.dataset.rate) };
-    try { await setTasteItem(ctx.pid, item, patch); if(control.dataset.startOutcome && patch.status) await recommendationOutcome(ctx.pid,starts[control.dataset.startOutcome],patch.status==='saved'?'save':patch.status==='hidden'?'pass':'known'); if (control.dataset.rate) keepRated.add(key); repaint(); }
+    try {
+      const start=control.dataset.startOutcome ? starts[control.dataset.startOutcome] : null;
+      await setTasteItem(ctx.pid, item, patch);
+      if(start && patch.status)await recommendationOutcome(ctx.pid,start,patch.status==='saved'?'save':patch.status==='hidden'?'pass':'known');
+      if(!alive)return;
+      if(control.dataset.rate)keepRated.add(key);
+      if(control.dataset.judge){
+        lastFeedback={item,status:old.status || '',start};
+        const receipt=$('#disc-feedback',root);receipt.hidden=false;
+        const message=patch.status==='saved'?'Saved for later. Saved favorites help seed your next selection.':patch.status==='hidden'?item.kind==='artist'?'Passed. This artist is removed from your picks.':'Passed. This record is removed from your picks; other music by the artist can still appear.':patch.status==='known'?'Marked already heard. This item is removed from new discoveries.':'Your shelf choice was cleared.';
+        receipt.innerHTML=`<span><b>${esc(item.name)}</b> — ${message}</span><button type="button" class="link" data-disc-undo>Undo</button>`;
+      }
+      repaint();
+      if(patch.status==='hidden'||patch.status==='known')$('[data-disc-undo]',root)?.focus({preventScroll:true});
+    }
     catch (e) { toast(e.message, 'bad'); control.disabled = false; }
   });
   root.addEventListener('submit', async (event) => {
@@ -233,7 +265,7 @@ export function discoverView(ctx, banner) {
     deepButton.innerHTML = 'Deep cuts <small>checking…</small>';
     const seeds = discoverySeeds(ctx.A, taste, Number(store.get(editionKey) || 0));
     $('#disc-seeds', root).innerHTML = `<span class="label">BASED ON</span><button type="button" data-disc-seed="" aria-pressed="true">All</button>${seeds.map((s) => `<button type="button" data-disc-seed="${esc(s.name)}" aria-pressed="false">${esc(s.name)}</button>`).join('')}`;
-    $('#disc-personal-copy',root).textContent=`Your latest rotation includes ${seeds.slice(0,3).map(s=>s.name).join(', ')}. Follow those connections, try another direction, or return to your own archive.`;
+    $('#disc-personal-copy',root).textContent=discoveryIntroduction(seeds,ctx.A);
     if (!lastfm.isLive()) {
       status('Add a Last.fm API key in Settings to find new artists.', 0);
       $('#disc-feature',root).innerHTML='<p class="empty">Artist recommendations need a Last.fm API key. Your listening stats and saved shelf still work.</p>';
@@ -243,26 +275,37 @@ export function discoverView(ctx, banner) {
     }
     const deadline=setTimeout(()=>controller.abort('timeout'),95000);
     try {
-      const board=await buildRecommendations({...ctx,taste},{signal,edition:Number(store.get(editionKey)||0),onProgress:status});
+      const applyBoard=(board)=>{
+        if(!alive||signal.aborted)return;
+        pool=board.pool;albums=board.albums;catalogue=board.catalogue||[];curation=board.curation||[];
+        paintStarts();paintArtists();paintAlbums();
+        deepButton.disabled=!pool.some(x=>x.audience>0);
+        deepButton.textContent='Deep cuts';
+        deepButton.title=deepButton.disabled?'Artist audiences are unavailable for this selection.':'';
+        $('#disc-album-status',root).textContent=`${albums.length} matched albums${board.writingPending?' · listening notes are still being prepared':''}`;
+        status(board.writingPending?'Your checked picks are available. Listening notes are still being prepared…':'Your checked picks are available. Preparing their artwork…',85);
+      };
+      const board=await buildRecommendations({...ctx,taste},{signal,edition:Number(store.get(editionKey)||0),onProgress:status,onPreview:applyBoard});
       if(!alive||signal.aborted)return;
       pool=board.pool;albums=board.albums;catalogue=board.catalogue||[];curation=board.curation||[];
       if(board.warning){status(board.warning,100);paintStarts();paintArtists();paintAlbums();return;}
       paintStarts();paintArtists();paintAlbums();
       $('#disc-album-status',root).textContent=`${albums.length} matched albums · ${curation.length?'recommendation notes prepared':'ranked from your artist connections'}`;
-      status(`${pool.length} unheard candidates checked · saved ${new Date(board.at).toLocaleDateString('en',{month:'short',day:'numeric'})}`,100);
+      status(`${pool.length} artists absent from this record · selection saved ${new Date(board.at).toLocaleDateString('en',{month:'short',day:'numeric'})}${board.aiIssue?' · Using catalogue connections while writing is unavailable.':''}`,100);
       Promise.all(albums.map((x) => critiqueCount(x.group.id))).then((counts) => {
         if (!alive || signal.aborted) return;
         albums.forEach((x, i) => { x.reviews = counts[i]; }); paintAlbums();
       });
       if (!alive || signal.aborted) return;
-      deepButton.disabled = false;
+      deepButton.disabled = !pool.some(x=>x.audience>0);
+      deepButton.title=deepButton.disabled?'Artist audiences are unavailable for this selection.':'';
       deepButton.textContent = 'Deep cuts';
     } catch (e) {
       if (!alive || (signal.aborted && signal.reason!=='timeout')) return;
-      status(`Discovery paused: ${e.message}`, 0);
+      status(pool.length?'Your checked records are available. The remaining preparation paused; try another selection to retry.':`Discovery paused: ${e.message}`,pool.length?100:0);
       paintStarts();
       $('#disc-album-status', root).textContent = 'Your ratings and saved items still work. Rebuild picks to retry.';
-      if(!pool.length)$('#disc-feature',root).innerHTML='<p class="empty">The recommendation checks could not finish. Your listening stats are ready; use “Prepare a different selection” to try again.</p>';
+      if(!pool.length)$('#disc-feature',root).innerHTML='<p class="empty">The recommendation checks could not finish. Your listening stats are ready; use “Another selection” to try again.</p>';
     } finally {
       clearTimeout(deadline);
     }

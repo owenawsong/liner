@@ -1,3 +1,4 @@
+import { supportedConnectionWriting } from '../../js/writing-claims.js';
 const evidenceIds=facts=>new Set([...facts.matchAll(/Evidence ID="([a-z][a-z0-9_-]*)"/g)].map(x=>x[1]));
 const candidateIds=facts=>new Set(facts.match(/\bartist_[a-p]\b/g)||[]);
 const text=value=>typeof value==='string'&&value.trim().length>=10;
@@ -63,7 +64,7 @@ export function validStructuredWriting(task,value,facts){
     const connections=new Map([...blocks].map(([id,block])=>[id,connectionNames(block)]));
     const allNames=new Set([...connections.values()].flat());
     for(const pick of value.picks){
-      if(!text(pick?.reason)||!ids.has(pick.id)||seen.has(pick.id))return false;
+      if(!text(pick?.reason)||!supportedConnectionWriting(pick.reason)||!ids.has(pick.id)||seen.has(pick.id))return false;
       const block=blocks.get(pick.id),names=connections.get(pick.id)||[];
       if(block&&!grounded(pick.reason,block))return false;
       // Whole-pool mentions are insufficient: this candidate must connect to it.

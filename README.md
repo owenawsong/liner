@@ -32,7 +32,7 @@ The frontend, analysis, recommendations, AI prompts/validation and server/budget
 
 The public build is `dist/`, created by `npm run build`. ZIP reading is bundled locally. [The deployment guide](docs/DEPLOYMENT.md) describes Cloudflare Pages Functions, the separate shared AI budget Worker, encrypted secrets, preview isolation and hosted verification. CI tests Linux/Windows, builds both server bundles, scans source/history/public output and audits dependencies. CI does not deploy.
 
-The release is deployed at [liner-c7u.pages.dev](https://liner-c7u.pages.dev). Hosted AI, imports, offline behavior and security headers have been checked on specific paths. The repository remains private until the maintainer publishes it. See [release readiness](docs/RELEASE_READINESS.md) for completed evidence and remaining quality/capacity work.
+The release is deployed at [liner-c7u.pages.dev](https://liner-c7u.pages.dev). Hosted AI, imports, offline behavior and security headers have been checked on specific paths. The repository remains private until the maintainer publishes it. See [release readiness](docs/RELEASE_READINESS.md) for completed evidence, [the first experience beta](docs/BETA_REVIEW.md) for real-user review, and [AI evaluation](docs/AI_MODEL_EVALUATION.md) for accepted and withheld synthetic responses.
 
 ## Get your data in
 

@@ -2,12 +2,15 @@
 // node scripts/ai-evaluate.mjs [--models=id,id] [--tasks=profile,curate] [--output=path]
 import { readFile, writeFile } from 'node:fs/promises';
 import { TASKS, STYLE } from '../functions/api/ai.js';
-import { normalizeStructuredWriting, validStructuredWriting } from '../functions/lib/writing-quality.js';
+import { inspectWriting } from '../functions/lib/writing-output.js';
+import { launchWritingCases } from '../tests/fixtures/writing-launch.mjs';
 
 const option = name => process.argv.find(x => x.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
 const models = (option('models') || 'dots-studio/dots-3-note-preview:free,nvidia/nemotron-3-ultra-550b-a55b:free,thinkingmachines/inkling:free,google/gemma-4-26b-a4b-it:free,google/gemma-4-31b-it:free').split(',');
-const tasks = (option('tasks') || 'profile,curate').split(',');
-if (models.length * tasks.length > 12 || tasks.some(x => !['profile','curate','notes'].includes(x))) throw new Error('At most 12 synthetic requests; allowed tasks: profile, curate, notes.');
+const suite=option('suite');
+if(suite&&suite!=='launch')throw new Error('Unknown evaluation suite.');
+const tasks = (option('tasks') || (suite?'profile,curate,year,ask':'profile,curate')).split(',');
+if(tasks.some(x=>!['profile','curate','notes','year','ask'].includes(x)))throw new Error('Unknown evaluation task.');
 const secrets = process.env.OPENROUTER_API_KEY ? '' : await readFile(process.env.SLEEVE_DEV_VARS || 'C:/Users/Owen/.sleeve/dev/.dev.vars', 'utf8');
 const key = process.env.OPENROUTER_API_KEY || secrets.match(/^OPENROUTER_API_KEY\s*=\s*["']?([^"'\r\n]+)/m)?.[1]?.trim();
 if (!key) throw new Error('Private OPENROUTER_API_KEY not configured.');
@@ -44,23 +47,26 @@ artist_c: Candidate C. Connections: Gamma (41 recent plays; 127 lifetime plays; 
 artist_d: Candidate D. Connections: Beta (35 recent plays; 64 lifetime plays; retained discovery). Last.fm audience: 7000. Artist tags: dream pop.
 artist_e: Candidate E. Connections: Delta (73 recent plays; 82 lifetime plays; rising share); Alpha (40 recent plays; 600 lifetime plays; declining share). Last.fm audience: 60000. Artist tags: jazz.
 artist_f: Candidate F. Connections: Gamma (41 recent plays; 127 lifetime plays; returned after gap). Last.fm audience: 5000. Artist tags: electronic.` : baselineCurate;
+const cases=suite?launchWritingCases.filter(row=>tasks.includes(row.task)):tasks.map(task=>({id:fixture,task,facts:task==='curate'?curate:profile}));
+if(models.length*cases.length>12)throw new Error('At most 12 synthetic provider requests per invocation.');
 const catalogue = (await (await fetch('https://openrouter.ai/api/v1/models')).json()).data;
 const rows = []; let lastStarted = 0;
 const numericGrounding = (text, facts) => {
   const numbers = s => [...s.matchAll(/\b\d[\d,]*(?:\.\d+)?\b/g)].map(x=>x[0].replaceAll(',',''));
   const allowed = new Set(numbers(facts)); return numbers(text).every(x=>allowed.has(x));
 };
-for (const model of models) {
+providers: for (const model of models) {
   const listed = catalogue.find(x => x.id === model);
   if (!listed || +listed.pricing.prompt !== 0 || +listed.pricing.completion !== 0) { rows.push({model,status:'skipped: not a listed free model'}); continue; }
-  for (const task of tasks) {
+  for (const entry of cases) {
+    const {task,facts,question}=entry;
     await new Promise(resolve => setTimeout(resolve, Math.max(0, 3300 - (Date.now() - lastStarted))));
-    const facts = task === 'curate' ? curate : profile;
-    const formatted = task !== 'notes' && listed.supported_parameters.includes('response_format');
+    const formatted = !!TASKS[task].json;
+    if(formatted&&!listed.supported_parameters.includes('response_format')){rows.push({model,task,case:entry.id,status:'skipped: JSON mode unavailable'});continue;}
     const reasoning = listed.reasoning?.mandatory ? {effort:'minimal',exclude:true} : {enabled:false};
-    const payload = {model, messages:[{role:'system',content:STYLE},{role:'user',content:TASKS[task].prompt(facts)}], max_tokens:1800, temperature:0.35, top_p:0.9, provider:{data_collection:'deny',...(formatted?{require_parameters:true}:{})},
+    const payload = {model, messages:[{role:'system',content:STYLE},{role:'user',content:TASKS[task].prompt(facts,question)}], max_tokens:['profile','curate'].includes(task)?1500:TASKS[task].max, temperature:formatted?0.35:0.65, top_p:0.9, provider:{data_collection:'deny',...(formatted?{require_parameters:true}:{})},
       ...(formatted?{response_format:{type:'json_object'}}:{}), ...(listed.supported_parameters.includes('reasoning')?{reasoning}:{})};
-    lastStarted = Date.now(); const row = {model,task,jsonMode:formatted,reasoning:listed.reasoning||null};
+    lastStarted = Date.now(); const row = {model,task,case:entry.id,review:entry.review,jsonMode:formatted,reasoning:listed.reasoning||null};
     try {
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',signal:AbortSignal.timeout(25000),headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json','X-Title':'Sleeve synthetic evaluation'},body:JSON.stringify(payload)});
       row.ms = Date.now()-lastStarted; row.status=res.status;
@@ -70,15 +76,17 @@ for (const model of models) {
         row.servedModel=data.model; row.provider=data.provider; row.finish=data.choices?.[0]?.finish_reason; row.usage=data.usage;
         const output=String(data.choices?.[0]?.message?.content||'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i,'$1').trim();
         row.output=output; row.groundedNumbers=numericGrounding(output,facts);
-        try { row.structured=task==='notes'||validStructuredWriting(task,normalizeStructuredWriting(task,JSON.parse(output)),facts); } catch { row.structured=false; }
-        row.accepted=output.length>=20&&row.groundedNumbers&&row.structured;
+        const inspected=inspectWriting(task,output,facts);
+        row.code=inspected.code;row.accepted=!inspected.code;row.visibleText=inspected.text;
       }
     } catch (error) { row.ms=Date.now()-lastStarted;row.status=error.name==='TimeoutError'?'timeout':'network';row.error=String(error.message).replaceAll(key,'[redacted]').slice(0,200); }
-    rows.push(row); console.log(JSON.stringify({...row,output:undefined,usage:undefined,reasoning:undefined}));
+    rows.push(row); console.log(JSON.stringify({...row,output:undefined,visibleText:undefined,usage:undefined,reasoning:undefined}));
+    // An authentication rejection applies to every model on this key.
+    if(row.status===401||row.status===403)break providers;
     // A privacy route rejection applies to all tasks; do not waste another attempt.
     if (row.status===404 && /data policy|data collection|privacy|No endpoints/i.test(row.error||'')) break;
   }
 }
-const report={at:new Date().toISOString(),syntheticOnly:true,fixture,dataCollection:'deny',attempts:rows.filter(x=>x.task).length,rows};
+const report={at:new Date().toISOString(),syntheticOnly:true,fixture:suite||fixture,dataCollection:'deny',attempts:rows.filter(x=>typeof x.status==='number'||x.status==='timeout'||x.status==='network').length,rows};
 if(option('output')) await writeFile(option('output'),JSON.stringify(report,null,2)+'\n');
 else console.log(JSON.stringify(report,null,2));

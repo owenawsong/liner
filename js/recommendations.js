@@ -2,7 +2,7 @@ import { idb, store } from './ui.js';
 import { discoverySeeds, candidatePool, rankCandidates, albumsFor, connectionFor, connectionReason, usefulCuration, revisitRecord } from './discovery.js';
 import { listeners, cachedListeners, releaseGroupForAlbum, art } from './meta.js';
 import { recordSignature, validateCuration } from './dossier.js';
-import { write, AI_VERSION } from './ai.js';
+import { write, AI_VERSION, writingFailure } from './ai.js';
 import { normalize } from './taste.js';
 import * as lastfm from './sources/lastfm.js';
 
@@ -10,7 +10,7 @@ const memory = new Map();
 const inflight = new Map();
 const outcomeWrites = new Map();
 export const feedbackVersion = (taste) => Math.max(0, ...Object.values(taste.items).map((x) => x.updated || 0));
-export const RECOMMENDATION_VERSION = 'records-v4';
+export const RECOMMENDATION_VERSION = 'records-v5';
 export const boardSignature = (A, taste, edition = 0) => `${RECOMMENDATION_VERSION}:${recordSignature(A)}:${feedbackVersion(taste)}:${edition}:${AI_VERSION}:${store.get('liner.ai') !== 'off'}:${lastfm.isLive()}`;
 const check = (signal) => { if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError'); };
 
@@ -52,20 +52,29 @@ export async function savedStartingRecords(pid,A,taste,edition=0) {
 }
 
 export function startingRecords(pool,albums,catalogue,taste,A,curation=[]) {
+  const notes = new Map(curation.map(note=>[normalize(note.name),note.reason]));
   const entry=(x,lane)=>{
-    const album=albums.find(a=>a.group?.id && ['Album','EP'].includes(a.group.type) && normalize(a.artist)===normalize(x.name)) || null;
-    const own=album ? taste.items[`album:${normalize(album.artist)}|${normalize(album.name)}`] : null;
-    if (own?.status==='hidden' || own?.status==='known' || own?.rating) return null;
+    const album=albums.find(a=>{
+      const own=taste.items[`album:${normalize(a.artist)}|${normalize(a.name)}`];
+      return a.group?.id && ['Album','EP'].includes(a.group.type) && normalize(a.artist)===normalize(x.name)
+        && own?.status!=='hidden' && own?.status!=='known' && !own?.rating;
+    }) || null;
+    // A passed album must not immediately reappear as a track-only card for the
+    // same artist. A different verified album is still a useful alternative.
+    if(!album && albums.some(a=>a.group?.id && ['Album','EP'].includes(a.group.type) && normalize(a.artist)===normalize(x.name)))return null;
     const track=catalogue.find(t=>normalize(t.artist)===normalize(x.name)) || null;
     if (!album && !track) return null;
+    const editorial=notes.get(normalize(x.name)) || '';
     return {lane,artist:x.name,album,track,source:connectionFor(x),
-      reason:usefulCuration(x.editorial,x)?x.editorial:connectionReason(x),audience:x.audience || 0};
+      reason:usefulCuration(editorial,x)?editorial:connectionReason(x),audience:x.audience || 0};
   };
-  const near=rankCandidates(pool,taste,'for-you',new Set(),curation).map(x=>entry(x,'current')).filter(Boolean);
+  // Notes can arrive after the catalogue. Keep the records in place while their
+  // explanations finish rather than swapping artwork under the listener.
+  const near=rankCandidates(pool,taste,'for-you').map(x=>entry(x,'current')).filter(Boolean);
   const current=near.find(x=>x.album)||near[0]||null;
   const remaining=pool.filter(x=>normalize(x.name)!==normalize(current?.artist));
   const currentSource=normalize(current?.source?.name);
-  const further=rankCandidates(remaining,taste,'explore',new Set(),curation);
+  const further=rankCandidates(remaining,taste,'explore');
   const order=[...further.filter(x=>normalize(connectionFor(x)?.name)!==currentSource),
     ...further.filter(x=>normalize(connectionFor(x)?.name)===currentSource)];
   const far=order.map(x=>entry(x,'explore')).filter(Boolean);
@@ -74,7 +83,7 @@ export function startingRecords(pool,albums,catalogue,taste,A,curation=[]) {
 }
 
 export async function recommendationOutcome(pid,start,action) {
-  if (!start || !['listen','save','pass','known'].includes(action)) return;
+  if (!start || !['listen','save','pass','known','undo'].includes(action)) return;
   const write=(outcomeWrites.get(pid)||Promise.resolve()).catch(()=>{}).then(async()=>{
     const key=`disc-outcomes:v1:${pid}`, data=await idb.get(key)||{entries:[]};
     data.entries.push({at:Date.now(),action,lane:start.lane,artist:start.artist,
@@ -85,13 +94,21 @@ export async function recommendationOutcome(pid,start,action) {
   outcomeWrites.set(pid,write);await write;
 }
 
-export async function buildRecommendations({pid, A, taste, source, p}, {edition = 0, signal, onProgress = () => {}, fresh = false} = {}) {
+export async function buildRecommendations({pid, A, taste, source, p}, {edition = 0, signal, onProgress = () => {}, onPreview = () => {}, fresh = false} = {}) {
   const signature = boardSignature(A, taste, edition);
   if (!fresh) {
     const cached = await savedRecommendations(pid, A, taste, edition);
     if (cached) { onProgress('Ready from your saved record', 100); return cached; }
   }
-  if (inflight.has(`${pid}:${signature}`)) return awaitSignal(inflight.get(`${pid}:${signature}`),signal);
+  const runKey=`${pid}:${signature}`;
+  const existing=inflight.get(runKey);
+  if(existing){
+    if(existing.preview)onPreview(existing.preview);
+    existing.previews.add(onPreview);
+    try{return await awaitSignal(existing.promise,signal);}finally{existing.previews.delete(onPreview);}
+  }
+  const shared={promise:null,preview:null,previews:new Set([onPreview])};
+  inflight.set(runKey,shared);
   const run = (async () => {
     check(signal);
     const seeds = discoverySeeds(A, taste, edition);
@@ -119,7 +136,7 @@ export async function buildRecommendations({pid, A, taste, source, p}, {edition 
     const candidates = contextual.map((x,i) => ({id:`artist_${String.fromCharCode(97+i)}`,name:x.name,
       evidence:`${x.name}. Connections: ${x.sources.slice(0,2).map(s=>`${s.name} (${s.recentPlays || 0} recent plays; ${s.lifetimePlays || 0} lifetime plays; ${s.why.join(', ')})`).join('; ')}. Last.fm audience: ${cachedListeners(x.name) || 'unknown'}. Artist tags: ${(x.tags||[]).slice(0,3).join(', ') || 'not available'}.`}));
     const writing = store.get('liner.ai') !== 'off';
-    let aiError = '';
+    let aiError = '', aiIssue = null, writingPending = writing && candidates.length >= 3;
     const curate = writing && candidates.length >= 3 ? (async () => {
       try {
         const history = `Recent means latest 90 days ending at the last recorded play. Seeds: ${seeds.slice(0,6).map(s=>`${s.name}: ${s.recentPlays || 0} recent plays; ${[...s.why].join(', ')}`).join('; ')}.`;
@@ -131,9 +148,10 @@ export async function buildRecommendations({pid, A, taste, source, p}, {edition 
         }
         const output = await write('curate', input, {signal});
         const result = validateCuration(output, candidates)?.filter(note=>usefulCuration(note.reason,contextual.find(x=>x.name===note.name)||{}));
-        if (!result?.length) throw new Error('The curator returned no specific, supported listening reasons.');
+        if (!result?.length) throw Object.assign(new Error('The curator returned no specific, supported listening reasons.'),{code:'unsupported_output'});
         return result;
-      } catch(e) { aiError=e.message; return []; }
+      } catch(e) { aiError=e.message; aiIssue=writingFailure(e); return []; }
+      finally { writingPending=false; }
     })() : Promise.resolve([]);
     onProgress('Choosing starting albums and checking their identities', 56);
     const ranked=rankCandidates(pool,taste), outward=rankCandidates(pool,taste,'explore');
@@ -146,20 +164,26 @@ export async function buildRecommendations({pid, A, taste, source, p}, {edition 
     const rawAlbums = await albumsFor(playableCandidates, A, taste, signal);
     const groups = await mapLimited(rawAlbums, 3, (x)=>releaseGroupForAlbum(x), signal);
     const albums = rawAlbums.map((x,i)=>({...x,group:groups[i],reviews:null})).filter(x=>x.group && ['Album','EP'].includes(x.group.type));
-    onProgress(writing ? 'Finishing the recommendation notes' : 'Preparing the artwork', 85);
-    const curation = await curate;
     const catalogue=(await tracksTask).filter(Boolean).map(tracks=>tracks[0]).filter(Boolean);
     check(signal);
-    const selected = rankCandidates(pool,taste,'for-you',new Set(),curation);
+    const seedsData=seeds.map(s=>({...s,why:[...s.why]}));
+    const provisional={signature,at:Date.now(),seeds:seedsData,pool,albums,catalogue,
+      starts:startingRecords(pool,albums,catalogue,taste,A),curation:[],aiError,aiIssue,warning:'',writingPending};
+    shared.preview=provisional;
+    for(const preview of shared.previews)preview(provisional);
+    const available=Object.values(provisional.starts).some(Boolean)?'Your records are ready.':'Your artist connections are ready.';
+    onProgress(provisional.writingPending ? `${available} Finishing their listening notes…` : `${available} Preparing the artwork…`, 85);
+    const selected = rankCandidates(pool,taste,'for-you');
     await mapLimited([...selected.slice(0,6).map(x=>['artist',x.name,x.name]),...albums.slice(0,4).map(x=>['album',x.name,x.artist])],4,([kind,name,artist])=>art(kind,name,artist),signal);
+    const curation = await curate;
     check(signal);
     const starts=startingRecords(pool,albums,catalogue,taste,A,curation);
-    const board = {signature,at:Date.now(),seeds:seeds.map(s=>({...s,why:[...s.why]})),pool,albums,catalogue,starts,curation,aiError,warning:''};
+    const board = {signature,at:Date.now(),seeds:seedsData,pool,albums,catalogue,starts,curation,aiError,aiIssue,warning:'',writingPending:false};
     memory.set(pid,board);
     await idb.set(`board:v2:${pid}`,board);
     onProgress('Recommendations ready',100);
     return board;
   })();
-  inflight.set(`${pid}:${signature}`,run);
-  try { return await run; } finally { inflight.delete(`${pid}:${signature}`); }
+  shared.promise=run;
+  try { return await run; } finally { inflight.delete(runKey); }
 }

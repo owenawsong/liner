@@ -2,8 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 globalThis.location = { protocol: 'http:', hostname: 'localhost' };
 globalThis.window = {};
-const { ratingsReviewsHTML, shelfImportPreview } = await import('../js/views/discover.js');
+const { ratingsReviewsHTML, shelfImportPreview, discoveryIntroduction } = await import('../js/views/discover.js');
 const { tasteKey } = await import('../js/taste.js');
+
+test('discovery introduces sparse, saved-only and empty records without inventing a current rotation',()=>{
+  assert.match(discoveryIntroduction([{name:'First artist',recentPlays:1}],{artists:[{}]}),/early selection from a small record/);
+  const saved=discoveryIntroduction([{name:'Saved favorite',recentPlays:0}],{artists:[]});
+  assert.match(saved,/saved favorites/);assert.doesNotMatch(saved,/latest recorded rotation/);
+  assert.match(discoveryIntroduction([],{artists:[]}),/no artist starting points/);
+});
 
 test('community scores need valid values and enough votes, and never imply an imported AOTY score', () => {
   const group = { id: 'matched-release', rating: 4.2, votes: 20 };
