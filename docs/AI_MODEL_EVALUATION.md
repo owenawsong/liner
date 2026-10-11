@@ -71,6 +71,31 @@ The year fixture exposed a claim that selected artist counts established an annu
 
 A subsequent hosted question response inferred a "direct rotation swap" and "handoff" from two artists changing concurrently. The question prompt now forbids inferred replacement, motivation and causality; its server guard rejects the observed swap/handoff language before caching. Question caches advance separately to v20. Tests cover this failure and fallback to supported presence commentary. The guard may withhold otherwise useful wording and does not identify every unsupported interpretation; calculated answers remain available independently.
 
+## Fixed launch evaluation — October 10 follow-up
+
+`tests/fixtures/writing-launch.mjs` contains six invented cases: selected annual counts, partial-year coverage with punctuated artist names, concurrent changes with continued presence, a short archive, contrasting profile findings, and candidate-specific connections. The live evaluator and Function use the same output inspector. Year/question tasks now use JSON envelopes. Regression fixtures include deliberately unsupported outputs; these tests validate known failure boundaries rather than proving every accepted sentence correct.
+
+The first attempt returned 401, "User not found," from the saved credential. After the maintainer replaced it locally, twelve direct synthetic requests returned 200: Dots 0.711–1.186 s; Gemma 0.821–1.083 s. These timings exclude the hosted Function, shared-budget RPC and fallback chain. The evaluator uses a 25-second request deadline; public per-model deadlines differ. This is not a latency distribution or capacity test.
+
+| Case | Dots | Gemma | Review |
+| --- | --- | --- | --- |
+| Selected annual counts | Withheld | Withheld | Both listed four counts despite the two-count budget. Neither was accepted merely because its numbers appeared in the facts. |
+| Partial year | Accepted | Accepted | Preserved supplied identities and counts; Gemma's paragraph supplied less monthly context. |
+| Concurrent change/presence | Withheld | Accepted | Dots used a negated "handoff" statement, which the conservative causal-wording guard also rejects. Gemma preserved continuing presence. |
+| Short archive | Accepted | Accepted | Neither invented an earlier preference; Dots was more verbose. |
+| Profile contrast | Accepted | Accepted | Correct decline, rise and return, but observations still repeat numerical evidence; the browser repetition filter may omit them. |
+| Candidate connections | Withheld after review | Accepted | Dots' first output passed old structure/identity checks but inferred renewed interest in sound, active exploration and a significant audience. The new shared wording guard rejects those observed claims. Gemma stayed with supplied seed roles. |
+
+A targeted follow-up after the curation prompt/guard change returned Dots 200 in 1.877 s with unsupported musical inference (withheld), and Gemma 502 in 0.884 s. No repeated retries were used to manufacture a passing benchmark. Catalogue-backed explanations and playable records remain available independently. The wording filters can reject supported negative statements and cannot identify every unsupported claim. More varied summaries and human editorial review remain necessary before promoting writing as dependable analysis.
+
+Reproduce deliberately, using a key in the private environment/dev-vars file:
+
+```powershell
+node scripts/ai-evaluate.mjs --suite=launch --models=dots-studio/dots-3-note-preview:free,google/gemma-4-26b-a4b-it:free --output=C:/Users/Owen/.sleeve/dev/ai-launch.json
+```
+
+The evaluator now stops the entire batch on 401/403. Raw outputs and credentials are not committed. Test fixtures are invented; no raw personal history was used in these manual requests.
+
 ## Official references
 
 Catalogue and parameter availability were checked against the [OpenRouter models API](https://openrouter.ai/api/v1/models). See the official [Dots3 Note Preview free listing](https://openrouter.ai/dots-studio/dots-3-note-preview:free), [Inkling free listing](https://openrouter.ai/thinkingmachines/inkling:free), [Nemotron Ultra free listing](https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b:free), [provider routing documentation](https://openrouter.ai/docs/guides/routing/provider-selection), and [reasoning token documentation](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens). Actual HTTP results above are the serving evidence for this account.

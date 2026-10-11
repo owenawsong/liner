@@ -22,6 +22,12 @@ test('connection diversity does not refill a seed beyond the cap',()=>{
   assert.equal(picks.length,3);
 });
 
+test('deep cuts require measured audience counts rather than treating unknown artists as obscure',()=>{
+  const candidate={name:'Unknown audience',score:2,match:.8,sources:[{name:'Seed',match:.8,weight:1}]};
+  assert.deepEqual(rankCandidates([candidate],{items:{}},'deep'),[]);
+  assert.equal(rankCandidates([{...candidate,audience:100}],{items:{}},'deep').length,1);
+});
+
 test('saved albums with low ratings and hidden high-rated albums do not become positive seeds', () => {
   const A = { to: Date.now(), rows: [], artists: [] };
   const taste = { items: {
@@ -45,6 +51,7 @@ test('a genre list is rejected even if it finishes with a seed name',()=>{
   const candidate={tags:['dream pop','indie pop','alternative'],sources:[{name:'Current favorite'}]};
   assert.equal(usefulCuration('Dream pop, indie pop and alternative sounds connect this artist to Current favorite.',candidate),false);
   assert.equal(usefulCuration('Current favorite is dominating your recent listening; this artist is also connected to Older favorite.',candidate),true);
+  assert.equal(usefulCuration('Try this artist for a fresh direction and an exciting new discovery.',candidate),false);
 });
 
 test('returning records are genuinely absent from the latest recorded period and respect passes',()=>{

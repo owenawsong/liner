@@ -23,6 +23,7 @@ import { savedStartingRecords } from '../recommendations.js';
 import { exclusionPanelHTML, bindExclusions, bindDetailExclusions } from './filters.js';
 import { audioPanelHTML, bindAudioPanel, cancelAllAudioAudits } from './audio.js';
 import { profileNavHTML } from '../profile-nav.js';
+import { historySetupState, preparationSetupState } from '../setup-presentation.js';
 
 const TABS = [['overview', 'Overview'], ['discover', 'Discover'], ['top', 'Top'], ['timeline', 'Timeline'], ['evolution', 'Evolution'], ['patterns', 'Deep dive'], ['insights', 'Insights'], ['clock', 'Clock'], ['data', 'Data']];
 const LABEL = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spotify', file: 'Spotify export', demo: 'Demo' };
@@ -307,21 +308,20 @@ function firstPlayCTA() {
 
 function firstRecordSetup(ctx) {
   const { pid, p } = ctx;
-  const writing = false;
   const recent = (p.recent || []).filter((track) => track.artist && track.name).slice(0, 3);
-  view().innerHTML = `<div class="wrap setup-wrap"><section class="setup-record" aria-labelledby="setup-title">
-    <div class="setup-record__copy"><span class="label">SLEEVE / FIRST PRESSING</span><h1 id="setup-title">Making sense of your record.</h1>
-      <p class="setup-record__lead">We found <b>${num(p.user.playcount)} plays</b> for ${esc(p.user.display)}. Sleeve is reading the full history before it lays out your eras, discoveries${writing ? ', and first liner note' : ''}.</p>
+  view().innerHTML = `<div class="wrap setup-wrap"><ol class="welcome-steps" aria-label="Profile setup"><li class="is-done"><span>01</span>Connect</li><li aria-current="step"><span>02</span>Prepare</li><li><span>03</span>Explore</li></ol><section class="setup-record" aria-labelledby="setup-title">
+    <div class="setup-record__copy"><span class="label">YOUR HISTORY / ${esc(p.user.display)}</span><h1 id="setup-title">Bringing your music together.</h1>
+      <p class="setup-record__lead">Last.fm reports <b>${num(p.user.playcount)} plays</b>. First, Sleeve reads the available history. Then it prepares your findings, artwork and next records.</p>
       <div class="setup-record__progress" role="status" aria-live="polite"><b id="setup-phase">Finding your plays</b><span id="setup-detail">Starting the history read…</span></div>
-      <div class="setup-record__bar" role="progressbar" aria-label="Reading listening history" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
-      <ol class="setup-record__steps"><li data-step="reading" class="is-active"><span>01</span> Read every play</li><li data-step="saving"><span>02</span> Map the record</li>${writing ? '<li data-step="writing"><span>03</span> Write the opening note</li>' : ''}</ol>
-      <div class="setup-record__actions"><button type="button" class="btn btn--line" id="setup-preview">Explore an early preview</button><button type="button" class="link" id="setup-retry" hidden>Try the history again</button></div>
-      <p class="setup-record__foot">Your plays are saved in this browser. A large history can take a few minutes; if you leave, the import resumes from its saved pages when you return.</p>
+      <div class="setup-record__bar" role="progressbar" aria-label="Reading listening history" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+      <ol class="setup-record__steps"><li data-step="reading" class="is-active"><span>01</span> Read history</li><li data-step="saving"><span>02</span> Save plays</li><li><span>03</span> Prepare profile</li></ol>
+      <div class="setup-record__actions"><button type="button" class="btn btn--line" id="setup-preview">Browse recent plays while this runs</button><button type="button" class="link" id="setup-retry" hidden>Resume import</button></div>
+      <p class="setup-record__foot">Recent plays are available now; full-history charts open after the import. Saved pages let you resume after leaving or reloading this tab. Larger histories take longer.</p>
     </div>
     <div class="setup-record__visual" aria-hidden="true"><span class="setup-record__eyebrow">RECENTLY ON YOUR TURNTABLE</span><div class="setup-record__sleeves">${recent.map((t, i) => `<div class="setup-record__sleeve" style="--i:${i}">${sleeve(t.album || t.name, t.artist, { img: t.image, size: 220 })}<span>${esc(t.name)} <i>— ${esc(t.artist)}</i></span></div>`).join('') || '<div class="setup-record__blank">Your first chapter is taking shape.</div>'}</div><span class="setup-record__index">${esc(p.user.name)} / YOUR WHOLE RECORD</span></div>
   </section></div>`;
   const setStep = (phase) => {
-    const order = ['reading', 'saving', 'writing'];
+    const order = ['reading', 'saving'];
     const current = order.indexOf(phase);
     $$('[data-step]', view()).forEach((row) => {
       const i = order.indexOf(row.dataset.step);
@@ -331,50 +331,43 @@ function firstRecordSetup(ctx) {
   };
   const off = watchSync(pid, (job) => {
     if (!$('#setup-phase')) return;
-    const phase = job?.phase === 'writing' ? 'writing' : job?.phase === 'saving' ? 'saving' : 'reading';
-    const pct = job?.total ? Math.min(100, Math.round(job.done / job.total * 100)) : 0;
+    const presentation = historySetupState(job);
     const bar = $('.setup-record__bar');
-    bar.setAttribute('aria-valuenow', String(phase === 'reading' ? pct : 100));
-    $('i', bar).style.width = `${phase === 'reading' ? pct : 100}%`;
-    setStep(phase);
-    $('#setup-retry').hidden = job?.state !== 'error' && job?.state !== 'cancelled';
-    if (job?.state === 'error' || job?.state === 'cancelled') {
-      $('#setup-phase').textContent = 'The history read paused';
-      $('#setup-detail').textContent = job.error || 'You can resume from the last saved page.';
-    } else if (phase === 'writing') {
-      $('#setup-phase').textContent = 'Putting the first page into words';
-      $('#setup-detail').textContent = 'Your history is saved. The opening note is the last step.';
-    } else if (phase === 'saving') {
-      $('#setup-phase').textContent = 'Mapping your listening';
-      $('#setup-detail').textContent = `${num(job.done)} plays read. Building your chapters now.`;
-    } else {
-      $('#setup-phase').textContent = job?.phase === 'resuming' ? 'Picking up where we left off' : 'Reading your listening history';
-      $('#setup-detail').textContent = job?.total ? `${num(job.done)} of ${num(job.total)} plays read · ${pct}%` : 'Finding the size of your record…';
-    }
+    if(presentation.progress===null)bar.removeAttribute('aria-valuenow');else bar.setAttribute('aria-valuenow',String(presentation.progress));
+    bar.setAttribute('aria-valuetext',presentation.ariaText);
+    $('i', bar).style.width = `${presentation.progress??0}%`;
+    bar.dataset.paused=String(presentation.paused);
+    setStep(presentation.phase);
+    $('#setup-retry').hidden = !presentation.paused;
+    $('#setup-phase').textContent=presentation.title;
+    $('#setup-detail').textContent=presentation.detail;
   });
   onLeave(off);
   $('#setup-preview').addEventListener('click', () => { store.set(`liner.setup.preview:${pid}`, '1'); rerender(); });
-  $('#setup-retry').addEventListener('click', () => startSync(pid, ctx.source, ctx.name, { prepare: true, profile: p }));
+  $('#setup-retry').addEventListener('click', () => startSync(pid, ctx.source, ctx.name));
 }
 
 function preparationSetup(ctx) {
   const {pid,A,p}=ctx;
-  const stages=[['metadata','Artists & artwork','Match names, audience counts and the covers you will see.'],['notes','Listening notes','Read your changes and prepare the answers worth opening.'],['recommendations','Recommendations','Build a candidate pool, compare its connections and check album identities.']];
-  view().innerHTML=`<div class="wrap prep-wrap"><section class="prep-screen" aria-labelledby="prep-title">
-    <header class="prep-screen__head"><span class="label">PROFILE SETUP</span><h1 id="prep-title">Preparing your profile.</h1><p>${esc(p.user.display)} · ${num(A.plays)} recorded plays · ${num(A.artists.length)} artists</p></header>
-    <div class="prep-screen__layout"><div><ol class="prep-stages">${stages.map(([id,label,detail])=>`<li data-prep-stage="${id}"><span class="prep-stages__state" aria-hidden="true"></span><div><b>${label}</b><p>${detail}</p><small data-prep-label>Waiting</small></div></li>`).join('')}</ol>
-    <div class="prep-screen__live" role="status" aria-live="polite"><b id="prep-detail">Reading the saved listening record</b><span id="prep-elapsed"></span></div><div class="setup-record__bar" role="progressbar" aria-label="Profile preparation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
-    <button class="link link--quiet" type="button" id="prep-open">Open the stats while this finishes ↗</button><p class="prep-screen__foot">This setup is saved on this device. Your notes and recommendation checks run together after the artist data is ready.</p></div>
-    <aside class="prep-screen__shelf"><span class="label">FROM YOUR LISTENING</span>${A.albums.slice(0,4).map(al=>`<div>${sleeve(al.album,al.artist,{size:82,kind:'album'})}<span><b>${esc(al.album)}</b><small>${esc(al.artist)} · ${num(al.n)} plays</small></span></div>`).join('')}</aside></div></section></div>`;
-  const labels={waiting:'Waiting',running:'Preparing…',done:'Ready',unavailable:'Stats ready · extra data unavailable',skipped:'Writing switched off'};
+  const days=Math.max(1,Math.ceil((A.to-A.from)/DAY));
+  const stages=[['metadata','Artists & artwork','Match the artists and covers in your record.'],['notes','Listening notes','Put supported changes and discoveries into words.'],['recommendations','Your next records','Follow artist connections and verify albums to start with.']];
+  const shelf=A.albums.length?A.albums.slice(0,4).map(al=>`<div>${sleeve(al.album,al.artist,{size:82,kind:'album'})}<span><b>${esc(al.album)}</b><small>${esc(al.artist)} · ${num(al.n)} plays</small></span></div>`).join(''):A.artists.slice(0,4).map(artist=>`<div>${sleeve(artist.name,artist.name,{size:82,kind:'artist'})}<span><b>${esc(artist.name)}</b><small>${num(artist.n)} recorded plays</small></span></div>`).join('');
+  view().innerHTML=`<div class="wrap prep-wrap"><ol class="welcome-steps" aria-label="Profile setup"><li class="is-done"><span>01</span>Connect</li><li aria-current="step"><span>02</span>Prepare</li><li><span>03</span>Explore</li></ol><section class="prep-screen" aria-labelledby="prep-title">
+    <header class="prep-screen__head"><span class="label">YOUR HISTORY IS SAVED</span><h1 id="prep-title">Now, the interesting part.</h1><p>${esc(p.user.display)} · ${num(A.plays)} counted plays · ${num(A.artists.length)} artists</p><p class="prep-screen__context">${days<180?'This record covers a shorter stretch. We will show what it supports today; longer-term comparisons grow with your history.':'Your rankings and listening charts are ready. Sleeve is checking the context that helps you explore them.'}</p></header>
+    <div class="prep-screen__layout"><div><ol class="prep-stages">${stages.map(([id,label,detail])=>`<li data-prep-stage="${id}"><span class="prep-stages__state" aria-hidden="true"></span><div><b>${label}</b><p>${detail}</p><small data-prep-label>Queued</small><span class="prep-stages__detail" data-prep-detail></span></div></li>`).join('')}</ol>
+    <div class="prep-screen__live" role="status" aria-live="polite"><b id="prep-detail">0 of 3 steps finished</b><span id="prep-resumed" hidden>Continuing from your saved preparation.</span></div><div class="prep-screen__completion" aria-hidden="true"><i></i><i></i><i></i></div><p class="prep-screen__elapsed" id="prep-elapsed"></p>
+    <button class="btn btn--ink" type="button" id="prep-open">Explore my listening now ${icon.arrow}</button><p class="prep-screen__foot">You can open your profile now. The remaining checks continue while this tab stays open; saved preparation can resume after a reload. Extra writing or artwork being unavailable does not change your listening statistics.</p></div>
+    <aside class="prep-screen__shelf"><span class="label">ALREADY PART OF YOUR RECORD</span>${shelf}</aside></div></section></div>`;
   const off=watchPreparation(pid,job=>{
     if(!job||!$('#prep-detail'))return;
-    $('#prep-detail').textContent=job.detail;
-    const bar=$('.setup-record__bar');bar.setAttribute('aria-valuenow',String(job.progress));$('i',bar).style.width=`${job.progress}%`;
-    $$('[data-prep-stage]').forEach(row=>{const status=job.stages[row.dataset.prepStage];row.dataset.state=status;$('[data-prep-label]',row).textContent=labels[status];});
+    const presentation=preparationSetupState(job);
+    $('#prep-detail').textContent=presentation.summary;
+    $('#prep-resumed').hidden=!presentation.resumed;
+    $$('[data-prep-stage]').forEach(row=>{const stage=presentation.stages.find(stage=>stage.id===row.dataset.prepStage);row.dataset.state=stage.status;$('[data-prep-label]',row).textContent=stage.label;$('[data-prep-detail]',row).textContent=stage.detail;});
+    $$('.prep-screen__completion i').forEach((mark,i)=>mark.dataset.complete=String(i<presentation.completed));
   });
   const started=preparationStatus(pid)?.started||Date.now();
-  const timer=setInterval(()=>{const el=$('#prep-elapsed');if(el)el.textContent=`${Math.floor((Date.now()-started)/1000)} seconds elapsed`;},1000);
+  const timer=setInterval(()=>{const el=$('#prep-elapsed'),seconds=Math.floor((Date.now()-started)/1000);if(el)el.textContent=seconds<30?`${seconds}s elapsed · checks finish independently`:'Still checking external services. You can explore your listening now.';},1000);
   onLeave(()=>{off();clearInterval(timer);});
   $('#prep-open').onclick=()=>{store.set(`liner.setup.preview:${pid}`,'1');rerender();};
   hydrate(view());

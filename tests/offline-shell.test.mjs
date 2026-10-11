@@ -26,7 +26,8 @@ test('offline cache misses have a readable error and unrelated requests are not 
   assert.equal(await service.request('https://sleeve.example/private-record.json'), undefined);
 });
 test('activation preserves caches belonging to other applications', async () => {
-  const service = worker({ keys: ['sleeve-v1', 'sleeve-v6', 'unrelated-project-cache'] });
+  const currentCache = script.match(/const CACHE = '([^']+)'/)[1];
+  const service = worker({ keys: ['sleeve-v1', currentCache, 'unrelated-project-cache'] });
   await service.activate();
   assert.deepEqual(service.deletes, ['sleeve-v1']);
 });

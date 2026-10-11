@@ -67,6 +67,20 @@ Only synthetic facts were submitted manually on the production Functions route. 
 
 This is a small functional/semantic spot check, not a p95 benchmark or proof that every accepted sentence is correct. Model interpretation remains labeled and exact calculations remain available when writing fails. [Earlier model evaluation](AI_MODEL_EVALUATION.md) records provider restrictions and local evidence. The error copy now describes unavailable supported writing instead of assuming every validation failure means busy providers.
 
+## First experience follow-up
+
+The next release improves preparation and discovery without changing repository visibility:
+
+- Three separate preparation stages show actual artist-check counts and writing/recommendation state. Writing starts concurrently with metadata; saved checkpoints resume completed work. A deadline also releases services that ignore cancellation. The play-history read remains determinate only once its source reports a total.
+- Setup offers an early profile preview and keeps statistics available on writing failures. First ZIP imports open Overview. Short histories explain the missing comparison period instead of treating it as zero listening.
+- Checked starting records appear before curation/artwork finish; late writing does not reshuffle them. Save/pass/already-heard actions have feedback and Undo. Discovery uses an indeterminate activity indicator while external checks run, rather than presenting its internal weighted phases as a measured percentage.
+- Version 22 shares output validation with a fixed six-case synthetic evaluation. Failures distinguish provider availability, invalid formatting, unsupported output, quota and deadlines. Year input is restricted to the selected year. Observed sound/motivation claims from listener connections are withheld in both server and browser checks.
+- The maintainer replaced the invalid local OpenRouter credential; the new value is stored encrypted in production configuration. It is absent from source and public assets. Public model routes still use the shared attempt budget and deny data collection; NVIDIA remains localhost-only.
+
+Local verification: 163 tests pass, both server bundles compile, source/public output scans have no blocking findings, and the dependency audit reports no known vulnerabilities. This follow-up has browser action/layout checks at 320px for the username form, independent preparation failures, Overview and Discover. Normal field/button heights are 56/46px on the checked desktop form. An isolated synthetic ZIP imported 48 counted plays, preserved them on reload, and allowed exploration while a held metadata adapter was still running. Additional ZIPs imported 20 plays over ten days and 12,000 plays over 24 months. The short history explained the absent comparison baseline and produced catalogue records connected to its two artists; the larger import completed preparation and opened Overview. Discover Save/Undo, secondary opinion links and two starting-record layout were checked. Screenshot capture was unreliable in this browser session, so these are DOM/layout/action checks, not a completed visual review across browsers.
+
+The [fixed live AI evaluation](AI_MODEL_EVALUATION.md#fixed-launch-evaluation--october-10-follow-up) reports accepted and withheld outputs separately. It exposed continued year/curation limitations and a provider 502. It does not establish model quality for every profile or public capacity. [The beta guide](BETA_REVIEW.md) provides the next real-user review; no external participants have been contacted or counted as tested.
+
 ## Remaining publication and quality work
 
 1. **Public repository:** enable public visibility when the maintainer is ready, then immediately enable and verify private vulnerability reporting. GitHub describes that feature for public repositories; its API returned 404 while this repository is private. No visibility change was made. Review the historical public read key's ownership/usage; do not rewrite shared history without coordinating.

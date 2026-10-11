@@ -4,10 +4,28 @@ import { $$, esc, num, pct, monthYear, idb, hourLabel } from './ui.js';
 import { topIn, lowerBound } from './analysis.js';
 import { evolution } from './evolution.js';
 import { cachedArtist } from './meta.js';
+import { yearWritingFacts } from './dossier.js';
 
 const DAY = 864e5;
 const local = new Map();
-export const AI_VERSION = 'v19';
+export const AI_VERSION = 'v22';
+
+const FAILURE_COPY={
+  not_configured:'Optional writing is not configured on this site.',
+  rate_limited:'The writing allowance is full for now. Your listening findings are ready.',
+  budget_unavailable:'The writing service could not check its allowance. Your findings are ready.',
+  provider_unavailable:'The writing providers are unavailable. Your findings are ready.',
+  timeout:'The writing took too long. Your findings are ready.',
+  invalid_response:'The writer returned an unusable response. Your findings are ready.',
+  unsupported_output:'The writing could not be supported by your record. Your calculated findings are ready.',
+  network:'The writing service could not be reached. Your saved record is ready.',
+  cancelled:'Optional preparation was interrupted. Completed work is saved.',
+};
+export function writingFailure(error){
+  const code=Object.hasOwn(FAILURE_COPY,error?.code)?error.code:error?.name==='AbortError'?'cancelled':'provider_unavailable';
+  return {code,message:FAILURE_COPY[code],retryAfter:Math.max(0,Math.min(86400,Number(error?.retryAfter)||0))};
+}
+const writingError=(message,code,extra={})=>Object.assign(new Error(message),{code,...extra});
 
 async function key(s) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
@@ -15,7 +33,7 @@ async function key(s) {
 }
 
 export async function write(task, facts, { question = '', fresh = false, signal } = {}) {
-  const version = task === 'year' ? 'v21' : task === 'ask' ? 'v20' : AI_VERSION;
+  const version = AI_VERSION;
   const k = `ai:${version}:${task}:${await key(`${facts}|${question}`)}`;
   if (!fresh) {
     if (local.has(k)) return local.get(k);
@@ -38,14 +56,14 @@ export async function write(task, facts, { question = '', fresh = false, signal 
     });
     d = await res.json().catch(() => ({}));
   } catch (e) {
-    if (timedOut) throw new Error('The writer took too long. Try again.');
+    if (timedOut) throw writingError('The writer took too long. Try again.','timeout');
     if (e.name === 'AbortError') throw e;
-    throw new Error("Couldn't reach Sleeve's writer. Check your connection.");
+    throw writingError("Couldn't reach Sleeve's writer. Check your connection.",'network');
   } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
-  if (res.status === 404) throw new Error('AI writing only works on the live site.');
-  if (!res.ok) throw new Error(d.error || 'The writer is busy. Try again in a moment.');
+  if (res.status === 404) throw writingError('AI writing only works on the live site.','not_configured');
+  if (!res.ok) throw writingError(d.error || 'The writer is unavailable. Try again later.',d.code||(res.status===429?'rate_limited':'provider_unavailable'),{retryAfter:Number(res.headers.get('Retry-After'))||Number(d.retryAfter)||0});
   if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
-  if(typeof d.text!=='string'||!d.text.trim())throw new Error('The writer returned no usable text. Try again.');
+  if(typeof d.text!=='string'||!d.text.trim())throw writingError('The writer returned no usable text. Try again.','invalid_response');
   local.set(k, d.text);
   idb.set(k, d.text);
   return d.text;
@@ -63,6 +81,10 @@ export function facts(A, p, { year, detailed = false } = {}) {
     if (rec.length) L.push(`Recently played: ${rec.join('; ')}.`);
     if (p?.topArtists?.length) L.push(`Top artists lately: ${p.topArtists.slice(0, 10).map((a) => a.name).join(', ')}.`);
     return L.join('\n');
+  }
+  if(year){
+    const recorded=A.years.find(row=>row.y===Number(year));
+    return recorded?`Year: ${year}.\n${yearWritingFacts(A,recorded)}`:`Year: ${year}. No recorded listening in this year.`;
   }
   let from = -Infinity, to = Infinity;
   if (year) { from = new Date(year, 0, 1).getTime(); to = new Date(year + 1, 0, 1).getTime(); }

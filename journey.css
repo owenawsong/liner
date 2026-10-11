@@ -18,6 +18,27 @@ body:is([data-page="start"],[data-page="settings"],[data-page="connect"]) .nav__
 body:is([data-page="settings"],[data-page="privacy"]) .settings__head h1 { font:700 clamp(34px,4vw,46px)/1.08 var(--f-display); letter-spacing:-.035em; text-transform:none; }
 .setlist li > span { min-width:0; }
 .setlist b { overflow-wrap:anywhere; }
+/* Setup distinguishes counted work from enrichment that has no known duration. */
+.setup-wrap, .prep-wrap { padding-bottom:40px; }
+.setup-wrap > .welcome-steps, .prep-wrap > .welcome-steps { margin-top:0; }
+.prep-screen__head h1 { font:700 clamp(34px,4.5vw,54px)/1.07 var(--f-display); letter-spacing:-.045em; text-transform:none; }
+.prep-screen__head .prep-screen__context { font-size:13px; max-width:60ch; line-height:1.65; margin-top:14px; }
+.prep-stages__detail { display:block; color:var(--ink-3); font-size:12px; line-height:1.6; margin-top:6px; overflow-wrap:anywhere; }
+.prep-stages__detail:empty { display:none; }
+.prep-stages [data-state=unavailable] .prep-stages__state { border-radius:0; border-color:var(--accent); }
+.prep-stages [data-state=skipped] .prep-stages__state { background:var(--ink-3); border-color:var(--ink-3); }
+.prep-screen__completion { display:flex; gap:5px; height:3px; margin-top:16px; }
+.prep-screen__completion i { flex:1; background:var(--line-2); }
+.prep-screen__completion i[data-complete=true] { background:var(--accent); }
+.prep-screen__elapsed { min-height:32px; margin:10px 0 20px; font:11px/1.6 var(--f-mono); color:var(--ink-3); }
+.prep-screen #prep-open { margin-top:0; min-height:46px; padding-inline:20px; }
+.prep-screen__foot { max-width:62ch; line-height:1.7; }
+.setup-record__bar[data-paused=true] i { background:color-mix(in srgb,var(--accent) 40%,var(--bg)); }
+.setup-record__copy > .label { overflow-wrap:anywhere; line-height:1.6; }
+.setup-record__progress { max-width:100%; }
+.setup-record__progress span { line-height:1.65; overflow-wrap:anywhere; }
+.setup-record__actions .btn { min-height:46px; text-align:left; }
+.prep-screen__shelf b { overflow-wrap:anywhere; }
 @media (max-width:960px) {
   .profile-identity .phead__side > .btn, .profile-identity .phead__side .search__input { min-height:44px; }
   .profile-nav__inner { display:block; }

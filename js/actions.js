@@ -28,7 +28,7 @@ export async function handleFiles(files, el) {
     await setArchive(pid, a);
     if (pid === 'file') profiles.remember({ pid: 'file', source: 'file', display: 'Spotify export', image: '' });
     toast(`Added ${num(ex.rows.length)} plays, ${monthYear(ex.from)} to ${monthYear(ex.to)}.`);
-    go(hrefFor(pid, 'timeline'));
+    go(hrefFor(pid));
   } catch (e) {
     toast(e.message, 'bad');
   } finally {

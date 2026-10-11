@@ -8,6 +8,8 @@ Initial read-only checks found production branch **`main`**, source `268114c`, a
 
 ## Reproduce the release locally
 
+The Windows preview helper copies the private dev-vars file beside its staged Wrangler configuration, outside the checkout and served `public/` directory. Pages Functions receive its bindings from that `.dev.vars`; a CLI `--env-file` alone does not install Function bindings. Restart the helper after changing local writer keys. The pure browser/server claim filter is also staged beside Functions so its relative import works in the private run folder.
+
 Use Node.js 22 or 24 and npm. Wrangler is pinned to 4.149.0 and JSZip to 3.10.1 in the lockfile.
 
 ```sh

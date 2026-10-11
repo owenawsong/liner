@@ -5,7 +5,7 @@ const local=new Map();globalThis.localStorage={getItem:k=>local.get(k)??null,set
 const { idb }=await import('../js/ui.js');const data=new Map();
 idb.get=async key=>data.get(key);idb.set=async(key,value)=>{data.set(key,structuredClone(value));return true;};idb.del=async key=>data.delete(key);
 const { analyze }=await import('../js/analysis.js');
-const { startPreparation,cancelPreparation,forgetPreparation,preparedProfile }=await import('../js/preparation.js');
+const { startPreparation,cancelPreparation,forgetPreparation,preparedProfile,watchPreparation }=await import('../js/preparation.js');
 const A=analyze(Array.from({length:20},(_,i)=>({t:new Date(2025,0,i+1).getTime(),artist:'A',track:'Song',album:'Album'})));
 const base={ready:async()=>{},art:async()=>'',artistInfo:async()=>null,listeners:async()=>null,getTaste:async()=>({items:{}})};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -32,4 +32,40 @@ test('removing a running profile clears its preparation checkpoint and cannot re
   for(let i=0;i<15&&job.stages.notes!=='running';i++)await tick();
   await forgetPreparation(ctx.pid);await job.promise;
   assert.equal(data.has('prepared:v2:qa:remove'),false);assert.equal(data.has('prep-work:v3:qa:remove'),false);
+});
+
+test('writing starts while metadata is pending and concurrent progress never moves backward',async()=>{
+  let release;const blocked=new Promise(resolve=>release=resolve),progress=[];
+  const ctx={pid:'qa:parallel',A,source:'file',p:{}};
+  const unwatch=watchPreparation(ctx.pid,job=>{if(job)progress.push(job.progress);});
+  const job=startPreparation(ctx,{services:{...base,art:()=>blocked,artistInfo:()=>blocked,listeners:()=>blocked,
+    write:async()=>JSON.stringify({notes:'A appears in your saved record.',observations:[],years:[],eras:[]}),
+    buildRecommendations:async(_ctx,{onProgress})=>{onProgress('Records checked',85);onProgress('An older callback',30);return {warning:'',aiError:''};}}});
+  for(let i=0;i<30&&job.stages.notes!=='done';i++)await tick();
+  assert.equal(job.stages.notes,'done');assert.equal(job.stages.metadata,'running');assert.equal(job.metadata.done,0);
+  release(null);await job.promise;unwatch();
+  assert.ok(progress.every((value,index)=>!index||value>=progress[index-1]));
+  assert.equal(job.metadata.done,job.metadata.total);assert.equal(job.state,'done');
+  await forgetPreparation(ctx.pid);
+});
+
+test('a service ignoring its abort signal cannot strand the setup screen',async()=>{
+  const ctx={pid:'qa:deadline',A,source:'file',p:{}};
+  const blocked=()=>new Promise(()=>{});
+  const job=startPreparation(ctx,{timeoutMs:30,services:{...base,write:blocked,art:blocked,getTaste:blocked}});
+  await job.promise;
+  assert.equal(job.state,'done');assert.equal(job.progress,100);
+  assert.equal(job.stages.notes,'unavailable');assert.equal(job.stages.recommendations,'unavailable');
+  assert.ok(await preparedProfile(ctx.pid,A));
+  assert.equal(job.packet.issues.notes.code,'timeout');
+  await forgetPreparation(ctx.pid);
+});
+
+test('writer failure retains its cause and the recommendations remain ready',async()=>{
+  const ctx={pid:'qa:unsupported',A,source:'file',p:{}};
+  const job=startPreparation(ctx,{services:{...base,write:async()=>{throw Object.assign(new Error('Private provider detail'),{code:'unsupported_output'});},buildRecommendations:async()=>({warning:'',aiError:''})}});
+  await job.promise;
+  assert.equal(job.packet.issues.notes.code,'unsupported_output');assert.equal(job.stages.recommendations,'done');
+  assert.ok(!JSON.stringify(job.packet.errors).includes('Private provider detail'));
+  await forgetPreparation(ctx.pid);
 });

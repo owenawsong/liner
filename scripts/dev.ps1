@@ -34,6 +34,11 @@ foreach ($file in Get-ChildItem -LiteralPath $functionSource -Recurse -File) {
   New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
   Copy-Item -LiteralPath $file.FullName -Destination $target -Force
 }
+# The Function and browser share this pure claim filter. Preserve its relative
+# import beside the staged Functions; it contains no runtime configuration.
+$sharedModuleDir = Join-Path $run 'js'
+New-Item -ItemType Directory -Path $sharedModuleDir -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $project 'js\writing-claims.js') -Destination (Join-Path $sharedModuleDir 'writing-claims.js')
 
 Write-Host "Serving Sleeve from $site"
 # Local preview intentionally has no production budget binding. For a full budget
@@ -41,7 +46,10 @@ Write-Host "Serving Sleeve from $site"
 $localConfig = Join-Path $run 'wrangler.jsonc'
 @{ name = 'liner'; compatibility_date = '2026-09-01'; pages_build_output_dir = $site } | ConvertTo-Json | Set-Content -LiteralPath $localConfig -Encoding UTF8
 $previewArgs = @('pages', 'dev', $site, '--port', "$Port", '--persist-to', (Join-Path $stage 'state'))
-if (Test-Path -LiteralPath $secrets) { $previewArgs += @('--env-file', $secrets) }
+# Pages dev loads Function bindings from .dev.vars beside its configuration.
+# --env-file loads CLI environment settings and does not provide these bindings.
+# Keep the private runtime copy outside both the checkout and served public/.
+if (Test-Path -LiteralPath $secrets) { Copy-Item -LiteralPath $secrets -Destination (Join-Path $run '.dev.vars') }
 Push-Location $run
 try {
   & $wrangler @previewArgs

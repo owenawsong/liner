@@ -3,11 +3,11 @@
 // Keys live in Cloudflare secrets (NVIDIA_API_KEY, OPENROUTER_API_KEY) and never reach
 // the browser. Prompts are fixed here, so this can't be used as a general chatbot.
 // Answers are cached, so the same request is only paid for once.
-import { normalizeStructuredWriting, validStructuredWriting, validYearWriting, validQuestionWriting } from '../lib/writing-quality.js';
+import { inspectWriting, writingErrorCode } from '../lib/writing-output.js';
 
 // Fixed OpenRouter models keep the voice testable. NVIDIA's hosted developer
 // endpoint is for local evaluation only; public traffic must never use it.
-const CACHE_VERSION = 'v19';
+const CACHE_VERSION = 'v22';
 // Verified with synthetic profile/curation requests under data_collection=deny.
 // Nemotron free requires a different data policy; Inkling free rejected this app.
 // Gemma 31B timed out twice. Do not silently relax privacy to unlock a model.
@@ -45,6 +45,8 @@ ${f}`,
 Only choose actual supplied IDs. If fewer than eight exist, do not invent or duplicate any. Spread choices across recent seeds, older favorites, and independent connections. These candidates have no recorded listening.
 For each reason, START with the NAME of a connected seed artist and its supplied role in this listener's history, then explain why that connection makes this a useful next listen. A link to both an older favorite and a recent discovery is useful; a genre list is not. Example form: "Your recent return to SEED points here; Last.fm also links this artist to OLDER SEED, which you have kept listening to." Use that form ONLY when both those connections and roles are actually supplied for that candidate. A Last.fm connection is evidence of listener overlap, not proof two artists sound alike. Do not infer sound or mood from that connection. Mention at most one supplied tag, and only when necessary. Do not start with tags or repeat the candidate's name. No claims that a candidate is new to a genre, will replace a favorite, or is a perfect fit. No scores, probabilities, invented musical descriptions or seed artists. Avoid offers, provides, aligns, core favorites, momentum, stylistic contrast, or generic closing praise. Privately check every reason against ONLY its candidate's evidence; omit an unsupported reason.
 
+Use recorded listening roles only. Do not translate a return into renewed interest in a sound, rising plays into active exploration, or a listener connection into acoustic similarity. No natural extension, perfect match or significant audience claims.
+
 ${f}`,
   },
   notes: {
@@ -55,7 +57,7 @@ Facts:
 ${f}`,
   },
   year: {
-    max: 260,
+    max: 260, json: true,
     prompt: (f) => `Write one or two short sentences, under 65 words altogether. Compare two supplied artists' recorded counts OR describe a supplied monthly change. Choose one of those angles; do not list every fact. Use at most two numeric values besides the year. Address you. For selected counts, say "You recorded X plays of ARTIST and Y of ARTIST" without turning that comparison into a ranking. Annual rankings are already shown elsewhere: do not call anyone the annual leader, winner, favorite, dominant artist or most played artist in this paragraph. Leadership language is allowed only for a named month explicitly supplied in the facts. Missing months cannot establish consistency, dominance or a causal explanation. No inferred reasons, feelings or audio qualities.\n\nFacts:\n${f}`,
   },
   roast: {
@@ -67,12 +69,17 @@ ${f}`,
     prompt: (f) => `For each era below, give it a short evocative title (2 to 5 words, not just the artist's name) and one sentence (under 20 words). Reply as JSON only: [{"artist":"...","title":"...","line":"..."}].\n\nEras and context:\n${f}`,
   },
   ask: {
-    max: 160,
+    max: 160, json: true,
     prompt: (f, q) => `Sleeve already calculated the answer shown below. Add one short, useful observation about its evidence. Do not repeat the headline, invent a number or name, infer emotion, motivation or preference, or contradict the calculation. Two artists changing in the same period cannot establish a direct swap, handoff, replacement or causal relationship. Do not claim any of those relationships; describe recorded presence, timing or the limits of the evidence. If the evidence offers no further observation, say what the coverage limits. At most two sentences.\n\nVerified answer and evidence:\n${f}\n\nListener's question: ${q}`,
   },
 };
 
 // Per-visitor isolate protection supplements the required public shared budget.
+// Keep the visible short paragraph separate from the provider's JSON envelope.
+for (const name of ['year','ask']) {
+  const prompt=TASKS[name].prompt;
+  TASKS[name].prompt=(...args)=>`${prompt(...args)}\n\nReturn JSON only: {"text":"the short commentary"}. No additional fields.`;
+}
 export { STYLE };
 // An account-level Cloudflare rate rule should reject abuse before this route.
 const hits = new Map();
@@ -116,6 +123,7 @@ async function reserveOpenRouter(env, localPreview, visitor) {
     if (!response.ok) {
       const error = new Error(`AI budget ${response.status}`);
       error.status = response.status;
+      error.retryAfter = Number(response.headers.get('Retry-After')) || 0;
       throw error;
     }
   } catch (error) { error.budget = true; throw error; }
@@ -139,15 +147,9 @@ function clean(text, structured = false) {
     .trim();
 }
 
-function groundedNumbers(text, facts) {
-  const numbers = (value) => [...String(value).matchAll(/\b\d[\d,]*(?:\.\d+)?\b/g)].map((match) => match[0].replaceAll(',', ''));
-  const allowed = new Set(numbers(facts));
-  return numbers(text).every((value) => allowed.has(value));
-}
-
 async function call(step, env, messages, max, localPreview, structured = false, visitor) {
   const key = step.via === 'nvidia' ? env.NVIDIA_API_KEY : env.OPENROUTER_API_KEY;
-  if (!key) throw new Error(`no key for ${step.via}`);
+  if (!key) throw Object.assign(new Error('Writer configuration unavailable'),{code:'not_configured'});
   if (step.via === 'openrouter') await reserveOpenRouter(env, localPreview, visitor);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), step.timeout);
@@ -171,11 +173,13 @@ async function call(step, env, messages, max, localPreview, structured = false, 
     if (!res.ok) {
       const error = new Error(`${step.model} ${res.status}`);
       error.status = res.status;
+      error.retryAfter = Number(res.headers.get('Retry-After')) || 0;
       throw error;
     }
-    const d = await res.json();
+    let d;
+    try{d=await res.json();}catch{throw Object.assign(new Error('Invalid provider response'),{code:'invalid_response'});}
     const text = clean(d.choices?.[0]?.message?.content, structured);
-    if (text.length < 20) throw new Error(`${step.model} empty`);
+    if (text.length < 20) throw Object.assign(new Error('Empty provider response'),{code:'invalid_response'});
     return { text, model: d.model || step.model };
   } finally {
     clearTimeout(timer);
@@ -206,14 +210,14 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const facts = body.facts, question = body.question || '';
   if (body.task === 'ask' && !question.trim()) return json({ error: 'Ask a question.' }, 400);
 
-  const version = body.task === 'year' ? 'v21' : body.task === 'ask' ? 'v20' : CACHE_VERSION;
+  const version = CACHE_VERSION;
   const cacheKey = new Request(`https://liner-ai.cache/${version}/${body.task}/${await sha(`${facts}|${question}|${body.seed || ''}`)}`);
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
   if (cached) return new Response(cached.body, { headers: { ...PRIVATE_HEADERS, 'X-Liner-Cache': 'hit' } });
 
   const ip = request.headers.get('CF-Connecting-IP') || 'local';
-  if (limited(ip)) return json({ error: "You've asked a lot in the last few minutes. Try again in a bit." }, 429);
+  if (limited(ip)) return json({ error: "You've asked a lot in the last few minutes. Try again in a bit.",code:'rate_limited',retryAfter:600 }, 429);
 
   const messages = [{ role: 'system', content: STYLE }, { role: 'user', content: task.prompt(facts, question) }];
   const key = cacheKey.url;
@@ -225,44 +229,43 @@ export async function onRequestPost({ request, env, waitUntil }) {
       const visitor = await sha(`sleeve-visitor|${new Date().toISOString().slice(0, 10)}|${ip}`);
       const errors = [];
       let budgetFailure = null;
+      let accountUnavailable = false;
       const deadline = Date.now() + 50000;
       const host = new URL(request.url).hostname;
       const localPreview = host === 'localhost' || host === '127.0.0.1';
       const routes = [...ROUTES[body.task], ...(localPreview ? [DIFFUSION] : [])];
       for (const step of routes) {
-        if (budgetFailure && step.via === 'openrouter') continue;
+        if ((budgetFailure || accountUnavailable) && step.via === 'openrouter') continue;
         const remaining = deadline - Date.now();
         if (remaining < 3000) break;
-        if ((cooldowns.get(step.model) || 0) > Date.now()) continue;
+        if ((cooldowns.get(step.model) || 0) > Date.now()) { errors.push({model:step.model,code:'provider_unavailable',cooldown:true}); continue; }
         const started = Date.now();
         try {
           const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max, localPreview, task.json, visitor);
-          if (!groundedNumbers(result.text, facts)) throw new Error(`${step.model} unsupported number`);
-          if (body.task === 'year' && !validYearWriting(result.text, facts)) throw new Error(`${step.model} unsupported year interpretation`);
-          if (body.task === 'ask' && !validQuestionWriting(result.text)) throw new Error(`${step.model} unsupported causal commentary`);
-          if (task.json) {
-            let structured;
-            try { structured = normalizeStructuredWriting(body.task, JSON.parse(result.text)); } catch { throw new Error(`${step.model} invalid structured response`); }
-            if (!validStructuredWriting(body.task,structured,facts)) throw new Error(`${step.model} unsupported structured writing`);
-            result.text = JSON.stringify(structured);
-          }
+          const checked=inspectWriting(body.task,result.text,facts);
+          if(checked.code)throw Object.assign(new Error('Unusable writing'),{code:checked.code});
+          result.text=checked.text;
+          result.fallback=errors.some(error=>!error.cooldown);
           console.log('ai: served', body.task, step.model, `${Date.now() - started}ms`);
           const out = JSON.stringify(result);
           waitUntil?.(cache.put(cacheKey, new Response(out, { headers: { 'Cache-Control': 'public, max-age=604800' } })).catch(() => {}));
           return { out, status: 200 };
         } catch (e) {
-          errors.push(String(e.message || e));
-          console.log('ai: provider failed', body.task, step.model, e.status || e.name || 'unknown', `${Date.now() - started}ms`);
+          const code=writingErrorCode(e);
+          errors.push({model:step.model,code,status:e.status||null,ms:Date.now()-started});
+          console.log('ai: provider failed', body.task, step.model, code, e.status || 'none', `${Date.now() - started}ms`);
           if (e.budget) { budgetFailure = e; if (!localPreview) break; else continue; }
+          if (step.via === 'openrouter' && (e.status === 401 || e.status === 403)) { accountUnavailable = true; if (!localPreview) break; else continue; }
           if (e.status === 429 || e.status >= 500) cooldowns.set(step.model, Date.now() + (e.status === 429 ? 30000 : 60000));
         }
       }
       if (budgetFailure) return { out: JSON.stringify({ error: budgetFailure.status === 429
         ? "Sleeve's writing quota is full right now. Your listening stats still work; try again later."
-        : "Sleeve's writing budget is unavailable. Your listening stats still work; try again later." }), status: budgetFailure.status === 429 ? 429 : 503 };
+        : "Sleeve's writing budget is unavailable. Your listening stats still work; try again later.",code:writingErrorCode(budgetFailure),retryAfter:budgetFailure.retryAfter||0 }), status: budgetFailure.status === 429 ? 429 : 503 };
       console.log('ai: every model failed', errors);
-      const unconfigured = errors.length && errors.every((e) => e.startsWith('no key'));
-      return { out: JSON.stringify({ error: unconfigured ? "AI writing isn't switched on for this site yet." : "We couldn't prepare supported writing right now. Your listening stats still work; try again later." }), status: 503 };
+      const unconfigured = errors.length && errors.every((e) => e.code==='not_configured');
+      const code=unconfigured?'not_configured':errors.find(e=>e.code==='unsupported_output')?.code||errors.find(e=>e.code==='invalid_response')?.code||errors.find(e=>e.code==='rate_limited')?.code||errors.find(e=>e.code==='timeout')?.code||'provider_unavailable';
+      return { out: JSON.stringify({ error: unconfigured ? "AI writing isn't switched on for this site yet." : "We couldn't prepare supported writing right now. Your listening stats still work; try again later.",code,attempts:errors }), status: 503 };
     })();
     inflight.set(key, work);
     work.then(() => { if (inflight.get(key) === work) inflight.delete(key); }, () => { if (inflight.get(key) === work) inflight.delete(key); });

@@ -5,6 +5,7 @@ import { topIn } from './analysis.js';
 import { cachedArtist, cachedListeners } from './meta.js';
 import { normalize, tasteKey } from './taste.js';
 import * as lastfm from './sources/lastfm.js';
+import { supportedConnectionWriting } from './writing-claims.js';
 
 const DAY = 864e5;
 const TTL = 14 * DAY;
@@ -99,7 +100,7 @@ export function rankCandidates(pool, taste, mode = 'for-you', keepRated = new Se
     const withAudience = allowed.filter((x) => audienceFor(x) > 0);
     const ceiling = [100000, 500000, 1000000, 3000000].find((n) => withAudience.filter((x) => audienceFor(x) <= n).length >= 8);
     if (ceiling) allowed = withAudience.filter((x) => audienceFor(x) <= ceiling);
-    else if (withAudience.length) allowed = withAudience;
+    else allowed = withAudience;
   }
   const scored = allowed.map((x) => {
     const audience = cachedListeners(x.name) || x.audience;
@@ -138,14 +139,14 @@ export function connectionReason(x) {
 }
 
 export function usefulCuration(reason, candidate) {
-  if (typeof reason !== 'string' || reason.trim().length < 30) return false;
+  if (!supportedConnectionWriting(reason) || reason.trim().length < 30) return false;
   const text = normalize(reason), tags=(candidate.tags || []).filter(t=>normalize(t).length>2);
   const tagCount=tags.filter(t=>text.includes(normalize(t))).length;
   const ties=(candidate.sources || []).some(s=>text.includes(normalize(s.name)));
   // Genre lists are metadata, not an explanation of why this is worth trying.
   const opening=normalize(reason.slice(0,100));
   const openingTags=tags.filter(t=>opening.includes(normalize(t))).length;
-  return tagCount < 3 && !(tagCount >= 2 && !ties) && openingTags < 2 && !/^(genres?|tags?)\s*:/i.test(reason)
+  return ties && tagCount < 3 && openingTags < 2 && !/^(genres?|tags?)\s*:/i.test(reason)
     && !/\b(offers?|provides?|boasts?|blends? a|unique blend|perfect for|fans of these genres)\b/i.test(reason);
 }
 
