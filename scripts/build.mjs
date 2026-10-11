@@ -10,8 +10,15 @@ export const PUBLIC_FILES = [
 const OPTIONAL_FILES = ['_headers', '_redirects'];
 const ASSET_EXTENSIONS = new Set(['.svg', '.png', '.jpg', '.jpeg', '.webp', '.avif', '.gif', '.ico', '.woff', '.woff2']);
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const samePath = (left, right) => relative(left, right) === '';
 const isInside = (parent, target) => { const rel = relative(parent, target); return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel); };
 async function statOrNull(path) { try { return await lstat(path); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } }
+async function checkAncestors(target) {
+  for (let current = target;; current = dirname(current)) {
+    if ((await statOrNull(current))?.isSymbolicLink()) throw new Error('Build output cannot traverse a symlink.');
+    if (dirname(current) === current) break;
+  }
+}
 async function copyPublic(source, target) {
   const entry = await lstat(source);
   if (entry.isSymbolicLink() || !entry.isFile()) throw new Error(`Public input must be a regular file: ${source}`);
@@ -34,20 +41,21 @@ export async function build({ projectDir = projectRoot, outDir = join(projectDir
   const source = await realpath(projectDir);
   const output = resolve(outDir);
   const canonicalOutput = join(source, 'dist');
-  if (output === source || isInside(output, source)) throw new Error('Build output cannot be the project or one of its parents.');
-  if (isInside(source, output) && output !== canonicalOutput) throw new Error('Inside the project, only dist/ may be used as build output.');
+  if (samePath(output, source) || isInside(output, source)) throw new Error('Build output cannot be the project or one of its parents.');
+  if (isInside(source, output) && !samePath(output, canonicalOutput)) throw new Error('Inside the project, only dist/ may be used as build output.');
   if (lastfmApiKey && !/^[a-f0-9]{32}$/i.test(lastfmApiKey)) throw new Error('LASTFM_API_KEY must be a 32-character hexadecimal public Last.fm read key.');
   const existing = await statOrNull(output);
   if (existing?.isSymbolicLink() || (existing && !existing.isDirectory())) throw new Error('Build output must be a real directory.');
+  await checkAncestors(output);
   // Verify the resolved target before removing the known, generated dist folder.
   if (existing) {
     const resolvedOutput = await realpath(output);
-    if (resolvedOutput !== output) throw new Error('Build output cannot traverse a symlink.');
-    if (output === canonicalOutput) await rm(output, { recursive: true, force: true });
+    if (!samePath(resolvedOutput, output)) throw new Error('Build output cannot traverse a symlink.');
+    if (samePath(output, canonicalOutput)) await rm(output, { recursive: true, force: true });
     else if ((await readdir(output)).length) throw new Error('External build output must be empty; create a fresh staging directory.');
   } else {
     await mkdir(output, { recursive: true });
-    if (await realpath(output) !== output) throw new Error('Build output cannot traverse a symlink.');
+    if (!samePath(await realpath(output), output)) throw new Error('Build output cannot traverse a symlink.');
   }
   await mkdir(output, { recursive: true });
   for (const name of PUBLIC_FILES) await copyPublic(join(source, name), join(output, name));

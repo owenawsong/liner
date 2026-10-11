@@ -14,6 +14,8 @@ AI writing is enabled by default and can be disabled in **Settings → AI writin
 
 Generated responses are cached on the server for seven days under hashed request identities. The browser also caches generated results. Server diagnostics include task/model/status/timing and do not intentionally include summary bodies or response text. Hosting infrastructure may record ordinary access metadata according to the hosting account's configuration. NVIDIA developer inference is restricted to local preview fallback. Personal OpenRouter authorization is not currently implemented.
 
+The shared AI budget stores daily request counts and a day-specific digest of the connecting IP to enforce visitor limits. It does not store raw IPs or listening summaries. A digest is pseudonymous, not a guarantee of anonymity. Daily rollover replaces old visitor counters; an idle-state alarm removes them ten minutes after the following midnight UTC. Networks sharing an IP also share the visitor allowance.
+
 ## Removing data
 
 Remove a profile or use **Settings → Clear everything** to delete this browser's stored copies. Export any shelf backup you wish to keep first. Removing local records does not erase earlier seven-day server-cache entries or data retained by external services. There is no server-side account identifier that lets the current code locate and erase every cached response for a person. A production host must provide an appropriate contact/reporting route and describe its own handling of requests.

@@ -91,6 +91,16 @@ test('public traffic uses OpenRouter and reuses a cached answer', async () => {
   assert.equal(urls.length, 1);
 });
 
+test('budget storage receives a visitor digest, never a raw address or listening facts', async () => {
+  let identity;
+  globalThis.fetch=async()=>success('synthetic-model');
+  const budget={idFromName:name=>name,get:()=>({fetch:async(_url,options)=>{identity=options.headers['X-Sleeve-Visitor'];return new Response('',{status:200});}})};
+  const facts='Visitor privacy test: Radiohead 90 to 10 plays; SZA 4 to 44 plays.';
+  assert.equal((await onRequestPost(context(request(facts),{OPENROUTER_API_KEY:'test-or',AI_BUDGET:budget}))).status,200);
+  assert.match(identity,/^[a-f0-9]{64}$/);
+  assert.ok(!identity.includes('192.0.2.')&&!identity.includes('Radiohead'));
+});
+
 test('a shared budget denial prevents public provider calls', async () => {
   let calls = 0;
   globalThis.fetch = async () => { calls++; return success('unused'); };

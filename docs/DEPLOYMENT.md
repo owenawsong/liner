@@ -4,7 +4,7 @@ Sleeve uses **Cloudflare Pages with Pages Functions**, plus a separate Worker fo
 
 ## Account state checked October 10, 2026
 
-Read-only CLI checks found the existing Git-linked `liner` Pages project with production branch **`main`**, latest production source `268114c`, and encrypted production secret names `OPENROUTER_API_KEY` / `NVIDIA_API_KEY`. Secret values were not inspected or validated. The `sleeve-ai-budget` Worker lookup returned 404 / code 10007: it still needs provisioning before public AI can work with the prepared binding. These local changes are not deployed. See [release readiness](RELEASE_READINESS.md) for the full remaining gates.
+Initial read-only checks found production branch **`main`**, source `268114c`, and no `sleeve-ai-budget` Worker. With the maintainer's subsequent authorization, that Worker was provisioned and the Pages production binding was added. Pages build settings now use `npm run build`, `dist`, build image 3 and Node.js 22. The approved public Last.fm read key is configured for builds, and the supplied OpenRouter key was installed as an encrypted production secret. OpenRouter's key-status endpoint returned 200. Preview environments retain no production budget binding or writer secret. See [release readiness](RELEASE_READINESS.md) for deployment evidence and remaining gates.
 
 ## Reproduce the release locally
 
@@ -62,6 +62,8 @@ The file can contain `OPENROUTER_API_KEY` and, for localhost prototyping only, `
 Cloudflare documents the configuration migration and external Durable Object requirement. [Pages Wrangler configuration](https://developers.cloudflare.com/pages/functions/wrangler-configuration/), [Durable Object bindings](https://developers.cloudflare.com/pages/functions/bindings/#durable-objects)
 
 The budget allows 19 attempts per rolling minute and 900 per UTC day. Provider fallbacks also consume slots; cached results do not. This is one shared public account budget, not a per-user allowance or an availability guarantee.
+
+Durable visitor limits also allow at most 12 provider attempts per ten minutes and 60 per UTC day for a day-specific digest of the connecting IP. Shared networks share that allowance. Raw IPs and listening facts are not sent to budget storage. Counters roll over daily; an idle-counter alarm removes the previous day's state ten minutes after midnight UTC. These controls limit quota spending across isolates; they do not authenticate visitors or prevent all coordinated abuse. Add zone-level request controls when serving a custom domain that supports them.
 
 ## Preview and production policy
 

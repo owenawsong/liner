@@ -75,3 +75,19 @@ test('a linked dist cannot delete or replace an external folder', async t => {
   await assert.rejects(build({ projectDir: project, lastfmApiKey: '' }), /real directory/);
   assert.equal(await readFile(join(external, 'keep.txt'), 'utf8'), 'keep');
 });
+
+test('linked parent folders are rejected before creating any output', async t => {
+  const { root, project }=await fixture(t);
+  const external=join(root,'protected-parent');await mkdir(external);
+  const link=join(root,'linked-parent');await symlink(external,link,process.platform==='win32'?'junction':'dir');
+  await assert.rejects(build({projectDir:project,outDir:join(link,'new-output'),lastfmApiKey:''}),/symlink/);
+  assert.deepEqual(await readdir(external),[]);
+});
+
+test('Windows path spelling differences are not mistaken for a symlink', {skip:process.platform!=='win32'}, async t => {
+  const { root, project }=await fixture(t);
+  const out=join(root,'CasePreservedOutput');await mkdir(out);
+  const alternate=out.toLowerCase();
+  await build({projectDir:project,outDir:alternate,lastfmApiKey:''});
+  assert.ok((await readdir(out)).includes('index.html'));
+});

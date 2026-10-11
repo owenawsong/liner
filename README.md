@@ -28,6 +28,8 @@ Do not serve the project root with `python -m http.server` or `wrangler pages de
 
 Sleeve's code is licensed under [MIT](LICENSE). See [contributor instructions](CONTRIBUTING.md), [security reporting](SECURITY.md), [data handling](PRIVACY.md), and [third-party notices](THIRD_PARTY_NOTICES.md). The app's Privacy page is also available from its footer and setup.
 
+The frontend, analysis, recommendations, AI prompts/validation and server/budget code are included in the open-source plan. Private credentials and user data are excluded. A future hosted AI allowance or paid service can be operated separately; no proprietary analyzer tier or paid plan is implemented in this release. Self-hosting remains documented.
+
 The public build is `dist/`, created by `npm run build`. ZIP reading is bundled locally. [The deployment guide](docs/DEPLOYMENT.md) describes Cloudflare Pages Functions, the separate shared AI budget Worker, encrypted secrets, preview isolation and hosted verification. CI tests Linux/Windows, builds both server bundles, scans source/history/public output and audits dependencies. CI does not deploy.
 
 The repository is prepared for review, not a certified public service. Account resources, provider permissions, hosted quotas/security headers and a consented live import must still be checked before enabling production AI. See [release readiness](docs/RELEASE_READINESS.md) for completed evidence and remaining gates.

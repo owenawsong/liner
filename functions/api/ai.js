@@ -99,7 +99,7 @@ async function readBody(request) {
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
   return new TextDecoder().decode(bytes);
 }
-async function reserveOpenRouter(env, localPreview) {
+async function reserveOpenRouter(env, localPreview, visitor) {
   if (!env.AI_BUDGET) {
     if (localPreview && env.AI_BUDGET_REQUIRED !== '1') return;
     const error = new Error('AI budget is not configured');
@@ -111,7 +111,7 @@ async function reserveOpenRouter(env, localPreview) {
     const ctrl = new AbortController(); let timer;
     const timeout = new Promise((_, reject) => { timer = setTimeout(() => { ctrl.abort(); reject(new Error('AI budget timed out')); }, 3000); });
     let response;
-    try { response = await Promise.race([stub.fetch('https://budget.internal/take', { method: 'POST', signal: ctrl.signal }), timeout]); }
+    try { response = await Promise.race([stub.fetch('https://budget.internal/take', { method: 'POST', signal: ctrl.signal, headers: { 'X-Sleeve-Visitor': visitor } }), timeout]); }
     finally { clearTimeout(timer); }
     if (!response.ok) {
       const error = new Error(`AI budget ${response.status}`);
@@ -145,10 +145,10 @@ function groundedNumbers(text, facts) {
   return numbers(text).every((value) => allowed.has(value));
 }
 
-async function call(step, env, messages, max, localPreview, structured = false) {
+async function call(step, env, messages, max, localPreview, structured = false, visitor) {
   const key = step.via === 'nvidia' ? env.NVIDIA_API_KEY : env.OPENROUTER_API_KEY;
   if (!key) throw new Error(`no key for ${step.via}`);
-  if (step.via === 'openrouter') await reserveOpenRouter(env, localPreview);
+  if (step.via === 'openrouter') await reserveOpenRouter(env, localPreview, visitor);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), step.timeout);
   let attribution = {};
@@ -219,6 +219,9 @@ export async function onRequestPost({ request, env, waitUntil }) {
   let work = inflight.get(key);
   if (!work) {
     work = (async () => {
+      // Compute after registering shared work, so hashing cannot break coalescing.
+      // Only a day-specific digest reaches budget storage, never raw IPs or facts.
+      const visitor = await sha(`sleeve-visitor|${new Date().toISOString().slice(0, 10)}|${ip}`);
       const errors = [];
       let budgetFailure = null;
       const deadline = Date.now() + 50000;
@@ -232,7 +235,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
         if ((cooldowns.get(step.model) || 0) > Date.now()) continue;
         const started = Date.now();
         try {
-          const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max, localPreview, task.json);
+          const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max, localPreview, task.json, visitor);
           if (!groundedNumbers(result.text, facts)) throw new Error(`${step.model} unsupported number`);
           if (task.json) {
             let structured;
