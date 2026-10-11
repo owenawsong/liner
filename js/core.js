@@ -4,6 +4,8 @@ import * as listenbrainz from './sources/listenbrainz.js';
 import * as spotify from './sources/spotify.js';
 import { sampleArchive } from './sources/demo.js';
 import { analyze } from './analysis.js';
+import { clearTaste } from './taste.js';
+import { getExclusions, exclusionsSignature, filterHistory } from './filters.js';
 
 export const SOURCES = { lastfm, listenbrainz, spotify };
 export const view = () => $('#view');
@@ -55,13 +57,24 @@ export async function getArchive(pid) {
 
 export async function setArchive(pid, a) {
   a.ver = Date.now();
+  if (pid !== 'demo' && !await idb.set(`archive:${pid}`, a)) throw new Error('This browser could not save your listening history. Check available storage and try again.');
   cache.set(pid, { archive: a });
-  if (pid !== 'demo') await idb.set(`archive:${pid}`, a);
 }
 
 export async function clearArchive(pid) {
+  const { forgetPreparation } = await import('./preparation.js');
+  const { forgetRecommendations } = await import('./recommendations.js');
+  const { forgetSync } = await import('./sync.js');
+  const { forgetAudioAudit } = await import('./views/audio.js');
+  await forgetSync(pid);
+  await forgetPreparation(pid);
+  await forgetAudioAudit(pid);
+  await forgetRecommendations(pid);
   cache.delete(pid);
+  store.set(`liner.exclusions:${pid}`,null);
   await idb.del(`archive:${pid}`);
+  await clearTaste(pid);
+  if (pid.startsWith('lastfm:')) await lastfm.clearCheckpoint(pid);
 }
 
 export function mergedRows(a) {
@@ -77,10 +90,13 @@ export const hasArchive = (a) => !!(a?.export?.rows?.length || a?.live?.rows?.le
 
 export function analysisFor(pid, a) {
   const c = cache.get(pid) || { archive: a };
-  if (c.A && c.minMs === state.minMs && c.ver === a.ver) return c.A;
-  const rows = mergedRows(a);
-  const A = rows.length ? analyze(rows, { minMs: state.minMs }) : null;
-  cache.set(pid, { archive: a, A, minMs: state.minMs, ver: a.ver });
+  const rules=getExclusions(pid),filterSignature=exclusionsSignature(rules);
+  if (c.A && c.minMs === state.minMs && c.ver === a.ver && c.filterSignature===filterSignature) return c.A;
+  const original=mergedRows(a),filtered=filterHistory(original,rules),rows=filtered.rows;
+  const result = rows.length ? analyze(rows, { minMs: state.minMs }) : null;
+  const A = result?.plays ? result : null;
+  if(A){A.filterSignature=filterSignature;A.exclusions={excluded:filtered.excluded,total:original.length,items:rules.length};}
+  cache.set(pid, { archive: a, A, minMs: state.minMs, ver: a.ver,filterSignature });
   return A;
 }
 
@@ -89,12 +105,40 @@ export function setMinMs(v) {
   store.set('liner.minMs', String(v));
 }
 
+// A large first import should not freeze the setup screen while stats are built.
+export async function prepareAnalysis(pid,a,signal) {
+  const c=cache.get(pid);
+  const rules=getExclusions(pid),filterSignature=exclusionsSignature(rules);
+  if(c?.A&&c.minMs===state.minMs&&c.ver===a.ver&&c.filterSignature===filterSignature)return c.A;
+  const original=mergedRows(a),filtered=filterHistory(original,rules),rows=filtered.rows,minMs=state.minMs;
+  if(rows.length<12000||typeof Worker==='undefined')return analysisFor(pid,a);
+  if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
+  let A;
+  try {
+    A=await new Promise((resolve,reject)=>{
+      const worker=new Worker(new URL('./analysis-worker.js',import.meta.url),{type:'module'});
+      const close=()=>{worker.terminate();clearTimeout(timer);signal?.removeEventListener('abort',abort);};
+      const abort=()=>{close();reject(new DOMException('Cancelled','AbortError'));};
+      const timer=setTimeout(()=>{close();reject(new Error('The history calculation timed out.'));},45000);
+      signal?.addEventListener('abort',abort,{once:true});
+      worker.onmessage=({data})=>{close();data.error?reject(new Error(data.error)):resolve(data.result);};
+      worker.onerror=()=>{close();reject(new Error('Background calculations are unavailable in this browser.'));};
+      try{worker.postMessage({rows,minMs});}catch(error){close();reject(error);}
+    });
+  }catch(error){if(error.name==='AbortError'||signal?.aborted)throw new DOMException('Cancelled','AbortError');return analysisFor(pid,a);}
+  if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
+  A=A?.plays?A:null;
+  if(A){A.rows=rows.filter(r=>r.track&&r.artist&&(r.ms==null||r.ms>=minMs));A.filterSignature=filterSignature;A.exclusions={excluded:filtered.excluded,total:original.length,items:rules.length};}
+  cache.set(pid,{archive:a,A,minMs,ver:a.ver,filterSignature});
+  return A;
+}
+
 // Deduplicate plays that arrive from more than one place (same song within a minute).
 export function dedupe(rows) {
   const seen = new Set();
   const out = [];
   for (const r of rows.sort((x, y) => x.t - y.t)) {
-    const k = `${Math.round(r.t / 60000)}|${r.track}`;
+    const k = `${Math.round(r.t / 60000)}|${String(r.artist || '').toLowerCase()}|${String(r.track || '').toLowerCase()}`;
     if (seen.has(k)) continue;
     seen.add(k);
     out.push(r);

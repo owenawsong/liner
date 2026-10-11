@@ -1,0 +1,7 @@
+# Copy to a private path outside the checkout, never into dist/.
+# Last.fm read key: public after injection into a browser build.
+LASTFM_API_KEY=
+# Optional private server writer key.
+OPENROUTER_API_KEY=
+# Optional LOCAL DEVELOPMENT ONLY fallback.
+NVIDIA_API_KEY=

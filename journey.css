@@ -1,0 +1,30 @@
+/* Core analysis is visible; sources and counting controls form a utility link. */
+.profile-nav { position:sticky; z-index:30; overflow:visible; margin-bottom:22px; }
+.profile-nav__inner { display:flex; align-items:center; gap:24px; }
+.profile-nav__primary { display:flex; justify-content:space-between; gap:18px; flex:1; min-width:0; }
+.profile-nav a { text-decoration:none; }
+.profile-nav__primary > a { padding:15px 0; font-size:14px; white-space:nowrap; }
+.profile-nav__utilities { display:flex; flex-shrink:0; border-left:1px solid var(--line); padding-left:20px; }
+.profile-nav__utilities > a { font-size:12px; padding:16px 0; }
+.profile-nav a:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+body[data-page="profile"] .nav__links { display:none; }
+body[data-page="profile"] .nav__menu-btn { display:none !important; }
+body[data-page="profile"] #nav-user { display:inline; }
+body[data-page="profile"] .nav__user { color:var(--ink-2); }
+body[data-page="profile"] .nav__inner { justify-content:space-between; }
+body:is([data-page="start"],[data-page="settings"],[data-page="connect"]) .nav__links { display:none; }
+body:is([data-page="start"],[data-page="settings"],[data-page="connect"]) .nav__menu-btn { display:none !important; }
+body:is([data-page="start"],[data-page="settings"],[data-page="connect"]) .nav__inner { justify-content:space-between; }
+body:is([data-page="settings"],[data-page="privacy"]) .settings__head h1 { font:700 clamp(34px,4vw,46px)/1.08 var(--f-display); letter-spacing:-.035em; text-transform:none; }
+.setlist li > span { min-width:0; }
+.setlist b { overflow-wrap:anywhere; }
+@media (max-width:960px) {
+  .profile-identity .phead__side > .btn, .profile-identity .phead__side .search__input { min-height:44px; }
+  .profile-nav__inner { display:block; }
+  .profile-nav__primary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0 8px; }
+  .profile-nav__primary > a { display:flex; align-items:center; justify-content:center; min-height:44px; font-size:12px; text-align:center; padding:10px 0; white-space:normal; }
+  .profile-nav__utilities { justify-content:flex-end; border-left:0; border-top:1px solid var(--line); padding-left:0; }
+  .profile-nav__utilities > a { display:flex; align-items:center; min-height:44px; padding:10px 0; }
+  .profile-nav { position:static; margin-bottom:14px; }
+  .insights-page #ask, .insights-page #mainstream, .insights-page #findings, .guide-change { scroll-margin-top:90px; }
+}

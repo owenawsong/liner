@@ -25,6 +25,9 @@ export const CATALOG = {
   'Djo': A('Djo', 'Decide', ['End of Beginning']),
   'Radiohead': A('Radiohead', 'In Rainbows', ['Weird Fishes/Arpeggi', 'Reckoner']),
   'Fleetwood Mac': A('Fleetwood Mac', 'Rumours', ['Dreams', 'The Chain']),
+  'The Marías': A('The Marías', 'Submarine', ['No One Noticed', 'Run Your Mouth']),
+  'Magdalena Bay': A('Magdalena Bay', 'Imaginal Disk', ['Image', 'Death & Romance']),
+  'Faye Webster': A('Faye Webster', 'Atlanta Millionaires Club', ['Kingston']),
 };
 
 // Relative weight of each artist in each era. Unlisted artists are absent.
@@ -33,7 +36,8 @@ const ERAS = [
   { until: '2020-12', w: { 'Frank Ocean': 3, 'Billie Eilish': 8, 'Phoebe Bridgers': 11, 'Mac DeMarco': 5, 'Tyler, The Creator': 7, 'The Strokes': 3, 'Radiohead': 2, 'Fleetwood Mac': 2, 'Tame Impala': 1 } },
   { until: '2022-10', w: { 'Olivia Rodrigo': 6, 'Mitski': 10, 'Steve Lacy': 4, 'Beach House': 5, 'Frank Ocean': 5, 'Phoebe Bridgers': 4, 'Radiohead': 3, 'Fleetwood Mac': 2 } },
   { until: '2024-12', w: { 'SZA': 9, 'Clairo': 6, 'Chappell Roan': 10, 'Charli xcx': 6, 'Sabrina Carpenter': 5, 'Frank Ocean': 3, 'Mitski': 2, 'Fleetwood Mac': 1 } },
-  { until: '2099-12', w: { 'Kendrick Lamar': 8, 'Billie Eilish': 7, 'Clairo': 5, 'Laufey': 4, 'Djo': 5, 'Lorde': 7, 'Chappell Roan': 3, 'Frank Ocean': 3 } },
+  { until: '2026-06', w: { 'Kendrick Lamar': 8, 'Billie Eilish': 7, 'Clairo': 5, 'Laufey': 4, 'Djo': 5, 'Lorde': 7, 'Chappell Roan': 3, 'Frank Ocean': 3 } },
+  { until: '2099-12', w: { 'The Marías': 10, 'Magdalena Bay': 9, 'Faye Webster': 7, 'Clairo': 6, 'Kendrick Lamar': 3, 'Djo': 4, 'Chappell Roan': 4, 'Lorde': 3, 'Billie Eilish': 2, 'Mitski': 2 } },
 ];
 // Newer albums only exist from their release month.
 const RELEASED = {
@@ -67,7 +71,8 @@ export function sampleArchive() {
   const HOURS = [5, 3, 1.5, .6, .3, .3, 1, 4, 6, 4, 3, 3, 4, 4, 4, 5, 6, 7, 6, 6, 7, 8, 9, 8].map((w, h) => [h, w]);
   const rows = [];
   const start = new Date(2017, 8, 3);
-  const end = new Date();
+  // A complete-day snapshot survives reloads without re-running the AI jobs.
+  const end = new Date(new Date().setHours(0, 0, 0, 0));
   for (let day = new Date(start); day < end; day.setDate(day.getDate() + 1)) {
     const key = ym(day);
     const era = ERAS.find((e) => key <= e.until);
@@ -113,6 +118,7 @@ export function sampleArchive() {
 
 /* ---------- Live demo profile ---------- */
 const NOW_ROTATION = [
+  ['No One Noticed', 'The Marías'], ['Image', 'Magdalena Bay'], ['Kingston', 'Faye Webster'],
   ['Birds of a Feather', 'Billie Eilish'], ['What Was That', 'Lorde'], ['luther', 'Kendrick Lamar'], ['End of Beginning', 'Djo'],
   ['Juna', 'Clairo'], ['From the Start', 'Laufey'], ['Nights', 'Frank Ocean'], ['tv off', 'Kendrick Lamar'], ['Wildflower', 'Billie Eilish'],
   ['Sexy to Someone', 'Clairo'], ['HOT TO GO!', 'Chappell Roan'], ['Supercut', 'Lorde'],
@@ -129,5 +135,7 @@ export function demoRecent(count = 20) {
 }
 
 export const DEMO_USER = { name: 'mira_spins', display: 'Mira', image: '', playcount: 0, since: new Date(2017, 8, 3).getTime(), url: '' };
+export const DEMO_NOTES = 'Your journey began with a heavy Lorde obsession that lasted through your first two years, before you shifted into a long era defined by Phoebe Bridgers and Mitski. What stands out most is your loyalty to Frank Ocean, who has appeared in your rotation every single year since you started.';
+export const DEMO_ROAST = 'You played Nobody by Mitski 19 times in one day, and your busiest hour is 10 pm, which tells me you only schedule your emotional crises for after everyone else goes to sleep.';
 
 export const wait = (ms) => new Promise((r) => setTimeout(r, ms));

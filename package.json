@@ -1,0 +1,29 @@
+{
+  "name": "sleeve",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "A personal listening record from Last.fm and local music history archives.",
+  "engines": {
+    "node": ">=22.0.0 <25"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "check:secrets:history": "node scripts/check-secrets.mjs --history",
+    "build": "node scripts/build.mjs",
+    "build:functions": "wrangler pages functions build functions --outfile .wrangler/build/worker.mjs",
+    "budget:dry-run": "wrangler deploy --config ai-budget/wrangler.jsonc --dry-run --outdir .wrangler/build/ai-budget",
+    "check": "npm run check:secrets && npm test && npm run build && npm run check:secrets && npm run build:functions && npm run budget:dry-run",
+    "preview": "npm run build && wrangler pages dev dist --port 5178",
+    "deploy:budget": "wrangler deploy --config ai-budget/wrangler.jsonc",
+    "deploy:preview": "npm run check && wrangler pages deploy dist --project-name liner --branch sleeve-preview"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  },
+  "dependencies": {
+    "jszip": "3.10.1"
+  }
+}

@@ -19,14 +19,14 @@ function cleanUsername(v) {
   return v.trim().replace(/^@/, '');
 }
 
-export function mountLookup(root, { source = 'lastfm', id, cta = 'Continue', initial = '', onConfirm }) {
+export function mountLookup(root, { source = 'lastfm', id, cta = 'Continue', initial = '', label = '', onConfirm }) {
   const src = SOURCES[source];
   const hint = source === 'lastfm'
     ? 'No password needed. Last.fm profiles are public, so your username is enough. Pasting your profile link works too.'
     : 'No password or key needed. ListenBrainz is open, so your username is enough.';
   root.innerHTML = `
     <form class="lookup" novalidate>
-      <label class="sr" for="${id}">Your ${src.label} username</label>
+      <label class="${label?'lookup__label':'sr'}" for="${id}">${esc(label||`Your ${src.label} username`)}</label>
       <div class="lookup__field">
         <span class="lookup__prefix">${PREFIX[source]}</span>
         <input class="lookup__input" id="${id}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="your username" maxlength="120" value="${esc(initial)}">
@@ -43,10 +43,10 @@ export function mountLookup(root, { source = 'lastfm', id, cta = 'Continue', ini
 
   async function run(name) {
     ctrl?.abort();
+    const my = ++seq;
     result = null; queried = name; ready(false);
     if (!name) { out.innerHTML = idle; busy = false; return; }
     if (!src.USERNAME_RE.test(name)) { busy = false; wantSubmit = false; out.innerHTML = `<p class="lookup__msg">${src.usernameRule}</p>`; return; }
-    const my = ++seq;
     ctrl = new AbortController();
     busy = true;
     out.innerHTML = '<div class="skel"><i style="width:48px;height:48px;border-radius:50%"></i><span style="flex:1;display:grid;gap:8px"><i style="width:40%;height:12px"></i><i style="width:72%;height:12px"></i></span></div>';
@@ -60,26 +60,30 @@ export function mountLookup(root, { source = 'lastfm', id, cta = 'Continue', ini
     } catch (e) {
       if (e.name === 'AbortError' || my !== seq) return;
       out.innerHTML = e.code === 'notfound'
-        ? `<p class="lookup__msg lookup__msg--bad">There's no ${src.label} user called <b>${esc(name)}</b>. Check the spelling, or <a href="#/connect/${source}">set up an account</a> in about a minute.</p>`
+        ? `<p class="lookup__msg lookup__msg--bad">There's no ${src.label} user called <b>${esc(name)}</b>. Check the spelling, or <a href="#/connect/${source}">set up an account</a>.</p>`
         : `<p class="lookup__msg lookup__msg--bad">${esc(e.message || 'Something went wrong. Try again.')}</p>`;
     } finally {
       if (my === seq) { busy = false; wantSubmit = false; }
     }
   }
   const later = debounce(run, 360);
-  onLeave(() => ctrl?.abort());
+  onLeave(() => { later.cancel(); ctrl?.abort(); });
 
   input.addEventListener('input', () => {
     const name = cleanUsername(input.value);
     if (/(last\.fm|listenbrainz\.org)\//i.test(input.value)) input.value = name;
     wantSubmit = false;
     if (name === queried && (result || busy)) return;
+    ctrl?.abort(); ++seq; result = null; busy = false;
+    out.innerHTML = idle;
     ready(false);
     later(name);
   });
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    later.cancel();
     const name = cleanUsername(input.value);
+    if(!name){out.innerHTML=`<p class="lookup__msg lookup__msg--bad">Enter your ${src.label} username or paste your profile link.</p>`;input.focus();return;}
     if (result && name === queried) return confirm();
     wantSubmit = true;
     if (name !== queried || !busy) run(name);
@@ -129,7 +133,7 @@ function lfmFlow(step) {
   if (step === 1) {
     shell({ back, label, n: 4, cur: 1, body: `
       <h1>Make a free Last.fm account</h1>
-      <p class="flow__lede">Last.fm keeps a log of every song you play on Spotify, on any device. Liner reads that log to build your stats. Signing up takes about 30 seconds.</p>
+      <p class="flow__lede">Last.fm keeps a log of songs you play on Spotify, across your devices. Sleeve reads that log to build your stats. A new account starts recording from now on; it won't contain your older Spotify plays.</p>
       <div class="flow__actions">
         ${ext('https://www.last.fm/join', `Open Last.fm sign-up ${icon.out}`, 'btn btn--ink btn--lg')}
         <a class="btn btn--line btn--lg" href="#/connect/lastfm/3">I already have an account</a>
@@ -186,7 +190,7 @@ function lbFlow(step) {
   if (step === 1) {
     shell({ back, label, n: 3, cur: 1, body: `
       <h1>Make a free ListenBrainz account</h1>
-      <p class="flow__lede">ListenBrainz is an open, non-profit alternative to Last.fm run by MetaBrainz. It logs what you play on Spotify, and anyone can read that log, so Liner needs no key.</p>
+      <p class="flow__lede">ListenBrainz is an open, non-profit alternative to Last.fm run by MetaBrainz. It can log new Spotify plays, and Sleeve can read them without an API key. A new account won't contain your older Spotify plays.</p>
       <div class="flow__actions">
         ${ext('https://listenbrainz.org/login/', `Open ListenBrainz ${icon.out}`, 'btn btn--ink btn--lg')}
         <a class="btn btn--line btn--lg" href="#/connect/listenbrainz/3">I already use it</a>
@@ -241,8 +245,10 @@ function detectStep(source, name, chrome) {
   const tick = setInterval(() => {
     const s = (Date.now() - started) / 1000;
     $('#elapsed').textContent = clock(s);
-    if (s >= 20 && s < 21.2) $('#hint').textContent = `Spotify can take up to 30 seconds to tell ${src.label}. Keep the song playing.`;
-    if (s >= 45) showTrouble(source, name);
+    if (s >= 20 && s < 21.2) $('#hint').textContent = source === 'listenbrainz'
+      ? 'ListenBrainz can take a few minutes to record a new Spotify play. Keep listening.'
+      : 'Last.fm may take a little while to record your play. Keep listening.';
+    if (s >= (source === 'listenbrainz' ? 120 : 45)) showTrouble(source, name);
   }, 1000);
   const stop = () => { stopped = true; clearInterval(tick); clearTimeout(timer); ctrl.abort(); };
   onLeave(stop);
@@ -273,7 +279,7 @@ function showTrouble(source, name) {
     <ol>
       <li><b>The song is really playing</b>, not paused, and it's music rather than a podcast.</li>
       <li><b>Private session is off</b> in Spotify. Private listening is never shared.</li>
-      <li><b>Spotify is connected.</b> On ${ext(LFM_APPS, 'Last.fm Applications')}, Spotify Scrobbling should say Disconnect. If it says Connect, press it.</li>
+      <li><b>Spotify is connected.</b> ${source === 'lastfm' ? `On ${ext(LFM_APPS, 'Last.fm Applications')}, Spotify Scrobbling should say Disconnect. If it says Connect, press it.` : `Check the Spotify connection in ${ext(LB_SERVICES, 'ListenBrainz Connect services')}.`}</li>
       <li><b>The username is right.</b> We're listening for <b>${esc(name)}</b>. <a href="#/connect/${source}/3">Change it</a></li>
     </ol>
   </div>`;
@@ -287,7 +293,7 @@ function detected(source, name, t) {
     ${sleeve(t.album || t.name, t.artist, { img: t.image, size: 200 })}
     <span class="chip chip--good"><span class="dot dot--live"></span>${t.nowPlaying ? 'Heard it live' : 'Found it'}</span>
     <h2>You're connected.</h2>
-    <p>${t.nowPlaying ? "You're listening to" : 'You just played'} <b>${esc(t.name)}</b> by <b>${esc(t.artist)}</b>. From now on, every song you play shows up in Liner by itself.</p>
+    <p>${t.nowPlaying ? "You're listening to" : 'You just played'} <b>${esc(t.name)}</b> by <b>${esc(t.artist)}</b>. From now on, every song you play shows up in Sleeve by itself.</p>
     <div class="flow__actions" style="justify-content:center"><a class="btn btn--ink btn--lg" href="${hrefFor(pid)}" id="open">Open my stats ${icon.arrow}</a></div>
   </div>`;
   $('#trouble').hidden = true;
@@ -299,21 +305,21 @@ function detected(source, name, t) {
 export const requestSteps = `
   <ol class="steplist">
     <li><span class="n">1</span><div><b>Open Spotify's privacy page</b><p>${ext(SPOTIFY_PRIVACY, 'spotify.com/account/privacy')}, then sign in.</p></div></li>
-    <li><span class="n">2</span><div><b>Tick "Extended streaming history"</b><p>The default option only covers the last year. The extended one has every play since you made your account.</p></div></li>
-    <li><span class="n">3</span><div><b>Request it and confirm the email</b><p>Spotify sends a confirmation link first. Your files come in a second email, usually within a few days. Spotify says it can take up to 30.</p></div></li>
-    <li><span class="n">4</span><div><b>Drop the ZIP into Liner</b><p>No need to unzip it. It's read right here on your device.</p></div></li>
+    <li><span class="n">2</span><div><b>Request Account data and Extended streaming history</b><p>Account data includes roughly the last year of plays. Extended history covers the life of your account, with more detail. You can add either file when it arrives.</p></div></li>
+    <li><span class="n">3</span><div><b>Confirm the request by email</b><p>Spotify sends a confirmation link first, then prepares the files. Extended history can take around 30 days.</p></div></li>
+    <li><span class="n">4</span><div><b>Drop the ZIP into Sleeve</b><p>No need to unzip it. It's read right here on your device.</p></div></li>
   </ol>`;
 
 function fileFlow() {
   shell({ label: 'Spotify export', body: `
-    <h1>Your whole history, straight from Spotify</h1>
-    <p class="flow__lede">Spotify will send you every play since you made your account, with exact listening time, skips, shuffle and devices. It's the most complete record there is.</p>
+    <h1>Add your Spotify listening history</h1>
+    <p class="flow__lede">Spotify's Account Data includes roughly the last year of plays. Extended Streaming History covers your account's lifetime with details such as listening time, skips, shuffle and devices.</p>
     ${dropzone({ big: true, title: 'Drop your Spotify ZIP here', sub: 'or click to choose it. It never leaves your device.' })}
     <div class="panel">
       <div class="panel__head"><h2>Don't have it yet?</h2><span class="label">Takes 2 minutes</span></div>
       ${requestSteps}
     </div>
-    <p class="flow__note">Waiting for Spotify? Connect ${'<a href="#/connect/lastfm">Last.fm</a>'} or ${'<a href="#/connect/listenbrainz">ListenBrainz</a>'} now and you'll have stats in the meantime.</p>` });
+    <p class="flow__note">Waiting for Spotify? ${'<a href="#/connect/lastfm">Last.fm</a>'} can start recording new plays now. A newly created log won't contain your older Spotify plays.</p>` });
   bindDrops(view(), handleFiles);
 }
 
@@ -324,13 +330,13 @@ function spotifyFlow() {
   const connected = spotify.isConnected();
   shell({ label: 'Spotify direct · Advanced', body: `
     <h1>Connect Spotify directly</h1>
-    <p class="flow__lede">For enthusiasts. You make your own free Spotify developer app, and Liner signs in through it. You get what's playing with live progress, your last 50 plays, Spotify's own top lists, and skip tracking while Liner is open.</p>
+    <p class="flow__lede">For enthusiasts. You make your own free Spotify developer app, and Sleeve signs in through it. You get what's playing with live progress, your last 50 plays, Spotify's own top lists, and skip tracking while Sleeve is open.</p>
     ${connected ? `<div class="banner"><span>${icon.check} Spotify is connected in this browser.</span><a class="link" href="#/spotify">Open my stats ${icon.arrow}</a></div>` : ''}
     ${onLocalhost ? `<div class="banner banner--warn"><span>Spotify only accepts <code>127.0.0.1</code> for apps running on your own computer, not <code>localhost</code>.</span><a class="link" href="${altUrl}">Switch to 127.0.0.1</a></div>` : ''}
     <p class="flow__note">You'll need <b>Spotify Premium</b>, which Spotify requires for developer apps. It takes about 5 minutes.</p>
     <ol class="steplist">
       <li><span class="n">1</span><div><b>Open the Spotify developer dashboard</b><p>${ext('https://developer.spotify.com/dashboard', 'developer.spotify.com/dashboard')}. Log in with your normal Spotify account and accept the terms if asked.</p></div></li>
-      <li><span class="n">2</span><div><b>Create an app</b><p>Press <b>Create app</b>. The name and description can be anything, like "My Liner".</p></div></li>
+      <li><span class="n">2</span><div><b>Create an app</b><p>Press <b>Create app</b>. The name and description can be anything, like "My Sleeve".</p></div></li>
       <li><span class="n">3</span><div><b>Add this redirect address</b><p>Paste it into <b>Redirect URIs</b> exactly as shown, tick <b>Web API</b>, and save.</p>
         <div class="copyline"><code id="redir">${esc(spotify.redirectUri())}</code><button type="button" class="btn btn--line btn--sm" id="copy-redir">Copy</button></div></div></li>
       <li><span class="n">4</span><div><b>Paste your Client ID</b><p>Open the app's <b>Settings</b> and copy the Client ID.</p>

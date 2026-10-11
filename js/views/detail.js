@@ -1,9 +1,10 @@
 // Artist, song and year pages, plus the pieces that link into them.
 import { $, $$, esc, sleeve, trackSleeve, num, pct, plural, fullDate, longMonth, monthYear, span, icon, toast } from '../ui.js';
-import { hrefFor } from '../core.js';
+import { hrefFor, onLeave } from '../core.js';
 import { topIn, lowerBound } from '../analysis.js';
 import { rankList, insightCard } from '../components.js';
 import { artistInfo, cachedArtist } from '../meta.js';
+import { exclusionButton } from './filters.js';
 
 const DAY = 864e5;
 const enc = encodeURIComponent;
@@ -41,7 +42,7 @@ function monthBars(A, counts, height = 120) {
 }
 
 function notFound(what, back) {
-  return `<div class="flow"><span class="label">Not in your history</span><h1>No plays of ${esc(what)}</h1><p class="flow__lede">It isn't in the history Liner has for this profile${back ? ', or it was filtered out by your counting rule' : ''}.</p><div class="flow__actions"><a class="btn btn--line" href="${back}">${icon.back} Back</a></div></div>`;
+  return `<div class="flow"><span class="label">Not in your history</span><h1>No plays of ${esc(what)}</h1><p class="flow__lede">It isn't in the history Sleeve has for this profile${back ? ', or it was filtered out by your counting rule' : ''}.</p><div class="flow__actions"><a class="btn btn--line" href="${back}">${icon.back} Back</a></div></div>`;
 }
 
 /* ---------- Artist ---------- */
@@ -53,6 +54,8 @@ export function artistPage(ctx, name) {
   const a = A.artists[idx];
   const counts = perMonth(A, a.times);
   const peakI = counts.indexOf(Math.max(...counts));
+  const repeatI = counts.findIndex((count) => count >= 3);
+  const recent90 = a.times.filter((t) => t >= A.to - 90 * DAY).length;
   let ms = 0, known = 0;
   for (const r of A.rows) if (r.artist === a.name && r.ms != null) { ms += r.ms; known++; }
   const hours = (ms + (a.n - known) * 3.4 * 60000) / 3.6e6;
@@ -71,6 +74,7 @@ export function artistPage(ctx, name) {
         <span class="label">Artist · No. ${idx + 1} of ${num(A.artists.length)}</span>
         <h1>${esc(a.name)}</h1>
         <div class="dhead__meta" id="artist-meta">${metaChips(info)}</div>
+        ${exclusionButton('artist',a.name)}
       </div>
     </header>
     <div class="stats">
@@ -79,8 +83,15 @@ export function artistPage(ctx, name) {
       <div><b>${A.hasMs && known === a.n ? '' : '≈'}${num(hours)}</b><span>hours</span></div>
       <div><b>${plural(activeYears, 'year')}</b><span>you've played them in</span></div>
     </div>
-    <section class="panel" style="margin-top:16px">
-      <div class="panel__head"><h2>Your plays over time</h2><span class="label">Peak: ${longMonth(A.months[peakI].start)}, ${num(counts[peakI])} plays</span></div>
+    <section class="panel artist-journey" style="margin-top:16px">
+      <div class="panel__head"><div><span class="label">FROM FIRST PLAY TO NOW</span><h2>Your history with ${esc(a.name)}</h2></div><span class="label">${num(a.n)} recorded plays</span></div>
+      <div class="artist-journey__steps">
+        <div><span>01 / FIRST HEARD</span><b>${monthYear(a.first)}</b><small>${esc(a.firstTrack)} on ${fullDate(a.first)}</small></div>
+        <div><span>02 / IN ROTATION</span><b>${repeatI >= 0 ? monthYear(A.months[repeatI].start) : 'Still unfolding'}</b><small>${repeatI >= 0 ? `${num(counts[repeatI])} plays that month` : 'No month has three plays yet'}</small></div>
+        <div><span>03 / BIGGEST MONTH</span><b>${monthYear(A.months[peakI].start)}</b><small>${num(counts[peakI])} plays</small></div>
+        <div><span>04 / LAST 90 DAYS</span><b>${num(recent90)} plays</b><small>${recent90 ? `Most recent: ${fullDate(a.last)}` : 'Not in your recent rotation'}</small></div>
+      </div>
+      <p class="artist-journey__caption">Each bar is a calendar month. The first and most recent months may be incomplete.</p>
       ${monthBars(A, counts)}
     </section>
     <div class="grid" style="margin-top:16px">
@@ -142,6 +153,7 @@ export function songPage(ctx, artist, track) {
         <span class="label">Song · No. ${idx + 1} of ${num(A.tracks.length)}</span>
         <h1>${esc(t.track)}</h1>
         <div class="dhead__meta"><a href="${L.artist(t.artist)}">${esc(t.artist)}</a>${t.album ? `<span>${esc(t.album)}</span>` : ''}</div>
+        ${exclusionButton('track',t.track,t.artist)}
       </div>
     </header>
     <div class="stats">
@@ -253,7 +265,7 @@ async function shareCard(c, who) {
   g.globalAlpha = 1; g.fillStyle = v('--accent'); g.beginPath(); g.arc(0, 0, 70, 0, Math.PI * 2); g.fill();
   g.restore();
   const text = (s, x, y, font, color, max) => { g.font = font; g.fillStyle = color; let t = s; while (max && g.measureText(t).width > max && t.length > 3) t = `${t.slice(0, -2)}…`; g.fillText(t, x, y); };
-  text('LINER · YEAR IN MUSIC', 80, 110, `400 26px ${mono}`, v('--ink-3'));
+  text('SLEEVE · YEAR IN MUSIC', 80, 110, `400 26px ${mono}`, v('--ink-3'));
   text(String(c.y), 72, 330, `500 230px ${disp}`, v('--ink'));
   text(`${who}`, 80, 400, `500 40px ${disp}`, v('--ink-2'), 560);
   const stat = (label, val, x) => { text(val, x, 530, `500 76px ${disp}`, v('--ink')); text(label.toUpperCase(), x, 575, `400 22px ${mono}`, v('--ink-3')); };
@@ -265,14 +277,14 @@ async function shareCard(c, who) {
   c.tracks.forEach((t, i) => { text(t.name, 560, 770 + i * 62, `500 ${i ? 36 : 40}px ${disp}`, v('--ink'), 440); });
   g.fillStyle = v('--line'); g.fillRect(80, 1130, W - 160, 2);
   if (c.discovered) text(`Best discovery: ${c.discovered}`, 80, 1200, `400 32px ${disp}`, v('--ink-2'), W - 160);
-  text('Made with Liner', 80, 1270, `400 24px ${mono}`, v('--ink-3'));
+  text('Made with Sleeve', 80, 1270, `400 24px ${mono}`, v('--ink-3'));
   cv.toBlob((blob) => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `liner-${c.y}.png`;
+    a.download = `sleeve-${c.y}.png`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    toast(`Saved liner-${c.y}.png`);
+    toast(`Saved sleeve-${c.y}.png`);
   }, 'image/png');
 }
 
@@ -305,7 +317,7 @@ export function onThisDay(A, L) {
 /* ---------- Search ---------- */
 export function mountSearch(root, A, L) {
   if (!root || !A) return;
-  root.innerHTML = `<div class="search"><label class="sr" for="q">Search your history</label><input id="q" class="search__input" type="search" placeholder="Search ${num(A.artists.length)} artists and ${num(A.tracks.length)} songs" autocomplete="off"><div class="search__out" hidden></div></div>`;
+  root.innerHTML = `<div class="search"><label class="sr" for="q">Search your history</label><input id="q" class="search__input" type="search" placeholder="Search" autocomplete="off"><div class="search__out" hidden></div></div>`;
   const input = $('#q', root), out = $('.search__out', root);
   const run = () => {
     const q = input.value.trim().toLowerCase();
@@ -323,8 +335,14 @@ export function mountSearch(root, A, L) {
     if (e.key === 'Escape') { input.value = ''; out.hidden = true; input.blur(); }
     if (e.key === 'Enter') { const first = $('a', out); if (first) location.hash = first.getAttribute('href'); }
   });
-  document.addEventListener('click', (e) => { if (!root.contains(e.target)) out.hidden = true; });
-  document.addEventListener('keydown', (e) => { if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); input.focus(); } });
+  const outside = (e) => { if (!root.contains(e.target)) out.hidden = true; };
+  const shortcut = (e) => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
+    e.preventDefault(); input.focus();
+  };
+  document.addEventListener('click', outside);
+  document.addEventListener('keydown', shortcut);
+  onLeave(() => { document.removeEventListener('click', outside); document.removeEventListener('keydown', shortcut); });
 }
 
 /* ---------- Genres ---------- */
@@ -332,6 +350,7 @@ export function mountSearch(root, A, L) {
 // so this re-renders as more artists are looked up.
 export function genres(items, onUpdate) {
   const pending = items.filter((a) => !cachedArtist(a.name));
+  const unavailable = items.some((a) => cachedArtist(a.name)?.unavailable);
   const tally = new Map();
   let covered = 0;
   for (const a of items) {
@@ -351,7 +370,7 @@ export function genres(items, onUpdate) {
       if (alive) onUpdate();
     }
   })();
-  return { list: [...tally.values()].sort((a, b) => b.plays - a.plays), pending: pending.length, covered, stop: () => { alive = false; } };
+  return { list: [...tally.values()].sort((a, b) => b.plays - a.plays), pending: pending.length, covered, unavailable, stop: () => { alive = false; } };
 }
 
 export function genresHTML(g, total) {
@@ -361,7 +380,7 @@ export function genresHTML(g, total) {
       <div class="genres__top"><b>${esc(x.name)}</b><span class="mono faint">${total ? pct(x.plays / total) : num(x.plays)}</span></div>
       <span class="rank__bar"><i style="width:${(x.plays / max) * 100}%"></i></span>
       <span class="genres__who">${x.artists.slice(0, 4).map(esc).join(', ')}${x.artists.length > 4 ? ` and ${x.artists.length - 4} more` : ''}</span>
-    </li>`).join('')}</ol>` : '<p class="empty">No genres yet.</p>'}`;
+    </li>`).join('')}</ol>` : `<p class="empty">${g.pending ? 'Genres will appear as artist details load.' : g.unavailable ? 'MusicBrainz is unavailable right now. Try again later.' : 'No genres are listed for these artists.'}</p>`}`;
 }
 
 export { insightCard };

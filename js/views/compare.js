@@ -1,5 +1,5 @@
 // Compare two listeners' taste. Works for any two public Last.fm or ListenBrainz users.
-import { $, $$, esc, sleeve, trackSleeve, num, icon, avatar, plural } from '../ui.js';
+import { $, esc, sleeve, trackSleeve, num, icon, avatar, plural } from '../ui.js';
 import { SOURCES, view, onLeave, go, hrefFor, pidFor } from '../core.js';
 import { rankList } from '../components.js';
 
@@ -13,12 +13,8 @@ export function renderCompare(source = 'lastfm', a = '', b = '') {
       <header class="cmp-head">
         <span class="label">Compare</span>
         <h1>How close is your taste?</h1>
-        <p class="flow__lede">Put in two usernames. Liner compares your all-time top artists and songs, then shows what you share and what you'd each get from the other.</p>
+        <p class="flow__lede">Put in two ${source === 'listenbrainz' ? 'ListenBrainz' : 'Last.fm'} usernames. Sleeve compares your all-time top artists and songs, then shows what you share and what you'd each get from the other.</p>
         <form class="cmp-form" id="cmp-form" novalidate>
-          <div class="seg" role="radiogroup" aria-label="Source">
-            <button type="button" role="radio" data-src="lastfm" aria-checked="${source === 'lastfm'}">Last.fm</button>
-            <button type="button" role="radio" data-src="listenbrainz" aria-checked="${source === 'listenbrainz'}">ListenBrainz</button>
-          </div>
           <div class="cmp-inputs">
             <label class="sr" for="cmp-a">First username</label>
             <input class="input" id="cmp-a" placeholder="Your username" value="${esc(a)}" autocomplete="off" spellcheck="false">
@@ -31,11 +27,7 @@ export function renderCompare(source = 'lastfm', a = '', b = '') {
       </header>
       <div id="cmp-out">${ready ? loading() : ''}</div>
     </div>`;
-  let src = source;
-  $$('[data-src]').forEach((btn) => btn.addEventListener('click', () => {
-    src = btn.dataset.src;
-    $$('[data-src]').forEach((x) => x.setAttribute('aria-checked', String(x === btn)));
-  }));
+  const src = source;
   $('#cmp-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const x = $('#cmp-a').value.trim(), y = $('#cmp-b').value.trim();

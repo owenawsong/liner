@@ -1,8 +1,16 @@
 {
-  // Cloudflare Workers: serve this folder as a static site.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Pages Functions compile from functions/; only dist/ is public.
   "name": "liner",
   "compatibility_date": "2026-09-01",
-  "assets": {
-    "directory": "./"
-  }
+  "pages_build_output_dir": "./dist",
+  "vars": { "NODE_VERSION": "22", "AI_BUDGET_REQUIRED": "1" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "AI_BUDGET", "class_name": "AIBudget", "script_name": "sleeve-ai-budget" }
+    ]
+  },
+  // Preview AI fails closed, rather than spending the production shared quota.
+  // Provision a separate budget Worker before deliberately enabling preview AI.
+  "env": { "preview": { "vars": { "NODE_VERSION": "22", "AI_BUDGET_REQUIRED": "1" }, "durable_objects": { "bindings": [] } } }
 }

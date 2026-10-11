@@ -95,6 +95,7 @@ export function analyze(all, { minMs = 30000 } = {}) {
 
   A.artists = [...artists.values()].sort((x, y) => y.n - x.n);
   A.tracks = [...tracks.values()].sort((x, y) => y.n - x.n);
+  A.trackAlbums = new Map([...tracks].map(([key, value]) => [key, value.album]));
   A.albums = [...albums.values()].sort((x, y) => y.n - x.n);
   A.heat = heat;
   A.days = days;
@@ -162,7 +163,7 @@ export function topIn(A, kind, from = -Infinity, to = Infinity, limit = 25, metr
     const n = Math.round(v);
     if (kind === 'artists') return { name: k, artist: '', plays: n, unit };
     const [name, artist] = k.split('\u0000');
-    const album = kind === 'tracks' ? A.tracks.find((t) => t.track === name && t.artist === artist)?.album : name;
+    const album = kind === 'tracks' ? A.trackAlbums?.get(k) : name;
     return { name, artist, plays: n, album, unit };
   });
 }
@@ -171,6 +172,16 @@ export function monthDetail(A, idx) {
   const mo = A.months[idx];
   const to = new Date(mo.y, mo.m + 1, 1).getTime();
   return { month: mo, artists: topIn(A, 'artists', mo.start, to, 5), tracks: topIn(A, 'tracks', mo.start, to, 5) };
+}
+
+export function monthStory(A, idx) {
+  const month = A.months[idx], to = new Date(month.y, month.m + 1, 1).getTime();
+  const fromIndex = lowerBound(A.rows, month.start), toIndex = lowerBound(A.rows, to);
+  const activeDays = new Set(A.rows.slice(fromIndex, toIndex).map((r) => new Date(r.t).toDateString())).size;
+  const newArtists = A.artists.filter((a) => a.first >= month.start && a.first < to).length;
+  const now = new Date();
+  return { month, activeDays, newArtists, previous: A.months[idx - 1] || null, yearAgo: A.months[idx - 12] || null,
+    current: month.y === now.getFullYear() && month.m === now.getMonth() };
 }
 
 /* ---------- Insights ---------- */

@@ -1,0 +1,119 @@
+/* Record-led discovery. Artwork, a listening reason and an actual first track. */
+#tab .disc-head { padding: 16px 0 22px; gap: 24px; grid-template-columns: minmax(0,1fr) auto; border-top: 0; }
+#tab .disc-head h2 { font: 650 clamp(30px,3.8vw,46px)/1.04 var(--f-display); letter-spacing: -.045em; text-transform: none; margin: 8px 0 10px; }
+#tab .disc-head p { font-size: 14px; max-width: 69ch; line-height: 1.5; }
+#tab .disc-head > .link { margin: 0 0 5px; font-size: 12px; white-space: nowrap; }
+#tab .disc-status { text-transform: none; letter-spacing: 0; min-height: 0; margin: 12px 0 7px; font: 12px/1.45 var(--f-mono); }
+#tab .disc-starts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0 30px; margin: 22px 0 32px; }
+.disc-start { min-width: 0; display: flex; flex-direction: column; position: relative; border-top: 2px solid var(--accent); }
+.disc-start--explore { border-color: var(--c1); }
+.disc-start--revisit { border-color: var(--c2); }
+.disc-start__mast { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 0; }
+.disc-start__mast > span:first-child { color: var(--accent); font: 12px var(--f-mono); }
+.disc-start--explore .disc-start__mast > span:first-child { color: var(--c1); }
+.disc-start--revisit .disc-start__mast > span:first-child { color: var(--c2); }
+.disc-start__mast .label { font-size: 12px; text-align: right; letter-spacing: .045em; }
+.disc-start__cover { width: 100%; aspect-ratio: 1; background: var(--bg-2); overflow: hidden; }
+.disc-start__cover .sleeve { --s: 100% !important; width: 100%; height: 100%; border-radius: 0; }
+.disc-start__cover img { object-fit: cover; }
+.disc-start__body { flex: 1; display: flex; flex-direction: column; align-items: start; padding: 16px 0 0; min-width: 0; }
+.disc-start__body > .label { font-size: 12px; }
+.disc-start h3 { font: 650 clamp(24px,2.5vw,32px)/1.07 var(--f-display); letter-spacing: -.045em; margin: 8px 0 5px; overflow-wrap: anywhere; }
+.disc-start__artist { font-size: 14px; color: var(--ink-2); }
+.disc-start__why { color: var(--ink-2); font-size: 14px; line-height: 1.55; margin: 15px 0 16px; }
+.disc-start__track { width: 100%; border-top: 1px solid var(--line-2); padding: 12px 0; margin-top: auto; }
+.disc-start__track .label { font-size: 12px; }
+.disc-start__track a { color: var(--ink); display: flex; justify-content: space-between; gap: 14px; margin: 7px 0 4px; text-decoration: none; font-size: 14px; }
+.disc-start__track a:hover b { text-decoration: underline; text-underline-offset: 4px; }
+.disc-start__track small { font: 12px/1.4 var(--f-mono); color: var(--ink-3); display: block; }
+.disc-start__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; width: 100%; margin-top: 6px; }
+.disc-start__actions .btn { padding: 10px 13px; font-size: 12px; border-radius: 2px; }
+.disc-start__actions > div { display: flex; align-items: center; gap: 11px; }
+.disc-start__actions button { border: 0; background: none; color: var(--ink-2); cursor: pointer; font: 12px var(--f-body); padding: 7px 0; text-decoration: underline; text-underline-offset: 3px; }
+.disc-start__actions button:hover { color: var(--ink); }
+.disc-start__actions button[aria-pressed=true] { color: var(--good); }
+.disc-start__opinion { font: 12px/1.4 var(--f-mono); color: var(--ink-3); margin-top: 15px; text-underline-offset: 3px; }
+.disc-start__opinions { font-size: 12px; color: var(--ink-3); margin-top: 12px; }
+.disc-start__opinions summary { cursor: pointer; }
+.disc-start__opinions a { display: block; color: var(--ink-2); margin-top: 9px; text-underline-offset: 3px; }
+.disc-start-placeholder { grid-column: 1/-1; padding: 26px 0 34px; border-bottom: 1px solid var(--line); }
+.disc-start-placeholder p { font-size: 14px; line-height: 1.5; max-width: 56ch; color: var(--ink-2); margin-top: 10px; }
+#tab .disc-seeds { margin: 0 0 18px; }
+#tab .disc-artist-browser { border-block: 1px solid var(--line-2); padding: 0; margin: 0 0 34px; }
+.disc-artist-browser > summary { padding: 16px 0; cursor: pointer; font: 550 17px var(--f-display); }
+.disc-artist-browser > summary .label { margin-left: 12px; font-size: 12px; }
+.disc-artist-browser .disc-toolbar { margin-top: 12px; }
+#tab .disc-feature__inner { grid-template-columns: 64px minmax(0,1fr); gap: 18px; min-height: 0; padding: 18px 0; background: none; color: var(--ink); border-bottom: 1px solid var(--line); }
+#tab .disc-feature__art { min-height: 0; height: 64px; width: 64px; aspect-ratio: 1; background: var(--bg-2); }
+#tab .disc-feature__body { padding: 0; gap: 8px; }
+#tab .disc-feature__body h3 { font: 600 23px/1.1 var(--f-display); }
+#tab .disc-feature__body > p { max-width: 80ch; color: var(--ink-2); font-size: 13px; }
+#tab .disc-feature__meta { color: var(--ink-3); }
+#tab .disc-feature .link, #tab .disc-feature .disc-save, #tab .disc-feature .disc-tools summary { color: var(--ink); }
+#tab .disc-feature .disc-controls, #tab .disc-feature .disc-tools__body { border-color: var(--line); }
+#tab .disc-feature .disc-actions button { color: var(--ink); border-color: var(--line); }
+#tab .disc-feature .disc-stars small { color: var(--ink-3); }
+#tab .disc-feature__loading { min-height: 90px; background: var(--bg-2); color: var(--ink); }
+#tab .disc-artist__body p { color: var(--ink-2); line-height: 1.5; }
+#tab .disc-artist__body > .link { display: inline-block; margin-top: 8px; font-size: 12px; }
+#tab .disc-album--lead { grid-template-columns: 22px 88px minmax(0,1fr) 148px; padding: 23px 0; margin: 0; background: none; border-top: 1px solid var(--line); }
+#tab .disc-album--lead h3 { font-size: clamp(24px,3vw,38px); }
+@media (max-width: 1050px) {
+  #tab .disc-starts { gap: 0 22px; }
+  .disc-start__actions > div { width: 100%; }
+  #tab .disc-album--lead { grid-template-columns: 22px minmax(90px,160px) minmax(0,1fr); }
+}
+@media (max-width: 760px) {
+  #tab .disc-head { grid-template-columns: 1fr; gap: 5px; }
+  #tab .disc-head > .link { justify-self: start; }
+  #tab .disc-starts { grid-template-columns: 1fr; gap: 26px; }
+  .disc-start { display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 0 16px; align-items: start; }
+  .disc-start__mast { grid-column: 1/-1; }
+  .disc-start__cover { grid-column: 1; }
+  .disc-start__body { grid-column: 2; padding: 0; }
+  .disc-start h3 { font-size: 24px; margin-top: 6px; }
+  .disc-start__artist { font-size: 13px; }
+  .disc-start__why { margin: 10px 0 12px; font-size: 14px; }
+  .disc-start__track a { font-size: 13px; }
+  .disc-start__actions { gap: 5px; }
+  .disc-start__actions button, .disc-start__actions .btn { min-height: 44px; }
+  .disc-start__actions > div { width: auto; }
+  #tab .disc-album--lead { grid-template-columns: 22px 96px minmax(0,1fr); gap: 12px; }
+}
+@media (max-width: 440px) {
+  .disc-start { grid-template-columns: 86px minmax(0,1fr); gap: 0 12px; }
+  .disc-start__mast .label { font-size: 12px; }
+  .disc-start h3 { font-size: 22px; }
+  .disc-start__track small { font-size: 12px; }
+  #tab .disc-album--lead { grid-template-columns: 18px 78px minmax(0,1fr); }
+  #tab .disc-feature__inner { grid-template-columns: 46px minmax(0,1fr); gap: 12px; }
+  #tab .disc-feature__art { width: 46px; height: 46px; }
+}
+
+/* Opinions are available when wanted, without competing with the next listen. */
+.disc-ratings { width:100%; margin-top:16px; font-size:12px; color:var(--ink-2); }
+.disc-ratings > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; list-style:none; padding:8px 0; border-top:1px solid var(--line-2); }
+.disc-ratings > summary::-webkit-details-marker { display:none; }
+.disc-ratings > summary span { transition:transform .15s; }
+.disc-ratings[open] > summary span { transform:rotate(45deg); }
+.disc-ratings > div { padding:6px 0 10px; }
+.disc-ratings a { display:block; color:var(--ink-2); text-underline-offset:3px; margin:9px 0; line-height:1.5; }
+.disc-ratings small { display:block; color:var(--ink-3); font-size:11px; line-height:1.5; max-width:42ch; }
+#tab .disc-community { align-self:start; padding:0; }
+#tab .disc-community .disc-ratings { margin-top:0; }
+#tab .disc-collection { border-top:1px solid var(--line); padding-top:0; min-width:0; }
+.disc-collection > summary { display:flex; justify-content:space-between; align-items:baseline; gap:18px; padding:20px 0; cursor:pointer; list-style:none; }
+.disc-collection > summary::-webkit-details-marker { display:none; }
+.disc-collection > summary > b { font:600 24px/1.2 var(--f-display); letter-spacing:-.03em; }
+.disc-collection > summary > span { font-size:12px; color:var(--ink-3); text-align:right; }
+.disc-collection > summary i { font-style:normal; display:inline-block; margin-left:8px; transition:transform .15s; }
+.disc-collection[open] > summary i { transform:rotate(45deg); }
+.disc-collection__body > p { margin:0 0 18px; font-size:13px; line-height:1.6; }
+.disc-show-shelf { margin:18px 0; }
+#disc-import-preview { padding:16px 0; margin-top:14px; border-top:1px solid var(--line); }
+#disc-import-preview h3 { font-size:16px; overflow-wrap:anywhere; margin-bottom:8px; }
+#disc-import-preview p { font-size:13px; line-height:1.6; color:var(--ink-2); }
+#disc-import-preview > div { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+@media(max-width:760px){.disc-collection > summary{gap:12px}.disc-collection > summary > b{font-size:22px}.disc-collection > summary > span{font-size:11px;max-width:48%}}
+@media(prefers-reduced-motion:reduce){.disc-ratings > summary span,.disc-collection > summary i{transition:none}}
+@media(max-width:700px){.disc-stars button{min-width:40px;min-height:44px}.disc-start__actions button,.disc-ratings>summary{min-height:44px}}

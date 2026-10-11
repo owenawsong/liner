@@ -1,0 +1,12 @@
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://ws.audioscrobbler.com https://api.listenbrainz.org https://api.spotify.com https://accounts.spotify.com https://musicbrainz.org https://critiquebrainz.org https://acousticbrainz.org https://itunes.apple.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+
+/sw.js
+  Cache-Control: no-cache
+
+/config.js
+  Cache-Control: no-cache

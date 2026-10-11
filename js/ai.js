@@ -2,36 +2,50 @@
 // their raw history. Answers are remembered in this browser too.
 import { $$, esc, num, pct, monthYear, idb, hourLabel } from './ui.js';
 import { topIn, lowerBound } from './analysis.js';
+import { evolution } from './evolution.js';
 import { cachedArtist } from './meta.js';
 
 const DAY = 864e5;
 const local = new Map();
+export const AI_VERSION = 'v19';
 
 async function key(s) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(buf)].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function write(task, facts, { question = '', fresh = false } = {}) {
-  const k = `ai:${task}:${await key(`${facts}|${question}`)}`;
+export async function write(task, facts, { question = '', fresh = false, signal } = {}) {
+  const version = task === 'year' ? 'v21' : AI_VERSION;
+  const k = `ai:${version}:${task}:${await key(`${facts}|${question}`)}`;
   if (!fresh) {
     if (local.has(k)) return local.get(k);
     const saved = await idb.get(k);
     if (saved) { local.set(k, saved); return saved; }
   }
-  let res;
+  if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const abort = () => ctrl.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, 60000);
+  let res, d;
   try {
     res = await fetch('/api/ai', {
       method: 'POST',
+      signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ task, facts, question, seed: fresh ? Date.now() : '' }),
     });
-  } catch {
-    throw new Error("Couldn't reach Liner's writer. Check your connection.");
-  }
+    d = await res.json().catch(() => ({}));
+  } catch (e) {
+    if (timedOut) throw new Error('The writer took too long. Try again.');
+    if (e.name === 'AbortError') throw e;
+    throw new Error("Couldn't reach Sleeve's writer. Check your connection.");
+  } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
   if (res.status === 404) throw new Error('AI writing only works on the live site.');
-  const d = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(d.error || 'The writer is busy. Try again in a moment.');
+  if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
+  if(typeof d.text!=='string'||!d.text.trim())throw new Error('The writer returned no usable text. Try again.');
   local.set(k, d.text);
   idb.set(k, d.text);
   return d.text;
@@ -61,9 +75,15 @@ export function facts(A, p, { year, detailed = false } = {}) {
     : `Listener: ${who}. Listening since ${monthYear(A.from)}. ${num(A.plays)} plays, about ${num(A.hours)} hours, ${num(A.artists.length)} artists, ${num(A.tracks.length)} songs.`);
   L.push(`Top artists: ${artists.map((a) => `${a.name} (${num(a.plays)})`).join(', ')}.`);
   L.push(`Top songs: ${tracks.map((t) => `${t.name} by ${t.artist} (${num(t.plays)})`).join('; ')}.`);
+  if (detailed) {
+    const E = evolution(A, A.to + 1);
+    L.push(`Taste change across the latest and previous 90 days: ${num(E.total)} vs ${num(E.previous)} plays, ${E.shift == null ? 'not enough data for a shift score' : `${E.shift}/100 shift`}, ${E.newArtists} newly heard artists, ${E.overlap} top-20 artists shared across both periods.`);
+    if (E.rising.length) L.push(`Artists gaining share: ${E.rising.slice(0, 5).map((x) => `${x.name} ${x.before} to ${x.plays} plays`).join('; ')}.`);
+    if (E.discoveries.length) L.push(`New discoveries: ${E.discoveries.slice(0, 5).map((x) => `${x.name} ${x.plays} plays`).join('; ')}.`);
+  }
   if (albums.length) L.push(`Top albums: ${albums.map((a) => `${a.name} by ${a.artist}`).join('; ')}.`);
   const genres = [...new Set(artists.slice(0, 12).map((a) => cachedArtist(a.name)?.tags?.[0]).filter(Boolean))];
-  if (genres.length) L.push(`Genres of their top artists: ${genres.slice(0, 6).join(', ')}.`);
+  if (detailed && genres.length) L.push(`Genres of their top artists: ${genres.slice(0, 6).join(', ')}.`);
   const eras = A.eras.filter((e) => e.to >= from && e.from < to);
   if (eras.length) L.push(`Eras (stretches led by one artist): ${eras.map((e) => `${e.artist} ${monthYear(e.from)} to ${monthYear(e.to)}`).join('; ')}.`);
   if (!year && A.years.length > 1) L.push(`Top artist each year: ${A.years.map((y) => `${y.y} ${y.topArtist}`).join(', ')}.`);
@@ -75,7 +95,7 @@ export function facts(A, p, { year, detailed = false } = {}) {
   if (!year) {
     const recent = topIn(A, 'artists', A.to - 28 * DAY, A.to + 1, 6);
     if (recent.length) L.push(`Last 4 weeks: ${recent.map((a) => a.name).join(', ')}.`);
-    L.push(`Things Liner noticed: ${A.insights.slice(0, detailed ? 12 : 7).map((i) => stripTags(i.title)).join('. ')}.`);
+    L.push(`Things Sleeve noticed: ${A.insights.slice(0, detailed ? 12 : 7).map((i) => stripTags(i.title)).join('. ')}.`);
   }
   if (detailed) {
     L.push(`First plays: ${A.artists.slice(0, 20).map((a) => `${a.name} first played ${monthYear(a.first)}`).join('; ')}.`);

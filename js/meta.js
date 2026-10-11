@@ -7,13 +7,16 @@ import { $$, idb, wait } from './ui.js';
 const mem = new Map();
 let loaded = false;
 let dirty = false;
+let caching = true;
 const loading = idb.get('meta').then((m) => { if (m) Object.entries(m).forEach(([k, v]) => mem.set(k, v)); loaded = true; });
 
 function save() {
-  if (dirty) return;
+  if (dirty || !caching) return;
   dirty = true;
-  setTimeout(() => { dirty = false; idb.set('meta', Object.fromEntries(mem)); }, 1500);
+  setTimeout(() => { dirty = false; if(caching)idb.set('meta', Object.fromEntries(mem)); }, 1500);
 }
+// A wipe reloads the app. Outstanding lookups must not refill cleared storage.
+export function clearMetadata(){caching=false;mem.clear();}
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/\(.*?\)|\[.*?\]| - .*$/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 const same = (a, b) => { const x = norm(a), y = norm(b); return x && y && (x === y || x.startsWith(y) || y.startsWith(x)); };
@@ -38,30 +41,49 @@ const itunesQ = queue(3200);
 const mbQ = queue(1100);
 const inflight = new Map();
 
+// Sound audits share the existing MusicBrainz queue instead of starting a second
+// stream against its one-request-per-second limit. Only verified results cache.
+export async function recordingForTrack(track,signal) {
+  const {audioTrackKey,recordingSearchURL,selectRecording,audioJSON}=await import('./audio-coverage.js');
+  await loading;
+  const key=`recording:v1:${audioTrackKey(track)}`,cached=mem.get(key);
+  if(cached&&Date.now()-cached.at<(cached.status==='matched'?30:7)*864e5)return cached;
+  const pending=mbQ(async()=>{
+    if(signal?.aborted)return null;
+    try{const data=await audioJSON(recordingSearchURL(track),{signal});const result={...selectRecording(track,data),at:Date.now()};if(caching){mem.set(key,result);save();}return result;}
+    catch(e){return {status:'error',error:e.message,at:Date.now()};}
+  });
+  if(!signal)return await pending||{status:'error',error:'Lookup did not complete'};
+  let stop;
+  const canceled=new Promise((_,reject)=>{stop=()=>reject(new DOMException('Audit paused','AbortError'));signal.addEventListener('abort',stop,{once:true});if(signal.aborted)stop();});
+  try{return await Promise.race([pending,canceled])||{status:'error',error:'Lookup did not complete'};}
+  finally{signal.removeEventListener('abort',stop);}
+}
+
 async function getJSON(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(String(r.status));
-  return r.json();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 9000);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) throw new Error(String(r.status));
+    return await r.json();
+  } finally { clearTimeout(timer); }
 }
 
 /* ---------- Artwork ---------- */
 const big = (u) => u?.replace(/\/\d+x\d+bb\./, '/400x400bb.') || '';
 
 async function fetchArt(kind, name, artist) {
-  const term = encodeURIComponent(kind === 'artist' ? name : `${artist} ${name}`);
+  if (kind === 'artist') return '';
+  const term = encodeURIComponent(`${artist} ${name}`);
   const entity = kind === 'track' ? 'song' : 'album';
   const d = await getJSON(`https://itunes.apple.com/search?term=${term}&entity=${entity}&limit=8`);
-  const want = kind === 'artist' ? name : artist;
-  const hits = (d.results || []).filter((x) => same(x.artistName, want));
-  // For an artist picture, prefer a real album over singles and EPs.
-  const full = hits.filter((x) => !/ - (single|ep)$/i.test(x.collectionName || '') && (x.trackCount || 0) >= 7);
-  let pick = kind === 'artist' ? full[0] || hits[0] : hits[0];
-  if (kind === 'album') pick = hits.find((x) => same(x.collectionName, name)) || pick;
-  if (kind === 'track') pick = hits.find((x) => same(x.trackName, name)) || pick;
+  const hits = (d.results || []).filter((x) => same(x.artistName, artist));
+  const pick = kind === 'album' ? hits.find((x) => same(x.collectionName, name)) : hits.find((x) => same(x.trackName, name));
   return pick ? big(pick.artworkUrl100) : '';
 }
 
-export const artKey = (kind, name, artist = '') => `art:${kind}:${norm(artist)}|${norm(name)}`;
+export const artKey = (kind, name, artist = '') => `art2:${kind}:${norm(artist)}|${norm(name)}`;
 
 export function cachedArt(kind, name, artist) {
   const v = mem.get(artKey(kind, name, artist));
@@ -78,10 +100,13 @@ function flush() {
   const jobs = batch.splice(0, 40);
   if (batch.length) batchTimer = setTimeout(flush, 0); else batchTimer = 0;
   const q = JSON.stringify(jobs.map((j) => j.item));
-  fetch(`/api/art?q=${encodeURIComponent(q)}`)
-    .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  fetch(`/api/art?q=${encodeURIComponent(q)}`, { signal: ctrl.signal })
+    .then((r) => { if (r.status === 404) apiOk = false; if (!r.ok) throw new Error(String(r.status)); return r.json(); })
     .then((d) => jobs.forEach((j, i) => j.done(d.results?.[i] ?? null)))
-    .catch(() => { apiOk = false; jobs.forEach((j) => j.done(undefined)); });
+    .catch(() => jobs.forEach((j) => j.done(undefined)))
+    .finally(() => clearTimeout(timer));
 }
 
 function viaApi(item) {
@@ -102,7 +127,7 @@ export function art(kind, name, artist = '', front = false) {
   const p = (async () => {
     let url = apiOk ? await viaApi([kind, name, artist]) : undefined;
     // Deezer found nothing, or the API is down: try iTunes before giving up.
-    if (!url) url = await viaItunes(kind, name, artist, front);
+    if (!url && kind !== 'artist') url = await viaItunes(kind, name, artist, front);
     if (url !== null && url !== undefined) { mem.set(key, url); save(); }
     inflight.delete(key);
     return url || '';
@@ -111,20 +136,35 @@ export function art(kind, name, artist = '', front = false) {
   return p;
 }
 
-// Swap real artwork into every sleeve under root that asks for it.
+// Load covers near the viewport so long profiles don't queue hundreds at once.
+const watched = new Set();
+const observer = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+  entries.forEach(({ target, isIntersecting }) => {
+    if (!isIntersecting && target.isConnected) return;
+    observer.unobserve(target); watched.delete(target);
+    if (target.isConnected) startArt(target);
+  });
+}, { rootMargin: '450px' }) : null;
+
+function startArt(el) {
+  if (el.dataset.done) return;
+  el.dataset.done = '1';
+  const [kind, name, artist] = JSON.parse(el.dataset.art);
+  const hit = cachedArt(kind, name, artist);
+  if (hit !== undefined) { apply(el, hit); return; }
+  art(kind, name, artist).then((url) => {
+    $$('[data-art]').forEach((x) => { if (x.dataset.art === el.dataset.art) apply(x, url); });
+  });
+}
+
 export async function hydrate(root = document) {
   if (!loaded) await loading;
-  const els = $$('[data-art]', root).filter((el) => !el.dataset.done);
-  // Visible ones first.
-  els.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
-  for (const el of els) {
-    el.dataset.done = '1';
-    const [kind, name, artist] = JSON.parse(el.dataset.art);
-    const hit = cachedArt(kind, name, artist);
-    if (hit !== undefined) { apply(el, hit); continue; }
-    art(kind, name, artist).then((url) => {
-      $$(`[data-art]`).forEach((x) => { if (x.dataset.art === el.dataset.art) apply(x, url); });
-    });
+  watched.forEach((el) => { if (!el.isConnected) { observer?.unobserve(el); watched.delete(el); } });
+  for (const el of $$('[data-art]', root)) {
+    if (el.dataset.done || watched.has(el)) continue;
+    if (el.closest('.deck__cover:not(.is-on)')) continue;
+    if (observer && !el.closest('.deck__cover')) { watched.add(el); observer.observe(el); }
+    else startArt(el);
   }
 }
 function apply(el, url) {
@@ -139,11 +179,17 @@ function apply(el, url) {
 
 /* ---------- Artist details (MusicBrainz) ---------- */
 export function cachedArtist(name) { return mem.get(`mb:${norm(name)}`); }
+let mbUnavailableUntil = 0;
 
 export function artistInfo(name, front = false) {
   const key = `mb:${norm(name)}`;
   if (mem.has(key)) return Promise.resolve(mem.get(key));
   if (inflight.has(key)) return inflight.get(key);
+  if (Date.now() < mbUnavailableUntil) {
+    const info = { tags: [], unavailable: true };
+    mem.set(key, info);
+    return Promise.resolve(info);
+  }
   const p = mbQ(async () => {
     try {
       const d = await getJSON(`https://musicbrainz.org/ws/2/artist/?query=${encodeURIComponent(`artist:"${name}"`)}&fmt=json&limit=3`);
@@ -157,8 +203,66 @@ export function artistInfo(name, front = false) {
       } : { tags: [], area: '', begin: '', type: '', mbid: '' };
       mem.set(key, info); save();
       return info;
-    } catch { return null; } finally { inflight.delete(key); }
+    } catch {
+      mbUnavailableUntil = Date.now() + 60000;
+      const info = { tags: [], unavailable: true };
+      mem.set(key, info);
+      return info;
+    } finally { inflight.delete(key); }
   }, front);
+  inflight.set(key, p);
+  return p;
+}
+
+// Last.fm album MBIDs generally identify a particular release. Resolve that
+// release to the MusicBrainz release group (the album concept) before reading
+// community ratings, and keep these calls on the shared 1/sec MusicBrainz queue.
+export async function releaseGroupForAlbum(album) {
+  const hasId = /^[0-9a-f-]{36}$/i.test(album.mbid || '');
+  const key = `rg:v2:${hasId ? album.mbid : `${norm(album.artist)}|${norm(album.name)}`}`;
+  if (mem.has(key)) return mem.get(key);
+  if (inflight.has(key)) return inflight.get(key);
+  if (Date.now() < mbUnavailableUntil) return null;
+  const p = (async () => {
+    const base = 'https://musicbrainz.org/ws/2/';
+    let groupId = album.mbid;
+    if (hasId) {
+      const release = await mbQ(() => getJSON(`${base}release/${album.mbid}?inc=release-groups&fmt=json`).catch(() => null));
+      groupId = release?.['release-group']?.id || album.mbid;
+    } else {
+      const query = `releasegroup:"${String(album.name).replace(/"/g, '')}" AND artist:"${String(album.artist).replace(/"/g, '')}"`;
+      const found = await mbQ(() => getJSON(`${base}release-group/?query=${encodeURIComponent(query)}&fmt=json&limit=4`).catch(() => null));
+      groupId = found?.['release-groups']?.find((g) => g.score >= 95 && norm(g.title) === norm(album.name)
+        && g['artist-credit']?.some((a) => norm(a.artist?.name || a.name) === norm(album.artist)))?.id;
+    }
+    if (!groupId) return null;
+    const group = await mbQ(() => getJSON(`${base}release-group/${groupId}?inc=ratings+genres+artist-credits&fmt=json`).catch(() => null));
+    if (!group || norm(group.title) !== norm(album.name)
+      || !group['artist-credit']?.some((a) => norm(a.artist?.name || a.name) === norm(album.artist))) return null;
+    const value = Number(group.rating?.value), count = Number(group.rating?.['votes-count'] || 0);
+    const info = { id: group.id, title: group.title, type: group['primary-type'] || '',
+      date: group['first-release-date'] || '', rating: Number.isFinite(value) && count ? value : null,
+      votes: count, genres: (group.genres || []).sort((a, b) => b.count - a.count).slice(0, 3).map((x) => x.name) };
+    mem.set(key, info); save();
+    return info;
+  })().finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+export async function critiqueCount(groupId) {
+  if (!groupId) return null;
+  const key = `cb:v1:${groupId}`;
+  if (mem.has(key)) return mem.get(key);
+  if (inflight.has(key)) return inflight.get(key);
+  const p = (async () => {
+    try {
+      const d = await getJSON(`https://critiquebrainz.org/ws/1/review/?entity_id=${groupId}&entity_type=release_group&review_type=review&limit=0`);
+      const count = Number(d.count || 0);
+      mem.set(key, count); save();
+      return count;
+    } catch { return null; }
+  })().finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
 }
@@ -167,10 +271,16 @@ export const ready = () => loading;
 
 /* ---------- Listener counts (Last.fm), for the obscurity score ---------- */
 const lastfmQ = queue(220);
-export const cachedListeners = (name) => mem.get(`lfl:${norm(name)}`);
+// Search returns the audience of canonical spelling variants. artist.getInfo
+// can attach a small, separate page to punctuation variants (e.g. Travi$ Scott)
+// and make a globally popular artist look obscure. v4 checks both stylized
+// dollar-sign names and plain spellings before selecting the largest match.
+const audienceName = (name) => String(name || '').replace(/\$/g, 's').replace(/[+&]/g, ' and ').toLowerCase()
+  .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+export const cachedListeners = (name) => mem.get(`lfl4:${audienceName(name)}`);
 
 export function listeners(name) {
-  const key = `lfl:${norm(name)}`;
+  const key = `lfl4:${audienceName(name)}`;
   if (mem.has(key)) return Promise.resolve(mem.get(key));
   if (inflight.has(key)) return inflight.get(key);
   let apiKey = '';
@@ -179,8 +289,15 @@ export function listeners(name) {
   if (!apiKey) return Promise.resolve(null);
   const p = lastfmQ(async () => {
     try {
-      const d = await getJSON(`https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=${encodeURIComponent(name)}&autocorrect=1&api_key=${apiKey}&format=json`);
-      const n = Number(d.artist?.stats?.listeners || 0) || null;
+      const search = async (query) => {
+        const d = await getJSON(`https://ws.audioscrobbler.com/2.0/?method=artist.search&artist=${encodeURIComponent(query)}&limit=15&api_key=${apiKey}&format=json`);
+        const matches = d.results?.artistmatches?.artist || [];
+        return Array.isArray(matches) ? matches : [matches];
+      };
+      const matches = await search(name);
+      if (name.includes('$')) matches.push(...await search(name.replace(/\$/g, 's')));
+      const exact = matches.filter((x) => audienceName(x.name) === audienceName(name));
+      const n = Math.max(0, ...exact.map((x) => Number(x.listeners || 0))) || null;
       mem.set(key, n); save();
       return n;
     } catch { return null; } finally { inflight.delete(key); }

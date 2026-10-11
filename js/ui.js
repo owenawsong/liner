@@ -43,7 +43,7 @@ export function sleeveSvg(key) {
 export function sleeve(title, artist, { img = '', size = 44, round = false, cls = '', kind } = {}) {
   const k = kind || (title === artist ? 'artist' : 'album');
   const key = `${artist}·${title}`;
-  const imgTag = img ? `<img src="${esc(img)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">` : '';
+  const imgTag = img ? `<img src="${esc(img)}" alt="" loading="lazy" decoding="async">` : '';
   const ask = !img && title ? ` data-art="${esc(JSON.stringify([k, title, k === 'artist' ? '' : artist]))}"` : '';
   return `<span class="sleeve${round ? ' sleeve--round' : ''}${cls ? ` ${cls}` : ''}" style="--s:${size}px"${ask} aria-hidden="true">${sleeveSvg(key)}${imgTag}</span>`;
 }
@@ -55,7 +55,7 @@ export const trackSleeve = (t, opts = {}) => (t.album
 export function avatar(name, img, size = 56) {
   const h = hash(name);
   const bg = INKS[[1, 2, 4, 5, 6, 7][h % 6]];
-  return `<span class="avatar" style="--s:${size}px;--av:${bg}" aria-hidden="true"><span>${esc(initials(name))}</span>${img ? `<img src="${esc(img)}" alt="" onerror="this.remove()">` : ''}</span>`;
+  return `<span class="avatar" style="--s:${size}px;--av:${bg}" aria-hidden="true"><span>${esc(initials(name))}</span>${img ? `<img src="${esc(img)}" alt="">` : ''}</span>`;
 }
 
 /* ---------- Formatting ---------- */
@@ -99,7 +99,9 @@ export const hourLabel = (h) => (h === 0 ? '12 am' : h < 12 ? `${h} am` : h === 
 
 export function debounce(fn, ms) {
   let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  const later = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  later.cancel = () => clearTimeout(t);
+  return later;
 }
 
 export const wait = (ms, signal) => new Promise((res, rej) => {
@@ -137,12 +139,25 @@ export const idb = {
     try {
       const d = await db();
       await new Promise((res, rej) => { const tx = d.transaction('kv', 'readwrite'); tx.objectStore('kv').put(val, key); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-    } catch { /* storage unavailable */ }
+      return true;
+    } catch { return false; }
   },
   async del(key) {
     try {
       const d = await db();
       await new Promise((res) => { const tx = d.transaction('kv', 'readwrite'); tx.objectStore('kv').delete(key); tx.oncomplete = res; tx.onerror = res; });
+    } catch { /* storage unavailable */ }
+  },
+  async delMany(keys) {
+    if (!keys.length) return;
+    try {
+      const d = await db();
+      await new Promise((res) => {
+        const tx = d.transaction('kv', 'readwrite');
+        const store = tx.objectStore('kv');
+        keys.forEach((key) => store.delete(key));
+        tx.oncomplete = res; tx.onerror = res;
+      });
     } catch { /* storage unavailable */ }
   },
   async clear() {
