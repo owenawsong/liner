@@ -2,7 +2,7 @@
 
 ## Decision
 
-The prepared release is now deployed to **[liner-c7u.pages.dev](https://liner-c7u.pages.dev)**, with a tested [preview](https://sleeve-preview.liner-c7u.pages.dev). The repository remains private with MIT licensing and a [release PR](https://github.com/owenawsong/liner/pull/1). Public repository visibility is a separate final publication step. Anonymous AI limits and a small hosted evaluation do not establish unlimited availability or perfect interpretation.
+The prepared release is now deployed to **[liner-c7u.pages.dev](https://liner-c7u.pages.dev)**, with a tested [preview](https://sleeve-preview.liner-c7u.pages.dev). The [release PR](https://github.com/owenawsong/liner/pull/1) was merged into `main`; the repository remains private with MIT licensing. Public repository visibility is a separate final publication step. Anonymous AI limits and a small hosted evaluation do not establish unlimited availability or perfect interpretation.
 
 The maintainer authorized hosting work after the initial local preparation. Source was pushed, the budget Worker provisioned, Pages build/runtime settings and encrypted secrets configured, and preview/production deployments uploaded. No paid tier was introduced. Frontend, analysis, recommendations, prompts, validation and server/budget code remain in the open-source plan; private credentials and user data are excluded.
 
@@ -24,7 +24,7 @@ The maintainer authorized hosting work after the initial local preparation. Sour
 
 | Check | Result and scope |
 | --- | --- |
-| `npm run check` | 138 tests pass locally; public build, source/output scan, Functions compilation and budget Worker dry-run succeed. Linux skips the Windows-specific case test. Unit AI requests use synthetic inputs and mocked providers. |
+| `npm run check` | 140 tests pass locally, including the follow-up question guard; public build, source/output scan, Functions compilation and budget Worker dry-run succeed. Linux skips the Windows-specific case test. Unit AI requests use synthetic inputs and mocked providers. |
 | `npm audit --audit-level=high` | No known dependency vulnerabilities reported at the time of this review. This does not establish absence of vulnerabilities. |
 | Reachable Git history scan | No recognized private credential matches. One historical public Last.fm read-key reference remains in `36caedc3e281`, `config.js`. Current source is neutral. Unreachable/remote-only history and unrecognized formats are outside this scan. |
 | Local browser checks before interruption | Analytical routes at 320px, Overview at 414/1440px, filtered-empty states, wrapped Data action, keyboard/focus and reduced-motion behavior; no observed runtime errors or horizontal overflow in those checks. Tab switching returned to the start of the new content. |
@@ -50,7 +50,7 @@ Those were the initial observations. Subsequent authorized work closed the missi
 - Preview has no writer key or production budget binding; its POST AI route returned 503. Production unknown API routes return JSON 404 and invalid AI methods return 405. Static CSP/nosniff headers and local JSZip were verified. Probes for env/Git/server/package paths returned SPA HTML, not source or credentials.
 - Hosted preview checked at 320px across all nine destinations with no observed horizontal overflow or runtime errors. Synthetic ZIP setup, reload persistence and HTTPS offline reload succeeded with network disabled and HTTP cache disabled. Production preserved the existing saved profile list; it was not cleared.
 - Last.fm invalid-format and missing-user feedback and the owner's live lookup were checked. The preview imported **12,641 recorded plays / 598 artists**, completed preparation with writing unavailable, and reopened the record after reload. Sparse-history and interrupted-checkpoint behavior also has automated coverage; a separately consented interrupted live account test remains broader QA.
-- Initial production upload `aa014bb9-89dd-4047-9fc9-dfcea1f53336` at source `bd07ec5` succeeded. Follow-up build-variable fixes shipped at `f806df7f`; year validation shipped at [e1cf1687](https://e1cf1687.liner-c7u.pages.dev) from `0a791d1`. The required budget, Node version and encrypted Last.fm/provider configuration were verified afterward. The local 5195 preview was rebuilt from that source and retained its synthetic saved record.
+- Initial production upload `aa014bb9-89dd-4047-9fc9-dfcea1f53336` at source `bd07ec5` succeeded. Follow-up build-variable fixes shipped at `f806df7f`; year validation shipped at [e1cf1687](https://e1cf1687.liner-c7u.pages.dev) from `0a791d1`. GitHub's automatic production deployment [aaf36a61](https://aaf36a61.liner-c7u.pages.dev) succeeded from merge `8a7b503`. The required budget, Node version and encrypted Last.fm/provider configuration were verified afterward. The local 5195 preview was rebuilt from the release source and retained its synthetic saved record.
 
 ## Hosted AI evaluation
 
@@ -62,7 +62,7 @@ Only synthetic facts were submitted manually on the production Functions route. 
 | Sparse candidate curation | 503 fallback; no unsupported selection displayed. |
 | Candidate curation with complete per-candidate evidence | Dots, 200, 3.262 s; four distinct supplied IDs and connected seed reasons. |
 | Year | Initial Dots response, 200, 1.907 s, promoted selected counts into an annual-leader claim. Prompt revision alone did not resolve it. The v21 year cache and server validator now reject unscoped leadership language, excessive numbers and overlong prose. The same sparse synthetic fixture returned a safe 503 fallback in 3.671 s; no unsupported text was served. A separate synthetic provider inspection confirmed that Dots still sometimes exceeds the numeric budget. Year-writing availability remains a quality limitation, rather than a demonstrated success. |
-| Calculated question commentary | Dots, 200, 1.730 s; preserved the recorded decline/rise and Alpha's continuing presence. |
+| Calculated question commentary | Initial Dots response, 200, 1.730 s, preserved decline/rise and Alpha's continuing presence. A subsequent post-merge check, 200, 6.178 s, inferred a "direct rotation swap" from concurrent changes. The follow-up prompt and v20 question cache add a guard against swap, handoff, replacement and causal wording. Regression tests verify rejection and fallback; this phrasing guard is not a semantic proof for every answer. |
 | Repeated profile | Cache hit, 200, 109 ms; reused the same served model/output. |
 
 This is a small functional/semantic spot check, not a p95 benchmark or proof that every accepted sentence is correct. Model interpretation remains labeled and exact calculations remain available when writing fails. [Earlier model evaluation](AI_MODEL_EVALUATION.md) records provider restrictions and local evidence. The error copy now describes unavailable supported writing instead of assuming every validation failure means busy providers.

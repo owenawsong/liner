@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeStructuredWriting, validStructuredWriting, validYearWriting } from '../functions/lib/writing-quality.js';
+import { normalizeStructuredWriting, validStructuredWriting, validYearWriting, validQuestionWriting } from '../functions/lib/writing-quality.js';
+
+test('question writing withholds causal and replacement language',()=>{
+  for(const text of ['Their counts suggest a direct swap.','The handoff was not absolute.','You replaced Alpha with Delta.','Delta caused Alpha to decline.'])assert.equal(validQuestionWriting(text),false);
+  assert.equal(validQuestionWriting('Alpha still appeared on 18 recorded listening days.'),true);
+});
 
 test('year commentary rejects selected counts promoted into annual leadership',()=>{
   const facts='Year: 2025. Selected artists: Alpha 160 plays; Beta 120 plays. January: Alpha 40 plays.';

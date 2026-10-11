@@ -11,11 +11,11 @@ globalThis.caches = { default: {
 } };
 
 let visitor = 0;
-function request(facts, { local = false, seed = '', task = 'notes' } = {}) {
+function request(facts, { local = false, seed = '', task = 'notes', question = '' } = {}) {
   return new Request(`${local ? 'http://127.0.0.1:5195' : 'https://sleeve.example'}/api/ai`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': `192.0.2.${++visitor}` },
-    body: JSON.stringify({ task, facts, seed }),
+    body: JSON.stringify({ task, facts, seed, question }),
   });
 }
 const openBudget = { idFromName: (name) => name, get: () => ({ fetch: async () => new Response('', { status: 200 }) }) };
@@ -104,6 +104,20 @@ test('an unsupported year interpretation tries another writer before caching', a
   const response=await onRequestPost(context(request(facts,{task:'year'})));
   assert.equal(response.status,200);assert.equal(models.length,2);
   assert.match((await response.json()).text,/You recorded/);
+});
+
+test('question commentary cannot turn concurrent changes into a direct swap', async () => {
+  const models=[];
+  globalThis.fetch=async(_url,options)=>{
+    const model=JSON.parse(options.body).model;models.push(model);
+    const content=model.includes('dots-3-note')
+      ? "Alpha's decline mirrors Delta's rise, suggesting a direct rotation swap."
+      : 'Alpha was still heard on 18 days in the latest window.';
+    return Response.json({model,choices:[{message:{content}}]});
+  };
+  const response=await onRequestPost(context(request('Causal guard fixture: Alpha declined from 160 to 40 plays; Delta rose from 9 to 73. Alpha was still heard on 18 days.',{task:'ask',question:'What changed?'})));
+  assert.equal(response.status,200);assert.equal(models.length,2);
+  assert.match((await response.json()).text,/still heard/);
 });
 
 test('budget storage receives a visitor digest, never a raw address or listening facts', async () => {
