@@ -1,6 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeStructuredWriting, validStructuredWriting } from '../functions/lib/writing-quality.js';
+import { normalizeStructuredWriting, validStructuredWriting, validYearWriting } from '../functions/lib/writing-quality.js';
+
+test('year commentary rejects selected counts promoted into annual leadership',()=>{
+  const facts='Year: 2025. Selected artists: Alpha 160 plays; Beta 120 plays. January: Alpha 40 plays.';
+  assert.equal(validYearWriting("In 2025, Alpha led with 160 plays compared to Beta's 120.",facts),false);
+  assert.equal(validYearWriting('Alpha led January but dominated the whole year.',facts),false);
+  assert.equal(validYearWriting('You recorded 160 plays of Alpha and 120 of Beta in 2025.',facts),true);
+  assert.equal(validYearWriting('Alpha led January with 40 plays.',facts),true);
+});
+
+test('year commentary keeps its numeric and length budget',()=>{
+  const facts='Year: 2025. Alpha 160; Beta 120; January 40.';
+  assert.equal(validYearWriting('You recorded 160 plays of Alpha, 120 of Beta and 40 in January.',facts),false);
+  assert.equal(validYearWriting('A recorded comparison. '+Array(66).fill('word').join(' '),facts),false);
+});
 test('a profile observation must refer to the supplied evidence',()=>{
   const value={notes:'Artist A returned while Artist B stayed.',observations:[{id:'invented',text:'A relationship beyond the available evidence.'}]};
   assert.equal(validStructuredWriting('profile',value,'Evidence ID="return"\nArtist A returned.'),false);

@@ -3,7 +3,7 @@
 // Keys live in Cloudflare secrets (NVIDIA_API_KEY, OPENROUTER_API_KEY) and never reach
 // the browser. Prompts are fixed here, so this can't be used as a general chatbot.
 // Answers are cached, so the same request is only paid for once.
-import { normalizeStructuredWriting, validStructuredWriting } from '../lib/writing-quality.js';
+import { normalizeStructuredWriting, validStructuredWriting, validYearWriting } from '../lib/writing-quality.js';
 
 // Fixed OpenRouter models keep the voice testable. NVIDIA's hosted developer
 // endpoint is for local evaluation only; public traffic must never use it.
@@ -56,7 +56,7 @@ ${f}`,
   },
   year: {
     max: 260,
-    prompt: (f) => `Write one short year-in-review paragraph under 65 words. Name a specific artist or recorded shift and support it with the supplied counts. Call an artist the annual leader ONLY when an annual ranking explicitly identifies them as first; selected artist counts or a few monthly leaders cannot establish annual leadership. Describe comparisons only between the supplied artists, without assuming they represent the whole year. Do not turn missing months into continuity, dominance or a causal explanation. A second distinct observation is optional. Address you, using at most two numeric facts.\n\nFacts:\n${f}`,
+    prompt: (f) => `Write one or two short sentences, under 65 words altogether. Compare two supplied artists' recorded counts OR describe a supplied monthly change. Choose one of those angles; do not list every fact. Use at most two numeric values besides the year. Address you. For selected counts, say "You recorded X plays of ARTIST and Y of ARTIST" without turning that comparison into a ranking. Annual rankings are already shown elsewhere: do not call anyone the annual leader, winner, favorite, dominant artist or most played artist in this paragraph. Leadership language is allowed only for a named month explicitly supplied in the facts. Missing months cannot establish consistency, dominance or a causal explanation. No inferred reasons, feelings or audio qualities.\n\nFacts:\n${f}`,
   },
   roast: {
     max: 260,
@@ -206,7 +206,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const facts = body.facts, question = body.question || '';
   if (body.task === 'ask' && !question.trim()) return json({ error: 'Ask a question.' }, 400);
 
-  const version = body.task === 'year' ? 'v20' : CACHE_VERSION;
+  const version = body.task === 'year' ? 'v21' : CACHE_VERSION;
   const cacheKey = new Request(`https://liner-ai.cache/${version}/${body.task}/${await sha(`${facts}|${question}|${body.seed || ''}`)}`);
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
@@ -238,6 +238,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
         try {
           const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max, localPreview, task.json, visitor);
           if (!groundedNumbers(result.text, facts)) throw new Error(`${step.model} unsupported number`);
+          if (body.task === 'year' && !validYearWriting(result.text, facts)) throw new Error(`${step.model} unsupported year interpretation`);
           if (task.json) {
             let structured;
             try { structured = normalizeStructuredWriting(body.task, JSON.parse(result.text)); } catch { throw new Error(`${step.model} invalid structured response`); }

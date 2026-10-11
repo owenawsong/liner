@@ -6,6 +6,19 @@ const grounded=(value,facts)=>{const allowed=new Set(numbers(facts));return numb
 const escape=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const mentions=(value,name)=>new RegExp(`(?<![\\p{L}\\p{N}])${escape(name)}(?![\\p{L}\\p{N}])`,'iu').test(value);
 
+// Rankings remain calculated UI. Short year commentary may describe a named
+// month, but must not promote selected counts into an annual leadership claim.
+export function validYearWriting(value,facts){
+  if(!text(value)||value.trim().split(/\s+/).length>65)return false;
+  const year=String(facts).match(/\b(?:Recorded\s+)?Year:\s*(\d{4})\b/i)?.[1];
+  if(numbers(value).filter(n=>n!==year).length>2)return false;
+  const leadership=/\b(?:led|lead(?:s|ing|er)?|topp(?:ed|ing)|domin(?:ant|ance|ated)|winner|favou?rite|most[- ]played|number one)\b/i;
+  const month=/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/i;
+  // Split clauses too: a monthly reference must not license an annual claim
+  // elsewhere in the same sentence. Ambiguous cases use the ordinary fallback.
+  return value.split(/[.!?;]|\b(?:but|while|although|whereas)\b/i).every(clause=>!leadership.test(clause)||month.test(clause)&&!/\b(?:annual|whole year|entire year|overall|throughout|year[- ]long)\b/i.test(clause));
+}
+
 // One observed Gemma response wrapped the correct object in a singleton array.
 // Unwrap only that envelope; never repair IDs, invent reasons, or merge answers.
 export function normalizeStructuredWriting(task,value){

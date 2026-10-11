@@ -15,7 +15,7 @@ async function key(s) {
 }
 
 export async function write(task, facts, { question = '', fresh = false, signal } = {}) {
-  const version = task === 'year' ? 'v20' : AI_VERSION;
+  const version = task === 'year' ? 'v21' : AI_VERSION;
   const k = `ai:${version}:${task}:${await key(`${facts}|${question}`)}`;
   if (!fresh) {
     if (local.has(k)) return local.get(k);

@@ -91,6 +91,21 @@ test('public traffic uses OpenRouter and reuses a cached answer', async () => {
   assert.equal(urls.length, 1);
 });
 
+test('an unsupported year interpretation tries another writer before caching', async () => {
+  const models=[];
+  globalThis.fetch=async(_url,options)=>{
+    const model=JSON.parse(options.body).model;models.push(model);
+    const content=model.includes('dots-3-note')
+      ? "In 2025, Alpha led with 160 plays compared to Beta's 120."
+      : 'You recorded 160 plays of Alpha and 120 of Beta in 2025.';
+    return Response.json({model,choices:[{message:{content}}]});
+  };
+  const facts='Year: 2025. Year validation test: selected artist counts Alpha 160 and Beta 120; no annual ranking.';
+  const response=await onRequestPost(context(request(facts,{task:'year'})));
+  assert.equal(response.status,200);assert.equal(models.length,2);
+  assert.match((await response.json()).text,/You recorded/);
+});
+
 test('budget storage receives a visitor digest, never a raw address or listening facts', async () => {
   let identity;
   globalThis.fetch=async()=>success('synthetic-model');
