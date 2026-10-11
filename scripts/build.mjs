@@ -1,5 +1,5 @@
 import { copyFile, lstat, mkdir, readdir, realpath, readFile, rm, writeFile } from 'node:fs/promises';
-import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const PUBLIC_FILES = [
@@ -18,6 +18,17 @@ async function checkAncestors(target) {
     if ((await statOrNull(current))?.isSymbolicLink()) throw new Error('Build output cannot traverse a symlink.');
     if (dirname(current) === current) break;
   }
+}
+async function canonicalTarget(target) {
+  const missing = []; let ancestor = target;
+  while (!(await statOrNull(ancestor))) {
+    missing.unshift(basename(ancestor));
+    if (dirname(ancestor) === ancestor) throw new Error('Build output volume does not exist.');
+    ancestor = dirname(ancestor);
+  }
+  // Windows temp paths can use an 8.3 alias. Resolve the existing ancestor
+  // before boundary comparisons rather than treating an alias as a symlink.
+  return join(await realpath(ancestor), ...missing);
 }
 async function copyPublic(source, target) {
   const entry = await lstat(source);
@@ -39,7 +50,11 @@ async function copyTree(source, target, accept) {
 
 export async function build({ projectDir = projectRoot, outDir = join(projectDir, 'dist'), lastfmApiKey = process.env.LASTFM_API_KEY } = {}) {
   const source = await realpath(projectDir);
-  const output = resolve(outDir);
+  const requestedOutput = resolve(outDir);
+  const requestedEntry = await statOrNull(requestedOutput);
+  if (requestedEntry?.isSymbolicLink() || (requestedEntry && !requestedEntry.isDirectory())) throw new Error('Build output must be a real directory.');
+  await checkAncestors(requestedOutput);
+  const output = await canonicalTarget(requestedOutput);
   const canonicalOutput = join(source, 'dist');
   if (samePath(output, source) || isInside(output, source)) throw new Error('Build output cannot be the project or one of its parents.');
   if (isInside(source, output) && !samePath(output, canonicalOutput)) throw new Error('Inside the project, only dist/ may be used as build output.');
@@ -49,13 +64,10 @@ export async function build({ projectDir = projectRoot, outDir = join(projectDir
   await checkAncestors(output);
   // Verify the resolved target before removing the known, generated dist folder.
   if (existing) {
-    const resolvedOutput = await realpath(output);
-    if (!samePath(resolvedOutput, output)) throw new Error('Build output cannot traverse a symlink.');
     if (samePath(output, canonicalOutput)) await rm(output, { recursive: true, force: true });
     else if ((await readdir(output)).length) throw new Error('External build output must be empty; create a fresh staging directory.');
   } else {
     await mkdir(output, { recursive: true });
-    if (!samePath(await realpath(output), output)) throw new Error('Build output cannot traverse a symlink.');
   }
   await mkdir(output, { recursive: true });
   for (const name of PUBLIC_FILES) await copyPublic(join(source, name), join(output, name));

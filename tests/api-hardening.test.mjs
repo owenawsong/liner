@@ -73,13 +73,12 @@ test('repeated uncached requests from one visitor stop before provider quota is 
   }
   assert.equal(calls,12);
 });
-test('shared-budget outages time out and fail closed before inference',async t=>{
+test('shared-budget outages time out and fail closed before inference',{timeout:10000},async t=>{
   t.mock.timers.enable({apis:['setTimeout']});
-  let taking=false,calls=0;globalThis.fetch=async()=>{calls++;return success();};
-  const env={OPENROUTER_API_KEY:'test',AI_BUDGET:{idFromName:x=>x,get:()=>({fetch:()=>{taking=true;return new Promise(()=>{});}})}};
+  let started,calls=0;const taking=new Promise(resolve=>{started=resolve;});globalThis.fetch=async()=>{calls++;return success();};
+  const env={OPENROUTER_API_KEY:'test',AI_BUDGET:{idFromName:x=>x,get:()=>({fetch:()=>{started();return new Promise(()=>{});}})}};
   const pending=onRequestPost({...ctx(ai({task:'notes',facts:'Budget timeout fixture'})),env});
-  for(let i=0;i<30&&!taking;i++)await new Promise(setImmediate);
-  assert.equal(taking,true);t.mock.timers.tick(3000);
+  await taking;t.mock.timers.tick(3000);
   const res=await pending;assert.equal(res.status,503);assert.equal(calls,0);
 });
 test('owner attribution is absent by default and accepts only a configured HTTPS origin',async()=>{
