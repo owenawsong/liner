@@ -1,5 +1,5 @@
 import { $, esc, icon } from '../ui.js';
-import { view, go, hrefFor, pidFor, profiles } from '../core.js';
+import { view, go, hrefFor, pidFor, profiles, SOURCES } from '../core.js';
 import { mountLookup } from './connect.js';
 import { dropzone, bindDrops } from '../components.js';
 import { handleFiles } from '../actions.js';
@@ -16,7 +16,7 @@ export function renderStart(choice='') {
     <details class="welcome-advanced"><summary>Advanced connections & file help</summary><div><a href="#/connect/file">How to request a Spotify history file ↗</a><a href="#/connect/spotify">I have a Spotify developer app ↗</a><a href="#/settings">Settings ↗</a></div><p>Your original Spotify ZIP from a stats.fm import works too. Sleeve does not connect to your stats.fm account.</p></details></div>`;
   const panel=$('#start-panel');
   if(active==='lastfm') {
-    panel.innerHTML=`<h2>Connect your Last.fm record</h2><div id="start-lookup"></div><p class="welcome-connect__quiet">No Sleeve account or password needed. Your listening record stays in this browser.</p>`;
+    panel.innerHTML=`<h2>Connect your Last.fm record</h2>${!SOURCES.lastfm.isLive()?'<p class="welcome-connect__quiet">Last.fm is not configured on this installation. <a href="#/settings">Add a read key in Settings</a>, or try the demo or a history file.</p>':''}<div id="start-lookup"></div><p class="welcome-connect__quiet">No Sleeve account or password needed. Your listening record stays in this browser. <a href="#/privacy">How optional AI uses a summary ↗</a></p>`;
     const input=mountLookup($('#start-lookup'),{source:'lastfm',id:'start-lastfm',cta:'Open my record',label:'Last.fm username',onConfirm:res=>go(hrefFor(pidFor('lastfm',res.user.name)))});
     if(choice==='lastfm' && matchMedia('(min-width:761px)').matches)input.focus({preventScroll:true});
   } else if(active==='file') {

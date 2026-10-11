@@ -78,6 +78,27 @@ export { STYLE };
 const hits = new Map();
 const inflight = new Map();
 const cooldowns = new Map();
+const PRIVATE_HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Cross-Origin-Resource-Policy': 'same-origin' };
+const json = (body, status = 200) => Response.json(body, { status, headers: PRIVATE_HEADERS });
+const MAX_BODY_BYTES = 24000; // At most 8,000 UTF-16 characters, including non-ASCII facts.
+async function readBody(request) {
+  if (Number(request.headers.get('Content-Length')) > MAX_BODY_BYTES) throw Object.assign(new Error('oversized'), { status: 413 });
+  const reader = request.body?.getReader();
+  if (!reader) return '';
+  const chunks = []; let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BODY_BYTES) { reader.cancel().catch(() => {}); throw Object.assign(new Error('oversized'), { status: 413 }); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(size); let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return new TextDecoder().decode(bytes);
+}
 async function reserveOpenRouter(env, localPreview) {
   if (!env.AI_BUDGET) {
     if (localPreview && env.AI_BUDGET_REQUIRED !== '1') return;
@@ -87,7 +108,11 @@ async function reserveOpenRouter(env, localPreview) {
   }
   try {
     const stub = env.AI_BUDGET.get(env.AI_BUDGET.idFromName('openrouter-free-v1'));
-    const response = await stub.fetch('https://budget.internal/take', { method: 'POST' });
+    const ctrl = new AbortController(); let timer;
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => { ctrl.abort(); reject(new Error('AI budget timed out')); }, 3000); });
+    let response;
+    try { response = await Promise.race([stub.fetch('https://budget.internal/take', { method: 'POST', signal: ctrl.signal }), timeout]); }
+    finally { clearTimeout(timer); }
     if (!response.ok) {
       const error = new Error(`AI budget ${response.status}`);
       error.status = response.status;
@@ -126,6 +151,10 @@ async function call(step, env, messages, max, localPreview, structured = false) 
   if (step.via === 'openrouter') await reserveOpenRouter(env, localPreview);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), step.timeout);
+  let attribution = {};
+  if (step.via === 'openrouter' && env.SITE_URL) {
+    try { const site = new URL(env.SITE_URL); if (site.protocol === 'https:' && !site.username && !site.password) attribution = { 'HTTP-Referer': site.origin }; } catch {}
+  }
   try {
     const res = await fetch(ENDPOINT[step.via], {
       method: 'POST',
@@ -133,7 +162,7 @@ async function call(step, env, messages, max, localPreview, structured = false) 
       headers: {
         Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json',
-        ...(step.via === 'openrouter' ? { 'HTTP-Referer': 'https://liner-c7u.pages.dev', 'X-Title': 'Sleeve' } : {}),
+        ...(step.via === 'openrouter' ? { ...attribution, 'X-Title': 'Sleeve' } : {}),
       },
       body: JSON.stringify({ model: step.model, messages, max_tokens: step.maxTokens || max, temperature: structured ? 0.35 : 0.65, top_p: 0.9,
         ...(step.via === 'openrouter' ? { provider: { data_collection: 'deny' }, reasoning: { enabled: false } } : {}),
@@ -159,26 +188,31 @@ async function sha(s) {
 }
 
 export async function onRequestPost({ request, env, waitUntil }) {
-  const raw = await request.text();
-  if (raw.length > 8000) return Response.json({ error: 'That request is too big.' }, { status: 413 });
+  const origin = request.headers.get('Origin');
+  if ((origin && origin !== new URL(request.url).origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site') return json({ error: 'Use Sleeve to request writing.' }, 403);
+  if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return json({ error: 'Send application/json.' }, 415);
+  let raw;
+  try { raw = await readBody(request); } catch (error) { return json({ error: error.status === 413 ? 'That request is too big.' : 'Could not read the request.' }, error.status || 400); }
+  if (raw.length > 8000) return json({ error: 'That request is too big.' }, 413);
   let body;
-  try { body = JSON.parse(raw); } catch { return Response.json({ error: 'Send JSON.' }, { status: 400 }); }
+  try { body = JSON.parse(raw); } catch { return json({ error: 'Send JSON.' }, 400); }
   if (!body || typeof body !== 'object' || Array.isArray(body))
-    return Response.json({ error: 'Send a JSON object.' }, { status: 400 });
+    return json({ error: 'Send a JSON object.' }, 400);
   const task = Object.hasOwn(TASKS, body.task) ? TASKS[body.task] : null;
-  if (!task) return Response.json({ error: 'Unknown task.' }, { status: 400 });
-  const facts = String(body.facts || '').slice(0, 5000);
-  const question = String(body.question || '').slice(0, 300);
-  if (!facts) return Response.json({ error: 'No facts sent.' }, { status: 400 });
-  if (body.task === 'ask' && !question.trim()) return Response.json({ error: 'Ask a question.' }, { status: 400 });
+  if (!task) return json({ error: 'Unknown task.' }, 400);
+  if (typeof body.facts !== 'string' || !body.facts.trim() || body.facts.length > 5000) return json({ error: 'Send up to 5000 characters of facts.' }, 400);
+  if (body.question != null && (typeof body.question !== 'string' || body.question.length > 300)) return json({ error: 'Send a question under 300 characters.' }, 400);
+  if (body.seed != null && !(typeof body.seed === 'string' && body.seed.length <= 64 || Number.isSafeInteger(body.seed) && body.seed >= 0)) return json({ error: 'Invalid refresh value.' }, 400);
+  const facts = body.facts, question = body.question || '';
+  if (body.task === 'ask' && !question.trim()) return json({ error: 'Ask a question.' }, 400);
 
   const cacheKey = new Request(`https://liner-ai.cache/${CACHE_VERSION}/${body.task}/${await sha(`${facts}|${question}|${body.seed || ''}`)}`);
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
-  if (cached) return new Response(cached.body, { headers: { 'Content-Type': 'application/json', 'X-Liner-Cache': 'hit' } });
+  if (cached) return new Response(cached.body, { headers: { ...PRIVATE_HEADERS, 'X-Liner-Cache': 'hit' } });
 
   const ip = request.headers.get('CF-Connecting-IP') || 'local';
-  if (limited(ip)) return Response.json({ error: "You've asked a lot in the last few minutes. Try again in a bit." }, { status: 429 });
+  if (limited(ip)) return json({ error: "You've asked a lot in the last few minutes. Try again in a bit." }, 429);
 
   const messages = [{ role: 'system', content: STYLE }, { role: 'user', content: task.prompt(facts, question) }];
   const key = cacheKey.url;
@@ -228,5 +262,5 @@ export async function onRequestPost({ request, env, waitUntil }) {
     work.then(() => { if (inflight.get(key) === work) inflight.delete(key); }, () => { if (inflight.get(key) === work) inflight.delete(key); });
   }
   const result = await work;
-  return new Response(result.out, { status: result.status, headers: { 'Content-Type': 'application/json' } });
+  return new Response(result.out, { status: result.status, headers: PRIVATE_HEADERS });
 }

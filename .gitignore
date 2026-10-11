@@ -8,6 +8,9 @@ desktop.ini
 
 # Local secrets for `wrangler pages dev`. Never commit.
 .dev.vars*
+!.dev.vars.example
 .env*
 .wrangler/
 node_modules/
+dist/
+coverage/

@@ -333,6 +333,7 @@ aside.finding-context { padding-left: 14px; border-left: 2px solid var(--line-2)
   .opening-pick__record .sleeve { width: 94px; height: 94px; }
   .finding-series { height: 88px; }
 }
+#danger .btn { max-width: 100%; height: auto; min-height: 44px; padding-block: 8px; white-space: normal; text-align: center; }
 @media (prefers-reduced-motion: reduce) {
   .profile-identity { transition: none; }
   .guide-record > .sleeve { transition: none; }

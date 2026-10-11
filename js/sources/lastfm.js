@@ -1,6 +1,5 @@
 // Last.fm source. Public reads only, so a username is all we need from the user.
-import { store, hash, wait, idb } from '../ui.js';
-import { CATALOG, demoRecent } from './demo.js';
+import { store, wait, idb } from '../ui.js';
 
 const BASE = 'https://ws.audioscrobbler.com/2.0/';
 const STAR = '2a96cbd8b46e442fc41c2b86b821562f';
@@ -22,6 +21,7 @@ export class SourceError extends Error {
 }
 
 async function call(method, params, signal) {
+  if (!isLive()) throw new SourceError('nokey', 'Last.fm is not configured on this installation. Add a Last.fm read key in Settings, explore the demo, or open a Spotify history file.');
   const url = new URL(BASE);
   url.search = new URLSearchParams({ method, api_key: apiKey(), format: 'json', ...params });
   const ctrl = new AbortController();
@@ -80,29 +80,8 @@ const user = (u) => ({
   url: u.url,
 });
 
-/* ---------- Simulated mode (no API key) ---------- */
-async function simLookup(name, signal) {
-  await wait(380 + (hash(name) % 360));
-  if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
-  const key = name.toLowerCase();
-  if (key === 'nobody') throw new SourceError('notfound', 'There is no Last.fm user with that name.');
-  const h = hash(key);
-  const u = {
-    name, display: name, image: '',
-    playcount: key === 'newuser' ? 0 : 1200 + (h % 90000),
-    since: key === 'newuser' ? Date.now() - 3.6e6 : (1262304000 + (h % 480000000)) * 1000,
-    url: `https://www.last.fm/user/${encodeURIComponent(name)}`,
-  };
-  const rec = demoRecent(3);
-  let latest = [];
-  if (key === 'staleuser') latest = [{ ...rec[1], nowPlaying: false, t: Date.now() - 864e5 * 74 }];
-  else if (key !== 'newuser' && key !== 'hiddenuser') latest = h % 3 === 0 ? rec : rec.slice(1);
-  return { user: u, latest, hidden: key === 'hiddenuser', simulated: true };
-}
-
 /* ---------- Public API ---------- */
 export async function lookup(name, signal) {
-  if (!isLive()) return simLookup(name, signal);
   const [info, recent] = await Promise.allSettled([
     call('user.getinfo', { user: name }, signal),
     call('user.getrecenttracks', { user: name, limit: 3 }, signal),
@@ -116,16 +95,11 @@ export async function lookup(name, signal) {
 }
 
 export async function recent(name, limit, signal) {
-  if (!isLive()) return demoRecent(limit);
   const d = await call('user.getrecenttracks', { user: name, limit }, signal);
   return list(d.recenttracks?.track).map(track).slice(0, limit + 1);
 }
 
 export async function profile(name, signal) {
-  if (!isLive()) {
-    const sim = await simLookup(name, signal);
-    return { source: id, simulated: true, user: sim.user, recent: demoRecent(20), today: 23 + (hash(name) % 30), week: 190 + (hash(name) % 140), hidden: sim.hidden };
-  }
   const dayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
   const weekStart = Math.floor(Date.now() / 1000) - 7 * 86400;
   const [info, rec, today, week] = await Promise.all([
@@ -148,7 +122,6 @@ export async function profile(name, signal) {
 
 // kind: artists | tracks | albums
 export async function top(name, period, kind, signal, limit = 25) {
-  if (!isLive()) return simTop(name, period, kind);
   const method = { artists: 'user.gettopartists', tracks: 'user.gettoptracks', albums: 'user.gettopalbums' }[kind];
   const d = await call(method, { user: name, period, limit }, signal);
   const key = { artists: 'topartists', tracks: 'toptracks', albums: 'topalbums' }[kind];
@@ -205,16 +178,6 @@ export function catalogueTracks(data, artist) {
 export async function topTracks(artist, signal, limit = 5) {
   if (!isLive()) return [];
   return catalogueTracks(await call('artist.gettoptracks',{artist,autocorrect:0,limit},signal),artist);
-}
-
-function simTop(name, period, kind) {
-  const scale = { '7day': 1, '1month': 4, '3month': 12, '6month': 24, '12month': 50, overall: 160 }[period] || 1;
-  const artists = Object.keys(CATALOG).sort((a, b) => hash(name + a) - hash(name + b));
-  if (kind === 'artists') return artists.slice(0, 15).map((a, i) => ({ name: a, artist: '', plays: Math.round((70 - i * 4.2) * scale), image: '' }));
-  const tracks = artists.flatMap((a) => CATALOG[a]).sort((a, b) => hash(name + a.name) - hash(name + b.name));
-  if (kind === 'tracks') return tracks.slice(0, 15).map((t, i) => ({ name: t.name, artist: t.artist, plays: Math.round((24 - i * 1.3) * scale), image: '' }));
-  const albums = [...new Map(tracks.map((t) => [t.album, t])).values()];
-  return albums.slice(0, 15).map((t, i) => ({ name: t.album, artist: t.artist, plays: Math.round((40 - i * 2.4) * scale), image: '' }));
 }
 
 // Keep fetched pages separately so a refresh or network failure resumes an

@@ -59,7 +59,9 @@ Keep evaluation inputs synthetic or explicitly consented. Log task/model/status/
 
 Official model catalogue: [OpenRouter models API](https://openrouter.ai/api/v1/models).
 
-## Open-source and publishing gates still open
+## Open-source and publishing gates at the initial review
+
+The following list is historical. MIT licensing, pinned dependencies, CI, neutral configuration and the Pages build boundary were subsequently implemented. See [RELEASE_READINESS.md](RELEASE_READINESS.md) for the current evidence and remaining hosting/user-journey gates.
 
 1. Choose an explicit source license; no LICENSE currently establishes open-source reuse rights. Add contribution and vulnerability-reporting instructions.
 2. Provide a reproducible dependency/runtime setup and CI. Local statistics/demo now start without AI secrets, but Wrangler is still downloaded through npx rather than a pinned project lockfile.
@@ -68,7 +70,7 @@ Official model catalogue: [OpenRouter models API](https://openrouter.ai/api/v1/m
 5. Finish a real-user journey check: new/sparse Last.fm accounts, large/resumed import, missing artwork, failed providers, exclusions, repeat visits, mobile charts and keyboard navigation. Preserve existing histories and URLs through changes.
 6. Keep unsupported community-rating feeds as attributed outbound links until approved access exists. Ratings remain secondary context, not the recommendation's main purpose.
 
-No public deployment, partner outreach or license selection was performed during this review.
+No public deployment or partner outreach was performed during this review. The maintainer subsequently selected MIT for the release preparation.
 
 Verification: all 89 tests pass. Browser checks at 1440px and 320px found no horizontal overflow, all nine navigation links present, and Overview liner notes outside any closed details element. The Insights prepared note is visible. These checks cover the visibility correction; they do not establish a flawless end-to-end release.
 

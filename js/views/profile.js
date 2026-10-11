@@ -425,6 +425,7 @@ function estimate(sec) {
 }
 
 function importCTA({ p, source }) {
+  if (source === 'file' || source === 'demo') return `<section class="panel c-12"><div class="cta"><div><span class="label">Your listening history</span><h2>Your record needs some plays</h2><p>${source === 'file' ? 'This file has no listening that can be counted. Add a Spotify history file with song plays to explore your record.' : 'The demo has no counted plays available. Review its counting settings, or connect your own listening history.'}</p></div><div class="cta__actions"><a class="btn btn--line" href="${source === 'file' ? '#/connect/file' : '#/start'}">${source === 'file' ? 'Choose a history file' : 'Get started'} ↗</a></div></div></section>`;
   const exportDrop = `<div style="border-top:1px solid var(--line);padding-top:18px">${dropzone({ title: source === 'spotify' ? 'Drop your Spotify export' : 'Or drop your Spotify export', sub: 'For exact listening time and skips. Read on your device, never uploaded.' })}</div>`;
   if (source === 'spotify') {
     return `<section class="panel c-12"><div class="cta"><div><span class="label">Your full history</span><h2 style="margin-top:8px">Spotify only shares your last 50 plays</h2><p>Sleeve keeps every batch it sees, so your history grows each time you visit. For everything since day one, add your Spotify export.</p></div><div class="cta__actions"><a class="btn btn--line" href="#/connect/file">How to get it</a></div></div>${exportDrop}</section>`;
@@ -629,6 +630,12 @@ function topBody(items, kind, periodLabel, total, L = {}) {
 
 /* ---------- Timeline ---------- */
 function needArchive(ctx, what) {
+  $('#tab').innerHTML = archiveNeededHTML(ctx, what);
+  bindCommon(ctx);
+}
+
+export function archiveNeededHTML(ctx, what) {
+  if (ctx.archive?.export?.rows?.length || ctx.archive?.live?.rows?.length) return `${banner(ctx)}<section class="panel"><h2>No plays match your counting settings</h2><p class="muted" style="margin-top:10px">Your original history is saved. Restore excluded listening or change the minimum play length to see your ${what === 'patterns' ? 'charts' : what === 'evolution' ? 'taste changes' : what === 'discover' ? 'recommendations' : what}.</p><a class="btn btn--line btn--sm" style="margin-top:16px" href="${hrefFor(ctx.pid,'data')}">Review counting settings ↗</a></section>`;
   const empty = ctx.source === 'lastfm' && !ctx.p.user.playcount;
   const preparing = ctx.source === 'lastfm' && !empty;
   const copy = (empty ? {
@@ -653,11 +660,10 @@ function needArchive(ctx, what) {
     insights: ['Insights need your full history', 'Import it once and Sleeve looks for obsessions, comebacks, streaks, late nights and more.'],
     clock: ['Your listening clock needs your full history', 'Import it once and Sleeve maps when you listen, hour by hour, across the week.'],
   })[what];
-  $('#tab').innerHTML = `${banner(ctx)}<div class="grid">
+  return `${banner(ctx)}<div class="grid">
     <div class="c-12 subhead" style="margin-top:0"><div><h2>${copy[0]}</h2><p class="muted" style="margin-top:6px">${copy[1]} <a href="${hrefFor('demo', what)}">See it on the demo profile</a>.</p></div></div>
     ${empty ? firstPlayCTA() : importCTA(ctx)}
   </div>`;
-  bindCommon(ctx);
 }
 
 function timelineTab(ctx) {
@@ -695,7 +701,7 @@ function timelineTab(ctx) {
       const next = sel + Number(button.dataset.monthStep);
       if (next < 0 || next >= A.months.length) return;
       pick(next);
-      $(`.tl__bar[data-i="${next}"]`, $('#tl'))?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      $(`.tl__bar[data-i="${next}"]`, $('#tl'))?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest', inline: 'center' });
       $('#month h3')?.focus();
     }));
     hydrate($('#month'));
@@ -754,7 +760,11 @@ function insightsTab(ctx) {
   bindAsk(ctx);
   bindMainstream(A, ctx.L);
   $$('[data-insights-jump]', $('#tab')).forEach((button) => button.addEventListener('click', () => {
-    $(`#${button.dataset.insightsJump}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const target=$(`#${button.dataset.insightsJump}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    const heading=$('h2,h3',target);
+    if (heading) { heading.tabIndex=-1; heading.focus({preventScroll:true}); }
   }));
 }
 

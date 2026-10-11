@@ -13,6 +13,14 @@ const SOURCE = { lastfm: 'Last.fm', listenbrainz: 'ListenBrainz', spotify: 'Spot
 
 export const aiEnabled = () => store.get('liner.ai') !== 'off';
 
+export function renderPrivacy() {
+  view().innerHTML = `<div class="wrap settings"><header class="settings__head"><span class="label">YOUR DATA</span><h1>Privacy & your listening</h1><p>What stays here, what leaves this browser, and how to remove it.</p></header>
+    <section class="setrow"><div class="setrow__label"><h2>Your record stays on this device</h2></div><div class="setstack"><p>Spotify history ZIPs are read locally. Listening records, ratings, exclusions, saved recommendations and preferences live in this browser. Sleeve does not create an account or upload your original history file.</p><p>Last.fm connections request public profile and listening data from Last.fm. Music names and recording IDs are sent to catalogue, artwork and sound-data services as needed. Those providers and this site's host receive ordinary network request metadata.</p></div></section>
+    <section class="setrow"><div class="setrow__label"><h2>Optional AI writing</h2></div><div class="setstack"><p>Writing is on by default and runs automatically during preparation. It sends a compact summary of measured findings and favorite music, sometimes including your display name, through Sleeve's server to OpenRouter and the selected model provider. Your raw play history is not sent.</p><p>Public writing requests deny provider data collection. This is a routing control, rather than a guarantee of zero retention. Generated responses are cached on the server for seven days. Disable writing in Settings before connecting a profile or opening a file if you prefer local analysis only.</p><a class="link" href="#/settings">Manage AI writing ↗</a></div></section>
+    <section class="setrow"><div class="setrow__label"><h2>Clear your local copies</h2></div><div class="setstack"><p>Remove a profile or use Clear everything in Settings. Export any recommendation shelf you want to keep first. Local deletion does not erase previously cached server writing or data held by external services. Browser clearing and private browsing can also remove your saved record.</p><a class="link" href="#/settings">Open data settings ↗</a></div></section>
+    <section class="setrow"><div class="setrow__label"><h2>Music services</h2></div><div class="setstack"><p>Sleeve uses Last.fm, MusicBrainz, CritiqueBrainz, AcousticBrainz, Deezer and iTunes for music context. Google Fonts supplies interface fonts. Album of the Year and Rate Your Music links open their sites; their scores are not imported. This site's host is responsible for any additional analytics or logging it enables.</p><p>Sleeve is independent of these services and Spotify. Their material keeps its own rights and policies.</p></div></section></div>`;
+}
+
 export function renderSettings() {
   const list = profiles.list();
   const key = store.get('liner.lfmkey') || '';
@@ -52,7 +60,7 @@ export function renderSettings() {
       </section>
 
       <section class="setrow">
-        <div class="setrow__label"><h2>Connections</h2><p>Advanced. Sleeve already has a Last.fm key, so you don't need your own.</p></div>
+        <div class="setrow__label"><h2>Connections</h2><p>${lastfm.isLive() ? 'Advanced. This installation has a Last.fm read key, so you do not need your own.' : 'This installation needs a Last.fm read key for live listening. The demo and Spotify history files work without one.'}</p></div>
         <div class="setstack">
           <details class="setmore">
             <summary>Use your own Last.fm API key</summary>
@@ -62,7 +70,7 @@ export function renderSettings() {
               <button class="btn btn--ink btn--sm" type="submit">Save</button>
               ${key ? '<button class="btn btn--quiet btn--sm" type="button" id="set-key-clear">Remove</button>' : ''}
             </form>
-            <p class="faint" style="font-size:13.5px;margin-top:8px">Status: ${lastfm.isLive() ? 'live' : 'simulated'}. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Create a key</a>.</p>
+            <p class="faint" style="font-size:13.5px;margin-top:8px">Status: ${lastfm.isLive() ? 'live' : 'not configured'}. <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Create a key</a>.</p>
           </details>
           <p class="faint" style="font-size:14px">Spotify direct: ${spotify.isConnected() ? 'connected. <button type="button" class="link" id="set-sp-off">Disconnect</button>' : '<a href="#/connect/spotify">not connected</a>.'}</p>
         </div>

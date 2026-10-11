@@ -43,7 +43,7 @@ export function sleeveSvg(key) {
 export function sleeve(title, artist, { img = '', size = 44, round = false, cls = '', kind } = {}) {
   const k = kind || (title === artist ? 'artist' : 'album');
   const key = `${artist}·${title}`;
-  const imgTag = img ? `<img src="${esc(img)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">` : '';
+  const imgTag = img ? `<img src="${esc(img)}" alt="" loading="lazy" decoding="async">` : '';
   const ask = !img && title ? ` data-art="${esc(JSON.stringify([k, title, k === 'artist' ? '' : artist]))}"` : '';
   return `<span class="sleeve${round ? ' sleeve--round' : ''}${cls ? ` ${cls}` : ''}" style="--s:${size}px"${ask} aria-hidden="true">${sleeveSvg(key)}${imgTag}</span>`;
 }
@@ -55,7 +55,7 @@ export const trackSleeve = (t, opts = {}) => (t.album
 export function avatar(name, img, size = 56) {
   const h = hash(name);
   const bg = INKS[[1, 2, 4, 5, 6, 7][h % 6]];
-  return `<span class="avatar" style="--s:${size}px;--av:${bg}" aria-hidden="true"><span>${esc(initials(name))}</span>${img ? `<img src="${esc(img)}" alt="" onerror="this.remove()">` : ''}</span>`;
+  return `<span class="avatar" style="--s:${size}px;--av:${bg}" aria-hidden="true"><span>${esc(initials(name))}</span>${img ? `<img src="${esc(img)}" alt="">` : ''}</span>`;
 }
 
 /* ---------- Formatting ---------- */

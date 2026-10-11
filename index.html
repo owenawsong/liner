@@ -21,13 +21,7 @@
   <link rel="stylesheet" href="welcome.css">
   <link rel="stylesheet" href="profile.css">
   <link rel="stylesheet" href="journey.css">
-  <script>
-    (function () {
-      var t = 'auto';
-      try { t = localStorage.getItem('liner.theme') || 'auto'; } catch (e) {}
-      if (t !== 'auto') document.documentElement.setAttribute('data-theme', t);
-    })();
-  </script>
+  <script src="js/theme-init.js"></script>
 </head>
 <body>
   <a class="skip" href="#view">Skip to content</a>
@@ -99,6 +93,7 @@
           <li><a href="#/demo">Demo profile</a></li>
           <li><a href="#/" data-scroll="faq">Questions</a></li>
           <li><a href="#/settings" id="settings-btn">Settings</a></li>
+          <li><a href="#/privacy">Privacy</a></li>
           <li><a href="#/start">Get started</a></li>
         </ul>
       </div>
@@ -120,7 +115,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <div class="dropveil" id="dropveil" hidden><div><b>Drop your Spotify export</b><span>The ZIP from Spotify's email. It's read here and never uploaded.</span></div></div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+  <script src="assets/vendor/jszip.min.js" defer></script>
   <script src="config.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>

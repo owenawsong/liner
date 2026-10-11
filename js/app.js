@@ -5,7 +5,7 @@ import { renderConnect } from './views/connect.js';
 import { renderProfile } from './views/profile.js';
 import { renderCompare } from './views/compare.js';
 import { renderStart } from './views/start.js';
-import { renderSettings } from './views/settings.js';
+import { renderSettings, renderPrivacy } from './views/settings.js';
 import { themeButtons, setTheme } from './theme.js';
 import { handleFiles } from './actions.js';
 import * as lastfm from './sources/lastfm.js';
@@ -31,6 +31,7 @@ async function route() {
     else if (a === 'u' && SOURCES[b] && c) { pid = pidFor(b, c); await renderProfile({ pid, source: b, name: c, tab: d, args: parts.slice(4) }); }
     else if (a === 'start') renderStart(b || '');
     else if (a === 'settings') renderSettings();
+    else if (a === 'privacy') renderPrivacy();
     else if (a === 'compare') renderCompare(b, c || '', d || '');
     else if (a === 'connect') renderConnect(b || 'lastfm', Number(c) || 1);
     else if (a === 'setup') renderConnect('lastfm', Number(b) || 1);
@@ -49,7 +50,10 @@ async function route() {
   }
   const tabs = $('.tabs');
   if (pid && pid === lastPid && tabs) {
-    const y = tabs.getBoundingClientRect().top + scrollY - 64;
+    const nav = tabs.closest('.profile-nav');
+    const tabHeight = nav && getComputedStyle(nav).position === 'sticky' ? nav.getBoundingClientRect().height : 0;
+    // Measure the normal-flow content, not the visually stuck navigation.
+    const y = Math.max(0, $('#tab').getBoundingClientRect().top + scrollY - $('#nav').getBoundingClientRect().height - tabHeight);
     if (scrollY > y) scrollTo(0, y);
   } else {
     scrollTo(0, 0);
@@ -113,7 +117,7 @@ function initMenu() {
 }
 
 function updateStatus() {
-  $('#source-status').textContent = lastfm.isLive() ? '' : 'Last.fm: simulated until a key is added in Settings';
+  $('#source-status').textContent = lastfm.isLive() ? '' : 'Last.fm is not configured · Demo and file imports are available';
 }
 
 /* ---------- Drop a Spotify export anywhere ---------- */
@@ -134,6 +138,10 @@ function initDrop() {
 
 /* ---------- Boot ---------- */
 async function boot() {
+  document.addEventListener('error', event => {
+    const image = event.target;
+    if (image?.tagName === 'IMG' && image.closest('.sleeve, .avatar')) image.remove();
+  }, true);
   $('.skip').addEventListener('click', (event) => {
     event.preventDefault();
     view().focus({ preventScroll: true });

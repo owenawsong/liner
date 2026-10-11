@@ -40,7 +40,7 @@ export async function readExport(files, onProgress = () => {}) {
     }
   }
   onProgress('Adding it all up');
-  const rows = chunks.flat().filter((r) => !Number.isNaN(r.t));
+  const rows = chunks.flat().filter((r) => Number.isFinite(r.t));
   if (!rows.length) {
     throw new Error(skipped.length
       ? `No listening history in ${skipped.map((s) => `"${s}"`).join(', ')}. Drop the ZIP from Spotify's email, or the Streaming_History files inside it.`
@@ -88,7 +88,7 @@ function parse(text, name) {
 }
 
 function platform(p) {
-  if (!p) return null;
+  if (typeof p !== 'string' || !p) return null;
   const s = p.toLowerCase();
   if (s.includes('ios') || s.includes('iphone') || s.includes('ipad')) return 'iOS';
   if (s.includes('android')) return 'Android';
@@ -102,18 +102,21 @@ function platform(p) {
 }
 
 function row(r) {
-  if (r && 'listened_at' in r) {
-    const md = r.track_metadata || {};
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+  const text = value => typeof value === 'string' && value.trim() ? value : null;
+  const duration = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+  if ('listened_at' in r) {
+    const md = r.track_metadata && typeof r.track_metadata === 'object' ? r.track_metadata : {};
     const t = typeof r.listened_at === 'number' ? r.listened_at * 1000 : Date.parse(r.listened_at);
-    return { t, ms: null, track: md.track_name || null, artist: md.artist_name || null, album: md.release_name || '', skipped: null, shuffle: null, platform: null, src: 'listenbrainz' };
+    return { t, ms: null, track: text(md.track_name), artist: text(md.artist_name), album: text(md.release_name) || '', skipped: null, shuffle: null, platform: null, src: 'listenbrainz' };
   }
   if ('ts' in r) {
     return {
       t: Date.parse(r.ts),
-      ms: r.ms_played || 0,
-      track: r.master_metadata_track_name || null,
-      artist: r.master_metadata_album_artist_name || null,
-      album: r.master_metadata_album_album_name || '',
+      ms: duration(r.ms_played),
+      track: text(r.master_metadata_track_name),
+      artist: text(r.master_metadata_album_artist_name),
+      album: text(r.master_metadata_album_album_name) || '',
       skipped: r.skipped === true || r.reason_end === 'fwdbtn',
       shuffle: typeof r.shuffle === 'boolean' ? r.shuffle : null,
       platform: platform(r.platform),
@@ -121,8 +124,9 @@ function row(r) {
     };
   }
   if ('endTime' in r) {
+    if (typeof r.endTime !== 'string') return null;
     const end = Date.parse(`${r.endTime.replace(' ', 'T')}Z`);
-    return { t: end - (r.msPlayed || 0), ms: r.msPlayed || 0, track: r.trackName || null, artist: r.artistName || null, album: '', skipped: null, shuffle: null, platform: null, src: 'export' };
+    return { t: end - duration(r.msPlayed), ms: duration(r.msPlayed), track: text(r.trackName), artist: text(r.artistName), album: '', skipped: null, shuffle: null, platform: null, src: 'export' };
   }
   return null;
 }

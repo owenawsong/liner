@@ -4,17 +4,33 @@ The complete record of your listening. Sleeve turns music history into timelines
 
 ## Run locally
 
-The frontend is plain HTML, CSS, and ES modules. On Windows with Node.js installed, run:
+Use Node.js 22 or 24. The frontend is plain HTML, CSS, and ES modules. Install the pinned toolchain and verify the release:
+
+```sh
+npm ci
+npm run check
+npm run check:secrets:history
+```
+
+For a cross-platform preview, run `npm run preview` and open `http://127.0.0.1:5178`. On Windows, this helper creates a fresh public staging directory and supports private local writer configuration:
 
 ```powershell
 .\scripts\dev.ps1
 ```
 
-Open `http://127.0.0.1:5178`. The script stages only public assets outside the repository, then starts Cloudflare Pages Functions. To use another port, pass `-Port 5180`.
+Open `http://127.0.0.1:5178`. To use another port, pass `-Port 5195`. Restart after source edits to rebuild the snapshot.
 
-AI keys are optional for local statistics and demo views. To enable writing, put `OPENROUTER_API_KEY=your-key` in `%USERPROFILE%\.sleeve\dev\.dev.vars`. An optional `NVIDIA_API_KEY` enables the development-only fallback. Never add either key to frontend code or commit that file.
+AI keys are optional for local statistics and demo views. Copy [.dev.vars.example](.dev.vars.example) to `%USERPROFILE%\.sleeve\dev\.dev.vars` and add your optional private `OPENROUTER_API_KEY`. An optional `NVIDIA_API_KEY` enables the development-only fallback. Never add either key to frontend code or commit that file. A separately provisioned `LASTFM_API_KEY` enables live Last.fm and is injected as **public browser configuration**; it is visible to visitors. With no read key, the demo and Spotify files still work and arbitrary usernames never receive simulated listening history.
 
 Do not serve the project root with `python -m http.server` or `wrangler pages dev .` if it contains a local `.dev.vars`: those commands can expose that file on localhost. The service worker registers on HTTPS deployments. Local development serves a public staging snapshot; restart the preview after repository edits to rebuild that snapshot.
+
+## Open source and hosting
+
+Sleeve's code is licensed under [MIT](LICENSE). See [contributor instructions](CONTRIBUTING.md), [security reporting](SECURITY.md), [data handling](PRIVACY.md), and [third-party notices](THIRD_PARTY_NOTICES.md). The app's Privacy page is also available from its footer and setup.
+
+The public build is `dist/`, created by `npm run build`. ZIP reading is bundled locally. [The deployment guide](docs/DEPLOYMENT.md) describes Cloudflare Pages Functions, the separate shared AI budget Worker, encrypted secrets, preview isolation and hosted verification. CI tests Linux/Windows, builds both server bundles, scans source/history/public output and audits dependencies. CI does not deploy.
+
+The repository is prepared for review, not a certified public service. Account resources, provider permissions, hosted quotas/security headers and a consented live import must still be checked before enabling production AI. See [release readiness](docs/RELEASE_READINESS.md) for completed evidence and remaining gates.
 
 ## Get your data in
 
