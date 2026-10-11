@@ -1,0 +1,36 @@
+name: Something is broken
+description: Report a problem with setup, listening data, charts or Discover.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks for helping improve Sleeve. Do not attach raw listening archives, API keys or unredacted personal responses. For vulnerabilities, use private security reporting."
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: What did you try, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we reproduce it?
+      description: Include the page and steps. A cropped screenshot without personal data is welcome.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and device
+      placeholder: "Firefox on Android; Chrome on Windows; etc."
+  - type: dropdown
+    id: source
+    attributes:
+      label: Listening source
+      options:
+        - Demo
+        - Last.fm
+        - Spotify history ZIP
+        - Advanced Spotify connection
+        - Other / not applicable

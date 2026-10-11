@@ -1,7 +1,7 @@
 {
   "name": "Sleeve",
   "short_name": "Sleeve",
-  "description": "The complete record of your listening. Free Spotify stats with timelines, eras and insights.",
+  "description": "Your music over time. Explore Last.fm history or a Spotify export with timelines, taste changes and your next record.",
   "start_url": "./#/",
   "scope": "./",
   "display": "standalone",
