@@ -2,6 +2,8 @@
 
 Sleeve uses **Cloudflare Pages with Pages Functions**, plus a separate Worker for the shared AI request budget. The historical Pages project name is `liner`; the budget Worker is `sleeve-ai-budget`. The root Wrangler configuration now describes Pages, not a static Workers deployment.
 
+**Just want to use Sleeve? [Open the hosted website](https://liner-c7u.pages.dev/).** No Cloudflare account, API key or installation is needed. The instructions below are for running a separate copy. When self-hosting, update `index.html`'s Open Graph URL and image URLs to your own public hostname.
+
 ## Account state checked October 10, 2026
 
 Initial read-only checks found production branch **`main`**, source `268114c`, and no `sleeve-ai-budget` Worker. With the maintainer's subsequent authorization, that Worker was provisioned and the Pages production binding was added. Pages build settings now use `npm run build`, `dist`, build image 3 and Node.js 22. The approved public Last.fm read key is configured for builds, and the supplied OpenRouter key was installed as an encrypted production secret. OpenRouter's key-status endpoint returned 200. Preview environments retain no production budget binding or writer secret. See [release readiness](RELEASE_READINESS.md) for deployment evidence and remaining gates.
@@ -47,13 +49,9 @@ npm run preview
 
 Open `http://127.0.0.1:5178`. Statistics and the demo need no AI secret. Rebuild/restart after editing source because the preview serves the public snapshot. Windows users can use `scripts/dev.ps1` for a fresh external staging folder and optional private local configuration.
 
-For optional local AI, pass the **path** of a private dotenv file outside `dist/`, never a token value in a command argument:
+For optional local AI on Windows, use `scripts/dev.ps1` with `%USERPROFILE%\.sleeve\dev\.dev.vars`. The helper stages a private runtime and installs Function bindings from that file. It can contain `OPENROUTER_API_KEY` and, for localhost prototyping only, `NVIDIA_API_KEY`. No token value belongs in a command argument.
 
-```sh
-npm exec -- wrangler pages dev dist --env-file /absolute/private/path/.dev.vars --port 5178
-```
-
-The file can contain `OPENROUTER_API_KEY` and, for localhost prototyping only, `NVIDIA_API_KEY`. This command does not load a separate local Durable Object implementation. For a full local shared-budget test, start `sleeve-ai-budget` with Wrangler in a separate terminal and keep the configured external binding. The automated budget tests exercise its admission rules without provider requests. `AI_BUDGET_REQUIRED=1` makes local AI fail closed when a binding is absent.
+Pages dev reads `.dev.vars` beside its Wrangler configuration; `--env-file` alone does **not** provide Function bindings. On other platforms, keep a local `.dev.vars` beside the config (Git ignores it) and serve only `dist/`. The checked-in config also requires the external budget binding. For a full local shared-budget test, start `sleeve-ai-budget` with Wrangler in a separate terminal and keep that binding. The automated budget tests exercise its admission rules without provider requests. `AI_BUDGET_REQUIRED=1` makes AI fail closed when a binding is absent; keep it enabled on public deployments. The Windows helper's separately staged localhost-only configuration deliberately has no production binding.
 
 ## Prepare hosting before an approved deployment
 

@@ -1,0 +1,15 @@
+name: An idea for Sleeve
+description: Suggest something that would make your listening record more useful.
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What would you like to understand or do?
+      description: Describe the listening question or problem, and where Sleeve falls short today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: A sketch, example or source of inspiration is welcome. Please leave out personal archives and credentials.

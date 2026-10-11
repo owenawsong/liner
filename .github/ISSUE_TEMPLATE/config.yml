@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Try Sleeve or open the demo
+    url: https://liner-c7u.pages.dev/
+    about: Use the hosted app without installing anything.
+  - name: Report a security vulnerability privately
+    url: https://github.com/owenawsong/liner/security/advisories/new
+    about: Keep sensitive details out of public issues.

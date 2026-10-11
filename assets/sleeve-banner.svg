@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Sleeve — your taste has a history</title>
+  <desc id="desc">An orange record sleeve and black vinyl sit beside the words Your taste has a history. What changed. What stayed. What to play next.</desc>
+  <defs><clipPath id="edge"><rect width="1200" height="630" rx="4"/></clipPath></defs>
+  <g clip-path="url(#edge)">
+    <rect width="1200" height="630" fill="#0d0d0c"/>
+    <rect width="9" height="630" fill="#ff653c"/>
+    <g transform="translate(65 43)">
+      <circle cx="18" cy="23" r="17" fill="#f3efe6"/>
+      <circle cx="18" cy="23" r="11" fill="none" stroke="#b8b5aa" stroke-width="1"/>
+      <circle cx="18" cy="23" r="5" fill="#ff653c"/>
+      <circle cx="18" cy="23" r="1.4" fill="#0d0d0c"/>
+      <path d="M36 5 26 19" stroke="#f3efe6" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="36" cy="5" r="3.5" fill="#f3efe6"/>
+    </g>
+    <text x="113" y="82" font-family="Arial,Helvetica,sans-serif" font-size="42" font-weight="700" letter-spacing="-2" fill="#f3efe6">sleeve</text>
+    <text x="1135" y="71" text-anchor="end" font-family="Arial,Helvetica,sans-serif" font-size="13" letter-spacing="2" fill="#aaa79d">FREE · OPEN SOURCE · YOUR MUSIC</text>
+    <g transform="rotate(-9 1000 286)">
+      <rect x="834" y="119" width="340" height="340" fill="#ff653c"/>
+      <rect x="853" y="138" width="302" height="302" fill="none" stroke="#0d0d0c" stroke-width="1" opacity=".45"/>
+      <path d="M860 403 1138 151 M860 432 1138 180" stroke="#0d0d0c" stroke-width="2" opacity=".28"/>
+    </g>
+    <circle cx="1043" cy="290" r="179" fill="#181817" stroke="#42423a" stroke-width="1"/>
+    <g fill="none" stroke="#363630" stroke-width="1">
+      <circle cx="1043" cy="290" r="167"/><circle cx="1043" cy="290" r="155"/>
+      <circle cx="1043" cy="290" r="142"/><circle cx="1043" cy="290" r="131"/>
+      <circle cx="1043" cy="290" r="116"/><circle cx="1043" cy="290" r="105"/>
+      <circle cx="1043" cy="290" r="91"/><circle cx="1043" cy="290" r="78"/>
+    </g>
+    <circle cx="1043" cy="290" r="60" fill="#f3efe6"/>
+    <circle cx="1043" cy="290" r="17" fill="#ff653c"/>
+    <circle cx="1043" cy="290" r="5" fill="#0d0d0c"/>
+    <text x="65" y="208" font-family="Arial,Helvetica,sans-serif" font-size="84" font-weight="700" letter-spacing="-4" fill="#f3efe6">Your taste</text>
+    <text x="65" y="299" font-family="Arial,Helvetica,sans-serif" font-size="84" font-weight="700" letter-spacing="-4" fill="#f3efe6">has a history.</text>
+    <text x="69" y="357" font-family="Arial,Helvetica,sans-serif" font-size="22" fill="#aaa79d">A closer look at the music you keep coming back to.</text>
+    <path d="M69 402H638" stroke="#42423a" stroke-width="1"/>
+    <text x="69" y="437" font-family="Arial,Helvetica,sans-serif" font-size="14" letter-spacing="1.2" fill="#f3efe6">LAST.FM HISTORY / SPOTIFY EXPORT</text>
+    <path d="M65 499H1135" stroke="#55554a" stroke-width="1"/>
+    <g font-family="Arial,Helvetica,sans-serif">
+      <text x="65" y="547" fill="#ff653c" font-size="13">01</text>
+      <text x="65" y="579" fill="#f3efe6" font-size="24" font-weight="700">What changed.</text>
+      <text x="427" y="547" fill="#ff653c" font-size="13">02</text>
+      <text x="427" y="579" fill="#f3efe6" font-size="24" font-weight="700">What stayed.</text>
+      <text x="789" y="547" fill="#ff653c" font-size="13">03</text>
+      <text x="789" y="579" fill="#f3efe6" font-size="24" font-weight="700">What to play next.</text>
+    </g>
+  </g>
+</svg>

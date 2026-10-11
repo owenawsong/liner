@@ -1,10 +1,10 @@
 # Security
 
-Sleeve is preparing its first public release. Security fixes apply to the current main development line; no older release has a promised support window.
+Security fixes apply to Sleeve's current main development line and first public release. No older release has a promised support window.
 
 ## Reporting
 
-Use the repository's **Security → Report a vulnerability** flow when private vulnerability reporting is enabled. If it is unavailable, contact the maintainer privately through an established channel before sharing sensitive details. Public issues are appropriate for ordinary bugs, but must not contain credentials, listening exports, personal responses, or instructions for exploiting a live service. The repository is currently private; GitHub's reporting feature is for public repositories and its API returned 404 during preparation. Enable and verify this flow when publishing the repository. [GitHub documentation](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository).
+Use **[Security → Report a vulnerability](https://github.com/owenawsong/liner/security/advisories/new)** to send a private report. If that flow is unavailable, contact the maintainer privately through an established channel before sharing sensitive details. Public issues are appropriate for ordinary bugs, but must not contain credentials, listening exports, personal responses, or instructions for exploiting a live service.
 
 ## Hosting boundaries
 
