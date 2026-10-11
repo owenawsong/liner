@@ -56,7 +56,7 @@ ${f}`,
   },
   year: {
     max: 260,
-    prompt: (f) => `Write one year-in-review paragraph (about 75 words). Choose one defining artist or shift supported by the facts and explain it with a count. Make a second, distinct observation only if the facts support it.\n\nFacts:\n${f}`,
+    prompt: (f) => `Write one short year-in-review paragraph under 65 words. Name a specific artist or recorded shift and support it with the supplied counts. Call an artist the annual leader ONLY when an annual ranking explicitly identifies them as first; selected artist counts or a few monthly leaders cannot establish annual leadership. Describe comparisons only between the supplied artists, without assuming they represent the whole year. Do not turn missing months into continuity, dominance or a causal explanation. A second distinct observation is optional. Address you, using at most two numeric facts.\n\nFacts:\n${f}`,
   },
   roast: {
     max: 260,
@@ -206,7 +206,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const facts = body.facts, question = body.question || '';
   if (body.task === 'ask' && !question.trim()) return json({ error: 'Ask a question.' }, 400);
 
-  const cacheKey = new Request(`https://liner-ai.cache/${CACHE_VERSION}/${body.task}/${await sha(`${facts}|${question}|${body.seed || ''}`)}`);
+  const version = body.task === 'year' ? 'v20' : CACHE_VERSION;
+  const cacheKey = new Request(`https://liner-ai.cache/${version}/${body.task}/${await sha(`${facts}|${question}|${body.seed || ''}`)}`);
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
   if (cached) return new Response(cached.body, { headers: { ...PRIVATE_HEADERS, 'X-Liner-Cache': 'hit' } });
@@ -259,7 +260,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
         : "Sleeve's writing budget is unavailable. Your listening stats still work; try again later." }), status: budgetFailure.status === 429 ? 429 : 503 };
       console.log('ai: every model failed', errors);
       const unconfigured = errors.length && errors.every((e) => e.startsWith('no key'));
-      return { out: JSON.stringify({ error: unconfigured ? "AI writing isn't switched on for this site yet." : 'The writing models are busy right now. Your listening stats still work; try the note again shortly.' }), status: 503 };
+      return { out: JSON.stringify({ error: unconfigured ? "AI writing isn't switched on for this site yet." : "We couldn't prepare supported writing right now. Your listening stats still work; try again later." }), status: 503 };
     })();
     inflight.set(key, work);
     work.then(() => { if (inflight.get(key) === work) inflight.delete(key); }, () => { if (inflight.get(key) === work) inflight.delete(key); });

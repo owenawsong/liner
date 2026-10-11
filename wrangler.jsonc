@@ -4,6 +4,7 @@
   "name": "liner",
   "compatibility_date": "2026-09-01",
   "pages_build_output_dir": "./dist",
+  "vars": { "NODE_VERSION": "22", "AI_BUDGET_REQUIRED": "1" },
   "durable_objects": {
     "bindings": [
       { "name": "AI_BUDGET", "class_name": "AIBudget", "script_name": "sleeve-ai-budget" }
@@ -11,5 +12,5 @@
   },
   // Preview AI fails closed, rather than spending the production shared quota.
   // Provision a separate budget Worker before deliberately enabling preview AI.
-  "env": { "preview": { "durable_objects": { "bindings": [] } } }
+  "env": { "preview": { "vars": { "NODE_VERSION": "22", "AI_BUDGET_REQUIRED": "1" }, "durable_objects": { "bindings": [] } } }
 }

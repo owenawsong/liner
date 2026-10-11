@@ -2,9 +2,9 @@
 
 ## Decision
 
-The source is substantially closer to an open-source release and is ready for a maintainer review. **Production launch is still gated.** A passing local build does not demonstrate a working, abuse-resistant public AI service.
+The prepared release is now deployed to **[liner-c7u.pages.dev](https://liner-c7u.pages.dev)**, with a tested [preview](https://sleeve-preview.liner-c7u.pages.dev). The repository remains private with MIT licensing and a [release PR](https://github.com/owenawsong/liner/pull/1). Public repository visibility is a separate final publication step. Anonymous AI limits and a small hosted evaluation do not establish unlimited availability or perfect interpretation.
 
-This preparation has not pushed commits, changed repository visibility, deployed resources, or changed the existing public site.
+The maintainer authorized hosting work after the initial local preparation. Source was pushed, the budget Worker provisioned, Pages build/runtime settings and encrypted secrets configured, and preview/production deployments uploaded. No paid tier was introduced. Frontend, analysis, recommendations, prompts, validation and server/budget code remain in the open-source plan; private credentials and user data are excluded.
 
 ## Completed locally
 
@@ -12,7 +12,7 @@ This preparation has not pushed commits, changed repository visibility, deployed
 - Locked JSZip 3.10.1 and Wrangler 4.149.0; Node.js 22/24 documented. ZIP support ships in the app instead of depending on a runtime CDN.
 - Explicit public build allowlist. Private env files, Git, dependencies, scripts, tests and Functions source are excluded from uploaded assets. Build targets and symlinks are checked before replacing generated output.
 - Cloudflare Pages configuration includes Functions and the external shared-budget binding. Preview builds deliberately lack the production budget binding. The Windows helper stages the same public build outside the checkout.
-- Read-only CI configured for Linux/Windows and Node.js 22/24, using pinned action revisions: tests, public build, credential scans, Functions compilation, budget Worker dry-run and dependency audit. **The remote CI matrix has not run for this unpushed revision.**
+- Read-only CI configured for Linux/Windows and Node.js 22/24, using pinned action revisions: tests, public build, credential scans, Functions compilation, budget Worker dry-run and dependency audit. All four jobs passed at `bd07ec5`; the latest run is linked in the release PR. CI uncovered Windows short-path alias handling and a timer-test synchronization issue; both were repaired.
 - No owner-specific Last.fm key in source. An explicitly supplied public read key can be injected into the build. An unconfigured installation gives actionable setup feedback and never invents history for a username. Private writer keys remain outside public assets.
 - API request/body checks, bounded artwork lookups, exact identity checks, HTTPS artwork hosts, private error headers and JSON 404/405 responses. Public AI fails closed without its shared budget; a stalled budget RPC times out.
 - Static CSP and security headers; external theme initialization and image-failure handling compatible with the CSP. Privacy is linked from setup, Settings and the footer.
@@ -24,7 +24,7 @@ This preparation has not pushed commits, changed repository visibility, deployed
 
 | Check | Result and scope |
 | --- | --- |
-| `npm run check` | 129 tests pass; public build, source/output scan, Functions compilation and budget Worker dry-run succeed. Test AI requests use synthetic inputs and mocked providers. |
+| `npm run check` | 135 tests pass locally; public build, source/output scan, Functions compilation and budget Worker dry-run succeed. Linux skips the Windows-specific case test. Unit AI requests use synthetic inputs and mocked providers. |
 | `npm audit --audit-level=high` | No known dependency vulnerabilities reported at the time of this review. This does not establish absence of vulnerabilities. |
 | Reachable Git history scan | No recognized private credential matches. One historical public Last.fm read-key reference remains in `36caedc3e281`, `config.js`. Current source is neutral. Unreachable/remote-only history and unrecognized formats are outside this scan. |
 | Local browser checks before interruption | Analytical routes at 320px, Overview at 414/1440px, filtered-empty states, wrapped Data action, keyboard/focus and reduced-motion behavior; no observed runtime errors or horizontal overflow in those checks. Tab switching returned to the start of the new content. |
@@ -43,14 +43,36 @@ On October 10, 2026, the authenticated Cloudflare CLI showed:
 - Encrypted production secret names `OPENROUTER_API_KEY` and `NVIDIA_API_KEY` present. Values were not read; presence does not verify validity or which credential is stored.
 - `sleeve-ai-budget` Worker lookup returned **404 / code 10007**. The shared-budget Worker is not provisioned under that name.
 
-## Remaining launch gates, in order
+Those were the initial observations. Subsequent authorized work closed the missing Worker/configuration gates:
 
-1. **Repository release review:** review the diff and third-party notices; run the configured remote CI matrix after an approved push. Enable GitHub private vulnerability reporting and verify a usable private reporting route before public visibility. Review the historical public read key's ownership/usage; do not rewrite shared history without coordinating.
-2. **Hosting configuration:** compare the existing Pages settings with the file-managed configuration, ensure a supported build system, Node.js 22/24, build command `npm run build` and output `dist`. Supply the application's approved public Last.fm key. Provision `sleeve-ai-budget` and verify the Pages production `AI_BUDGET` binding. See [DEPLOYMENT.md](DEPLOYMENT.md).
-3. **AI account and abuse controls:** verify the encrypted OpenRouter secret and actual account limits/terms. Add platform rate/abuse controls before public AI. Confirm preview isolation and NVIDIA's local-only restriction. Provider free availability and model quality are not guaranteed by the shared budget.
-4. **Hosted user journey:** test a new/sparse Last.fm account and a consented large/resumed account, missing artwork, provider failures, exclusions, repeat visits, all main mobile routes and keyboard navigation. Repeat browser ZIP setup/persistence and service-worker update/offline reload checks on HTTPS.
-5. **Bounded hosted AI evaluation:** use synthetic or explicitly consented data on the public Functions route to verify profile, curation, year and question tasks; served model, semantic accuracy, latency, cache reuse, fallback consumption and quota exhaustion. The earlier [model evaluation](AI_MODEL_EVALUATION.md) records local evidence and limitations, not production certification.
+- `sleeve-ai-budget` deployed with the SQLite `AIBudget` namespace; production Pages binds it as `AI_BUDGET`. It now enforces shared 19/minute and 900/day provider attempts, plus durable visitor 12/ten-minute and 60/day attempts. Daily pseudonymous visitor counters have an idle cleanup alarm. Limit denial/rollover and no-inference-on-denial are covered by tests; deliberately exhausting the live account budget was not attempted.
+- Build command `npm run build`, output `dist`, build image 3 and Node.js 22 configured. Account-specific Last.fm build configuration is stored encrypted to survive file-managed uploads; its generated browser value remains public. The encrypted production OpenRouter key returned 200 from the provider's key-status endpoint. That endpoint's deprecated rate field does not verify the account's exact daily free allowance.
+- Preview has no writer key or production budget binding; its POST AI route returned 503. Production unknown API routes return JSON 404 and invalid AI methods return 405. Static CSP/nosniff headers and local JSZip were verified. Probes for env/Git/server/package paths returned SPA HTML, not source or credentials.
+- Hosted preview checked at 320px across all nine destinations with no observed horizontal overflow or runtime errors. Synthetic ZIP setup, reload persistence and HTTPS offline reload succeeded with network disabled and HTTP cache disabled. Production preserved the existing saved profile list; it was not cleared.
+- Last.fm invalid-format and missing-user feedback and the owner's live lookup were checked. The preview imported **12,641 recorded plays / 598 artists**, completed preparation with writing unavailable, and reopened the record after reload. Sparse-history and interrupted-checkpoint behavior also has automated coverage; a separately consented interrupted live account test remains broader QA.
+- Initial production upload `aa014bb9-89dd-4047-9fc9-dfcea1f53336` at source `bd07ec5` succeeded. Follow-up model wording/build-variable fixes are recorded in the PR and subsequent deployment.
+
+## Hosted AI evaluation
+
+Only synthetic facts were submitted manually on the production Functions route. No provider token was exposed in browser code or test output.
+
+| Task | Result |
+| --- | --- |
+| Structured profile | Dots, 200, 3.746 s; kept Alpha's decline, Delta's rise and Gamma's return attached to the supplied artists. |
+| Sparse candidate curation | 503 fallback; no unsupported selection displayed. |
+| Candidate curation with complete per-candidate evidence | Dots, 200, 3.262 s; four distinct supplied IDs and connected seed reasons. |
+| Year | Dots, 200, 1.907 s; numeric grounding passed, but the wording promoted selected counts into an annual-leader claim. The year prompt was tightened and its browser/server cache version advanced to v20 for a fresh check. |
+| Calculated question commentary | Dots, 200, 1.730 s; preserved the recorded decline/rise and Alpha's continuing presence. |
+| Repeated profile | Cache hit, 200, 109 ms; reused the same served model/output. |
+
+This is a small functional/semantic spot check, not a p95 benchmark or proof that every accepted sentence is correct. Model interpretation remains labeled and exact calculations remain available when writing fails. [Earlier model evaluation](AI_MODEL_EVALUATION.md) records provider restrictions and local evidence. The error copy now describes unavailable supported writing instead of assuming every validation failure means busy providers.
+
+## Remaining publication and quality work
+
+1. **Public repository:** enable public visibility when the maintainer is ready, then immediately enable and verify private vulnerability reporting. GitHub describes that feature for public repositories; its API returned 404 while this repository is private. No visibility change was made. Review the historical public read key's ownership/usage; do not rewrite shared history without coordinating.
+2. **Broader user coverage:** test separately consented new/sparse and interrupted live accounts, exclusion edits, keyboard routes, missing-artwork/provider-failure states and update behavior in additional browsers. The hosted import/offline/mobile evidence above covers specific checked paths.
+3. **AI quality and capacity:** grow a fixed synthetic semantic evaluation, assess latency distributions and review real provider capacity before promotion. The account budget caps attempts, not successful preparations or guaranteed availability. Shared-IP visitors share an allowance; anonymous limits do not prevent all coordinated abuse. Add zone-level controls when hosting on a custom domain that supports them.
 
 Community ratings remain optional attributed links or existing approved-source context; no unapproved AOTY/RYM scraping was added. Newer-song mood/tempo/key coverage remains the documented [audio-data pilot](RELEASE_REVIEW.md), not fabricated measurements or an established population comparison.
 
-An approved preview deployment is the next hosting action after these local changes are reviewed. Public launch should follow the hosted checks above.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for reproducible self-hosting and environment boundaries. The public site is deployed; public repository release and broader quality/capacity work remain explicit next steps.

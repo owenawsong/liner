@@ -35,6 +35,8 @@ The builder rejects symlinked public inputs. It can clean only the project's gen
 
 **AI provider tokens are different:** never pass them to frontend configuration or build substitutions. Keep them in private local files or Cloudflare encrypted secrets. The builder does not copy environment variables other than the explicit public Last.fm key.
 
+For this file-managed Pages project, store account-specific `LASTFM_API_KEY` in Cloudflare's encrypted environment-variable storage for production and preview. Wrangler preserves secret variables during uploads, while its file-managed `vars` replace dashboard plain variables. This storage choice keeps the account-specific value out of the repository; it still becomes **public** when the builder writes browser configuration. Node.js 22 and the required-budget flag are declared in `wrangler.jsonc`. Never add the read-key value to that file.
+
 ## Local preview
 
 ```sh
