@@ -3,7 +3,7 @@
 // Keys live in Cloudflare secrets (NVIDIA_API_KEY, OPENROUTER_API_KEY) and never reach
 // the browser. Prompts are fixed here, so this can't be used as a general chatbot.
 // Answers are cached, so the same request is only paid for once.
-import { normalizeStructuredWriting, validStructuredWriting, validYearWriting } from '../lib/writing-quality.js';
+import { normalizeStructuredWriting, validStructuredWriting, validYearWriting, validQuestionWriting } from '../lib/writing-quality.js';
 
 // Fixed OpenRouter models keep the voice testable. NVIDIA's hosted developer
 // endpoint is for local evaluation only; public traffic must never use it.
@@ -68,7 +68,7 @@ ${f}`,
   },
   ask: {
     max: 160,
-    prompt: (f, q) => `Sleeve already calculated the answer shown below. Add one short, useful observation about its evidence. Do not repeat the headline, invent a number or name, infer emotion, or contradict the calculation. If the evidence offers no further observation, say what the coverage limits. At most two sentences.\n\nVerified answer and evidence:\n${f}\n\nListener's question: ${q}`,
+    prompt: (f, q) => `Sleeve already calculated the answer shown below. Add one short, useful observation about its evidence. Do not repeat the headline, invent a number or name, infer emotion, motivation or preference, or contradict the calculation. Two artists changing in the same period cannot establish a direct swap, handoff, replacement or causal relationship. Do not claim any of those relationships; describe recorded presence, timing or the limits of the evidence. If the evidence offers no further observation, say what the coverage limits. At most two sentences.\n\nVerified answer and evidence:\n${f}\n\nListener's question: ${q}`,
   },
 };
 
@@ -206,7 +206,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const facts = body.facts, question = body.question || '';
   if (body.task === 'ask' && !question.trim()) return json({ error: 'Ask a question.' }, 400);
 
-  const version = body.task === 'year' ? 'v21' : CACHE_VERSION;
+  const version = body.task === 'year' ? 'v21' : body.task === 'ask' ? 'v20' : CACHE_VERSION;
   const cacheKey = new Request(`https://liner-ai.cache/${version}/${body.task}/${await sha(`${facts}|${question}|${body.seed || ''}`)}`);
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
@@ -239,6 +239,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
           const result = await call({ ...step, timeout: Math.min(step.timeout, remaining) }, env, messages, task.max, localPreview, task.json, visitor);
           if (!groundedNumbers(result.text, facts)) throw new Error(`${step.model} unsupported number`);
           if (body.task === 'year' && !validYearWriting(result.text, facts)) throw new Error(`${step.model} unsupported year interpretation`);
+          if (body.task === 'ask' && !validQuestionWriting(result.text)) throw new Error(`${step.model} unsupported causal commentary`);
           if (task.json) {
             let structured;
             try { structured = normalizeStructuredWriting(body.task, JSON.parse(result.text)); } catch { throw new Error(`${step.model} invalid structured response`); }

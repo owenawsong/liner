@@ -19,6 +19,12 @@ export function validYearWriting(value,facts){
   return value.split(/[.!?;]|\b(?:but|while|although|whereas)\b/i).every(clause=>!leadership.test(clause)||month.test(clause)&&!/\b(?:annual|whole year|entire year|overall|throughout|year[- ]long)\b/i.test(clause));
 }
 
+// Concurrent count changes cannot identify what replaced what or why.
+// Withhold ambiguous causal commentary; the calculated answer stays visible.
+export function validQuestionWriting(value){
+  return text(value)&&! /\b(?:swap(?:ped|ping|s)?|hand[- ]?off|replac(?:e|ed|es|ement|ing)|caus(?:e|ed|es|ing)|because|led to|took over)\b/i.test(value);
+}
+
 // One observed Gemma response wrapped the correct object in a singleton array.
 // Unwrap only that envelope; never repair IDs, invent reasons, or merge answers.
 export function normalizeStructuredWriting(task,value){
