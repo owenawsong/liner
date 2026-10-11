@@ -6,7 +6,7 @@ Sleeve now uses **`dots-studio/dots-3-note-preview:free`** first and **`google/g
 
 The primary route was selected from actual synthetic requests, rather than catalogue listings alone. Both routes preserve `provider.data_collection: "deny"`. Structured tasks request `response_format: {type: "json_object"}` with `provider.require_parameters: true`. Reasoning is explicitly disabled (`reasoning.enabled: false`): these tasks interpret already calculated evidence and do not need a hidden reasoning stage to consume their small completion budget. This is the setting used in the benchmark, not a claim about each model's maximum reasoning ability.
 
-Browser writing and server response caches are version **v19**. Preparation and discovery signatures already include the browser AI version, so previously prepared prose and curator selections are regenerated when the profile is prepared again. The per-visitor limit, shared public budget, request coalescing, timeout, model cooldown and local evidence fallback remain active. A public site still needs its shared budget binding and secret configured; this benchmark does not verify a deployed site's configuration.
+Browser writing and server response caches are version **v19**, with a **v21 exception for standalone year commentary** added during hosted release checks below. Preparation and discovery signatures include the browser AI version, so prepared prose and curator selections follow that signature. The per-visitor limit, shared public budget, request coalescing, timeout, model cooldown and local evidence fallback remain active. This original benchmark did not verify hosting; the subsequent [release checks](RELEASE_READINESS.md) cover the deployed binding and secret.
 
 ## Live results
 
@@ -62,6 +62,12 @@ This makes three live requests; running it is an intentional use of the account 
 ## Own-key support
 
 Not implemented in this change. The proposed follow-up uses OpenRouter PKCE authorization, session-scoped browser key storage, direct personal requests, and a separate browser-local queue and response cache. It must reuse the fixed prompts and evidence validators, preserve the chosen privacy policy, show actual quota and disconnect, and never silently fall back to a paid model. No personal key should pass through the shared inference route or shared server cache. See [AI_LAUNCH.md](AI_LAUNCH.md#personal-openrouter-connection--proposed-not-implemented) for the design. The site's current owner key remains server-side.
+
+## Subsequent hosted release checks
+
+Synthetic requests through the deployed Functions route succeeded for structured profile writing, complete-evidence curation and calculated question commentary. A repeated profile was served from cache in 109 ms. Sparse curation returned a safe fallback. See [release readiness](RELEASE_READINESS.md#hosted-ai-evaluation) for timings and scope.
+
+The year fixture exposed a claim that selected artist counts established an annual leader. Tightening the prompt alone still returned leadership language and more counts than requested. The standalone year route now has a short-prose/numeric budget and rejects leadership clauses without a named monthly scope; its browser/server cache is v21. The hosted fixture returned 503 with ordinary statistics still available. A direct synthetic inspection found Dots quoting four counts despite the two-count prompt, which the guard rejects. This is a known availability/editorial limitation, not evidence of reliable year interpretation. Regression tests cover the observed failure and fallback to another writer. These checks do not validate every musical or causal claim.
 
 ## Official references
 
